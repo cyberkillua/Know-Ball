@@ -1,0 +1,75 @@
+{
+  "position": "ST",
+  "version": 4,
+  "baseline": 6.5,
+  "weights": {
+    "finishing": 0.3,
+    "involvement": 0.225,
+    "carrying": 0.175,
+    "physical": 0.175,
+    "pressing": 0.125
+  },
+  "constants": {
+    "goal_bonus": 0.5,
+    "wastage_factor": 0.2,
+    "self_created_bonus": 0.05,
+    "big_chance_missed_penalty": 0.2,
+    "no_shot_penalty_light": -0.08,
+    "no_shot_penalty_moderate": -0.15,
+    "no_shot_penalty_heavy": -0.25,
+    "low_possession_threshold": 35,
+    "low_team_shots_threshold": 8,
+    "shot_on_target_weight": 0.15,
+    "shot_on_target_threshold": 0.4,
+    "position_quality_weight": 0.1,
+    "league_avg_xg_per_shot": 0.12,
+    "blocked_attempt_reward": 0.04,
+    "assist_bonus": 0.35,
+    "avg_xa_per_assist": 0.35,
+    "big_chance_created_reward": 0.18,
+    "presence_factor": 0.005,
+    "dribble_rate_weight": 0.3,
+    "dribble_volume_reward": 0.05,
+    "foul_won_reward": 0.1,
+    "penalty_won_reward": 0.35,
+    "possession_loss_rate_penalty": 0.8,
+    "error_lead_to_goal_penalty": 0.3,
+    "aerial_win_reward": 0.12,
+    "aerial_loss_penalty": 0.06,
+    "ground_duel_win_reward": 0.1,
+    "ground_duel_loss_penalty": 0.05,
+    "tackle_reward": 0.1,
+    "interception_reward": 0.1,
+    "recovery_reward": 0.08
+  },
+  "display_only_stats": [
+    "hitWoodwork"
+  ],
+  "normalization": {
+    "method": "median_iqr",
+    "calibrated_at": "2026-03-30",
+    "sample_size": 2261,
+    "midpoints": {
+      "finishing": {
+        "median": -0.08,
+        "scale": 0.3336
+      },
+      "involvement": {
+        "median": 0.197,
+        "scale": 0.2481
+      },
+      "carrying": {
+        "median": -0.2667,
+        "scale": 0.3102
+      },
+      "physical": {
+        "median": 0.05,
+        "scale": 0.28
+      },
+      "pressing": {
+        "median": 0.16,
+        "scale": 0.16
+      }
+    }
+  }
+}
