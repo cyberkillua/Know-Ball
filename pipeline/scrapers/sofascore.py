@@ -271,9 +271,6 @@ _POSITIONS_DETAILED_MAP = {
     "CF": "CF",
     "ST": "ST",
     "SS": "ST",
-    "F": "ST",
-    "D": "CB",
-    "M": "CM",
     "G": "GK",
 }
 
