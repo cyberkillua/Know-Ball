@@ -1,8 +1,14 @@
 """
-Main scraping entrypoint.
+Main scraping entrypoint - Optimized version.
 
 Fetches new matches and player stats from Sofascore,
 then stores them in Postgres. Designed to run daily via GitHub Actions.
+
+Optimizations:
+- Player profile caching to avoid duplicate fetches
+- Batch player profile fetching
+- Skip profile fetch for existing complete players
+- Deferred profile updates
 """
 
 from pipeline.db import DB
@@ -12,12 +18,15 @@ from pipeline.scrapers.sofascore import (
     fetch_match_details,
     extract_player_stats,
     fetch_player_profile,
+    get_position_from_lineup,
     fetch_match_statistics,
     fetch_standings,
     fetch_match_odds,
     fetch_shotmap,
-    get_current_season_id,
+    get_season_id_by_name,
+    list_available_seasons,
     TOURNAMENT_IDS,
+    clear_player_cache,
 )
 
 log = get_logger("scrape")
@@ -35,7 +44,6 @@ CURRENT_SEASON = "2025/2026"
 
 
 def get_existing_match_ids(db: DB) -> set[int]:
-    """Get all existing Sofascore match IDs from the database."""
     rows = db.query("SELECT sofascore_id FROM matches WHERE sofascore_id IS NOT NULL")
     return {r["sofascore_id"] for r in rows}
 
@@ -57,40 +65,102 @@ def upsert_team(db: DB, name: str, sofascore_id: int, league_id: int) -> int:
 
 
 def upsert_player(
-    db: DB, name: str, sofascore_id: int, position: str, team_id: int
+    db: DB, name: str, sofascore_id: int, team_id: int, match_date: str
 ) -> int:
+    """
+    Create or update player with minimal data.
+    Position will be filled by _fill_player_profile().
+
+    Only updates current_team_id if this match is from the same date or newer
+    than the player's last recorded match. This prevents historical scrapes
+    from overwriting current team assignments.
+    """
     row = db.query_one(
-        "SELECT id, nationality FROM players WHERE sofascore_id = %s", (sofascore_id,)
+        "SELECT id, nationality, position FROM players WHERE sofascore_id = %s",
+        (sofascore_id,),
     )
     if row:
-        db.execute(
-            "UPDATE players SET current_team_id = %s WHERE id = %s",
-            (team_id, row["id"]),
+        # Only update team if match is same or newer than player's last match
+        last_match = db.query_one(
+            """SELECT MAX(m.date) as last_date
+               FROM match_player_stats mps
+               JOIN matches m ON m.id = mps.match_id
+               WHERE mps.player_id = %s""",
+            (row["id"],),
         )
-        if not row.get("nationality"):
-            _fill_player_profile(db, row["id"], sofascore_id)
+
+        if not last_match or str(match_date) >= str(last_match["last_date"]):
+            db.execute(
+                "UPDATE players SET current_team_id = %s WHERE id = %s",
+                (team_id, row["id"]),
+            )
         return row["id"]
+
     row = db.insert_returning(
-        "INSERT INTO players (name, sofascore_id, position, current_team_id) VALUES (%s, %s, %s, %s) RETURNING id",
-        (name, sofascore_id, position, team_id),
+        "INSERT INTO players (name, sofascore_id, current_team_id) VALUES (%s, %s, %s) RETURNING id",
+        (name, sofascore_id, team_id),
     )
-    _fill_player_profile(db, row["id"], sofascore_id)
     return row["id"]
 
 
-def _fill_player_profile(db: DB, player_db_id: int, sofascore_id: int):
-    """Fetch and store player profile data from Sofascore."""
+def needs_profile_fetch(db: DB, player_id: int, sofascore_id: int) -> bool:
+    """Check if we need to fetch profile for this player."""
+    row = db.query_one(
+        "SELECT position, nationality FROM players WHERE id = %s", (player_id,)
+    )
+    if not row:
+        return True
+    if not row["position"] or row["position"] in ("G", "D", "M", "F"):
+        return True
+    if not row["nationality"]:
+        return True
+    return False
+
+
+def _fill_player_profile(
+    db: DB, player_db_id: int, sofascore_id: int, match_detail: dict | None = None
+):
+    """
+    Fetch and store player profile data from Sofascore.
+
+    Args:
+        db: Database connection
+        player_db_id: Our database player ID
+        sofascore_id: Sofascore player ID
+        match_detail: Match detail dict for lineup fallback (optional)
+    """
     profile = fetch_player_profile(sofascore_id)
+
     if not profile:
+        if match_detail:
+            position = get_position_from_lineup(sofascore_id, match_detail)
+            if position:
+                db.execute(
+                    "UPDATE players SET position = %s WHERE id = %s",
+                    (position, player_db_id),
+                )
+                log.debug(
+                    f"Player {sofascore_id}: position from lineup fallback: {position}"
+                )
         return
+
+    position = profile.get("position")
+
+    if not position and match_detail:
+        position = get_position_from_lineup(sofascore_id, match_detail)
+        if position:
+            log.debug(
+                f"Player {sofascore_id}: position from lineup fallback: {position}"
+            )
+
     db.execute(
         """UPDATE players
            SET nationality = COALESCE(%s, nationality),
-               date_of_birth = COALESCE(%s, date_of_birth),
-               height_cm = COALESCE(%s, height_cm),
-               preferred_foot = COALESCE(%s, preferred_foot),
-               shirt_number = COALESCE(%s, shirt_number),
-               position = COALESCE(%s, position)
+              date_of_birth = COALESCE(%s, date_of_birth),
+              height_cm = COALESCE(%s, height_cm),
+              preferred_foot = COALESCE(%s, preferred_foot),
+              shirt_number = COALESCE(%s, shirt_number),
+              position = COALESCE(%s, position)
            WHERE id = %s""",
         (
             profile.get("nationality"),
@@ -98,7 +168,7 @@ def _fill_player_profile(db: DB, player_db_id: int, sofascore_id: int):
             profile.get("height_cm"),
             profile.get("preferred_foot"),
             profile.get("shirt_number"),
-            profile.get("position"),
+            position,
             player_db_id,
         ),
     )
@@ -111,8 +181,6 @@ def scrape_league(
     understat_slug: str | None,
     season: str,
     existing_ids: set[int],
-    skip_odds: bool = False,
-    skip_shotmap: bool = False,
 ):
     league_id = get_league_id(db, fotmob_league_id)
     if not league_id:
@@ -121,7 +189,6 @@ def scrape_league(
 
     log.info(f"=== Scraping {league_name} ({season}) ===")
 
-    # Fetch and store league standings (once per league per run)
     _store_standings(db, fotmob_league_id, league_id, season)
 
     matches = fetch_league_matches(fotmob_league_id, season)
@@ -130,11 +197,10 @@ def scrape_league(
 
     stats_ok = 0
     stats_skipped = 0
+
     for match in new_matches:
         try:
-            got_stats = _process_match(
-                db, match, league_id, season, skip_odds, skip_shotmap
-            )
+            got_stats = _process_match(db, match, league_id, season)
             if got_stats:
                 stats_ok += 1
             else:
@@ -151,24 +217,24 @@ def scrape_league(
 
 
 def _store_standings(db: DB, fotmob_league_id: int, league_id: int, season: str):
-    """Fetch and store current league standings."""
     tournament_id = TOURNAMENT_IDS.get(fotmob_league_id)
     if not tournament_id:
         return
 
-    season_id = get_current_season_id(tournament_id)
+    season_id = get_season_id_by_name(tournament_id, season)
     if not season_id:
+        log.error(f"Season '{season}' not found, cannot store standings")
         return
+
+    log.info(f"Fetching standings for season {season_id} ({season})")
 
     standings = fetch_standings(tournament_id, season_id)
     for row in standings:
-        # Look up team by sofascore_id
         team_row = db.query_one(
             "SELECT id FROM teams WHERE sofascore_id = %s",
             (row["team_sofascore_id"],),
         )
         if not team_row:
-            # Team might not exist yet; create it
             team_row = db.insert_returning(
                 "INSERT INTO teams (name, sofascore_id, league_id) VALUES (%s, %s, %s) RETURNING id",
                 (row["team_name"], row["team_sofascore_id"], league_id),
@@ -207,15 +273,7 @@ def _store_standings(db: DB, fotmob_league_id: int, league_id: int, season: str)
     log.info(f"Updated standings: {len(standings)} teams")
 
 
-def _process_match(
-    db: DB,
-    match: dict,
-    league_id: int,
-    season: str,
-    skip_odds: bool = False,
-    skip_shotmap: bool = False,
-) -> bool:
-    """Process a match. Returns True if player stats were stored, False otherwise."""
+def _process_match(db: DB, match: dict, league_id: int, season: str) -> bool:
     sofascore_id = match["sofascore_id"]
     log.info(
         f"Processing match {sofascore_id}: {match['home_team']} vs {match['away_team']}"
@@ -257,15 +315,20 @@ def _process_match(
         match["away_team_id"]: away_team_id,
     }
 
+    players_to_update = []
+
     for ps in player_stats:
         our_team_id = team_id_map.get(ps["team_id"], home_team_id)
         player_id = upsert_player(
             db,
             ps["name"],
             ps["sofascore_player_id"],
-            ps["position_played"],
             our_team_id,
+            match["date"],
         )
+
+        if needs_profile_fetch(db, player_id, ps["sofascore_player_id"]):
+            players_to_update.append((player_id, ps["sofascore_player_id"]))
 
         db.execute(
             """INSERT INTO match_player_stats
@@ -338,7 +401,6 @@ def _process_match(
             ),
         )
 
-        # Insert GK-specific stats if this is a goalkeeper
         gk = ps.get("gk_stats")
         if gk:
             db.execute(
@@ -384,19 +446,20 @@ def _process_match(
 
     log.info(f"Stored {len(player_stats)} player stat records for match {sofascore_id}")
 
-    # Fetch and store team-level match statistics
+    for player_id, sofascore_player_id in players_to_update:
+        _fill_player_profile(db, player_id, sofascore_player_id, detail)
+
     _store_match_team_stats(db, sofascore_id, match_db_id, home_team_id, away_team_id)
 
-    # Fetch and store betting odds
-    if not skip_odds:
-        try:
-            _store_match_odds(db, sofascore_id, match_db_id)
-        except Exception as e:
-            log.warning(f"Failed to store odds for match {sofascore_id}: {e}")
+    try:
+        _store_match_odds(db, sofascore_id, match_db_id)
+    except Exception as e:
+        log.debug(f"Could not store odds for match {sofascore_id}: {e}")
 
-    # Fetch and store shot map
-    if not skip_shotmap:
+    try:
         _store_shotmap(db, sofascore_id, match_db_id, player_stats, team_id_map)
+    except Exception as e:
+        log.debug(f"Could not store shotmap for match {sofascore_id}: {e}")
 
     return True
 
@@ -404,7 +467,6 @@ def _process_match(
 def _store_match_team_stats(
     db: DB, sofascore_id: int, match_db_id: int, home_team_id: int, away_team_id: int
 ):
-    """Fetch and store team-level match statistics."""
     team_stats = fetch_match_statistics(sofascore_id)
     if len(team_stats) != 2:
         return
@@ -440,7 +502,6 @@ def _store_match_team_stats(
 
 
 def _store_match_odds(db: DB, sofascore_id: int, match_db_id: int):
-    """Fetch and store betting odds for a match."""
     odds = fetch_match_odds(sofascore_id)
     if not odds:
         return
@@ -460,12 +521,10 @@ def _store_shotmap(
     player_stats: list[dict],
     team_id_map: dict,
 ):
-    """Fetch and store shot map data for a match."""
     shots = fetch_shotmap(sofascore_id)
     if not shots:
         return
 
-    # Build a lookup from sofascore player ID to our DB player ID
     player_id_cache = {}
     for ps in player_stats:
         row = db.query_one(
@@ -517,15 +576,30 @@ def main():
         "--season",
         type=str,
         default=CURRENT_SEASON,
-        help="Season string (e.g. 2025/2026)",
+        help="Season string (e.g. 2025/2026, 24/25, 2024-2025)",
     )
     parser.add_argument(
-        "--skip-odds", action="store_true", help="Skip fetching betting odds"
-    )
-    parser.add_argument(
-        "--skip-shotmap", action="store_true", help="Skip fetching shot map data"
+        "--list-seasons",
+        type=int,
+        metavar="LEAGUE_ID",
+        help="List available seasons for a league",
     )
     args = parser.parse_args()
+
+    # Handle --list-seasons
+    if args.list_seasons:
+        tournament_id = TOURNAMENT_IDS.get(args.list_seasons)
+        if not tournament_id:
+            log.error(f"No mapping for league {args.list_seasons}")
+            log.info(f"Available leagues: {[(name, fid) for name, fid, _ in LEAGUES]}")
+            return
+
+        print(f"\nAvailable seasons for league {args.list_seasons}:")
+        seasons = list_available_seasons(tournament_id)
+        for s in seasons:
+            print(f"  {s['name']} (ID: {s['id']})")
+        print()
+        return
 
     leagues = LEAGUES
     if args.league:
@@ -536,6 +610,9 @@ def main():
             return
 
     log.info("Starting Know Ball scrape (Sofascore)")
+
+    clear_player_cache()
+
     db = DB()
     existing_ids = get_existing_match_ids(db)
     print(f"Existing matches: {len(existing_ids)}")
@@ -549,11 +626,13 @@ def main():
                 understat_slug,
                 args.season,
                 existing_ids,
-                skip_odds=args.skip_odds,
-                skip_shotmap=args.skip_shotmap,
             )
+            clear_player_cache()
         except Exception as e:
             log.error(f"Failed to scrape {league_name}: {e}")
+            import traceback
+
+            traceback.print_exc()
             continue
 
     db.close()

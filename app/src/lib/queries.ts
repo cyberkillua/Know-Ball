@@ -118,12 +118,18 @@ export const getPlayer = createServerFn({ method: 'GET' })
 export const getPlayerSeasons = createServerFn({ method: 'GET' })
   .inputValidator((d: { playerId: number }) => d)
   .handler(async ({ data }) => {
-    return query<{ season: string }>(
-      `SELECT DISTINCT mat.season
+    return query<{ season: string; league_id: number; league_name: string; matches: number }>(
+      `SELECT DISTINCT
+          mat.season,
+          l.id as league_id,
+          l.name as league_name,
+          COUNT(DISTINCT mat.id)::int as matches
        FROM match_player_stats mps
        JOIN matches mat ON mat.id = mps.match_id
+       JOIN leagues l ON l.id = mat.league_id
        WHERE mps.player_id = $1
-       ORDER BY mat.season DESC`,
+       GROUP BY mat.season, l.id, l.name
+       ORDER BY mat.season DESC, l.name`,
       [data.playerId],
     )
   })

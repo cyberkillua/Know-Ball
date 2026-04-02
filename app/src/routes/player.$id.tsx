@@ -86,7 +86,7 @@ function pct(per90Pct: number | null | undefined, rawPct: number | null | undefi
 function PlayerProfilePage() {
   const { id } = Route.useParams()
   const [player, setPlayer] = useState<Player | null>(null)
-  const [seasons, setSeasons] = useState<string[]>([])
+  const [seasons, setSeasons] = useState<{ season: string; league_id: number; league_name: string; matches: number }[]>([])
   const [season, setSeason] = useState<string>('')
   const [ratings, setRatings] = useState<MatchRating[]>([])
   const [peerRating, setPeerRating] = useState<PeerRating | null>(null)
@@ -143,9 +143,11 @@ function PlayerProfilePage() {
       getPlayerSeasons({ data: { playerId } }),
     ]).then(([p, s]) => {
       setPlayer(p)
-      const available = s.map((r: { season: string }) => r.season)
-      setSeasons(available)
-      setSeason(available[0] ?? '')
+      setSeasons(s)
+      if (s.length > 0) {
+        const first = s[0]
+        setSeason(`${first.league_id}|${first.season}`)
+      }
     })
   }, [id])
 
@@ -153,14 +155,15 @@ function PlayerProfilePage() {
   useEffect(() => {
     if (!season) return
     const playerId = Number(id)
+    const [leagueId, seasonStr] = season.split('|')
     setSeasonLoading(true)
     Promise.all([
-      getPlayerRatings({ data: { playerId, season } }),
-      getPlayerPeerRating({ data: { playerId, season, scope: 'league' } }),
-      getPlayerPeerRating({ data: { playerId, season, scope: 'all' } }),
-      getPlayerStats({ data: { playerId, season } }),
-      getPlayerShots({ data: { playerId, season } }),
-      getPlayerXgotDelta({ data: { playerId, season } }),
+      getPlayerRatings({ data: { playerId, season: seasonStr } }),
+      getPlayerPeerRating({ data: { playerId, season: seasonStr, scope: 'league' } }),
+      getPlayerPeerRating({ data: { playerId, season: seasonStr, scope: 'all' } }),
+      getPlayerStats({ data: { playerId, season: seasonStr } }),
+      getPlayerShots({ data: { playerId, season: seasonStr } }),
+      getPlayerXgotDelta({ data: { playerId, season: seasonStr } }),
     ]).then(([r, pr, apr, st, sh, xgd]) => {
       setRatings(r)
       setPeerRating(pr as PeerRating | null)
@@ -255,25 +258,25 @@ function PlayerProfilePage() {
               </div>
             </div>
 
-            {/* Season selector */}
-            {seasons.length > 0 && (
-              <div className="flex flex-col items-end gap-1 shrink-0">
-                <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Season
-                </label>
-                <select
-                  value={season}
-                  onChange={(e) => setSeason(e.target.value)}
-                  className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  {seasons.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+{/* Season selector */}
+             {seasons.length > 0 && (
+               <div className="flex flex-col items-end gap-1 shrink-0">
+                 <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                   Season
+                 </label>
+                 <select
+                   value={season}
+                   onChange={(e) => setSeason(e.target.value)}
+                   className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                 >
+                   {seasons.map((s) => (
+                     <option key={`${s.league_id}-${s.season}`} value={`${s.league_id}|${s.season}`}>
+                       {s.league_name} {s.season}
+                     </option>
+                   ))}
+                 </select>
+               </div>
+             )}
 
             <div className="text-center shrink-0">
               {avgRating > 0 && (
@@ -550,11 +553,11 @@ function PlayerProfilePage() {
                     </div>
                   </>
                 )}
-                {/* ── Watermark ───────────────────────────── */}
-                <div style={{ marginTop: 20, paddingTop: 12, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 10, color: 'var(--muted-foreground)' }}>
-                  <span>Season: {season}</span>
-                  <span style={{ fontWeight: 500 }}>Know Ball</span>
-                </div>
+{/* ── Watermark ───────────────────────────── */}
+<div style={{ marginTop: 20, paddingTop: 12, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 10, color: 'var(--muted-foreground)' }}>
+<span>{seasons.find(s => `${s.league_id}|${s.season}` === season)?.league_name} {seasons.find(s => `${s.league_id}|${s.season}` === season)?.season}</span>
+<span style={{ fontWeight: 500 }}>Know Ball</span>
+</div>
               </CardContent>
             </Card>
 
