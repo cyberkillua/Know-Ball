@@ -53,7 +53,7 @@ export default function CategoryKingCard({ category, playerName, playerId, score
       <Link
         to="/player/$id"
         params={{ id: String(playerId) }}
-        className="card-glow flex items-center gap-3 rounded-xl border border-border bg-card p-3 no-underline transition-all hover:bg-accent/30"
+        className="card-glow flex items-center gap-3 rounded-none border border-border bg-card p-3 no-underline transition-all hover:bg-accent/30"
         onMouseEnter={() => setShowTooltip(true)}
         onMouseLeave={() => setShowTooltip(false)}
       >

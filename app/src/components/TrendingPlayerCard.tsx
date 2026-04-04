@@ -11,7 +11,7 @@ export default function TrendingPlayerCard({ playerName, teamName, rating, rank 
   const ratingFloor = Math.floor(rating)
 
   return (
-    <div className="flex items-center gap-4 rounded-xl border border-border bg-card p-4 transition-all hover:bg-accent/30">
+    <div className="flex items-center gap-4 rounded-none border border-border bg-card p-4 transition-all hover:bg-accent/30">
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-sm font-bold text-primary">
         {rank}
       </span>

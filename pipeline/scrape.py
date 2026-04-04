@@ -13,6 +13,7 @@ Optimizations:
 
 from pipeline.db import DB
 from pipeline.logger import get_logger
+from pipeline.scrapers.understat import fetch_league_player_stats
 from pipeline.scrapers.sofascore import (
     fetch_league_matches,
     fetch_match_details,
@@ -41,6 +42,8 @@ LEAGUES = [
 ]
 
 CURRENT_SEASON = "2025/2026"
+
+MIDFIELDER_POSITIONS = {"CAM", "CM", "CDM", "LM", "RM", "AM"}
 
 
 def get_existing_match_ids(db: DB) -> set[int]:
@@ -214,6 +217,11 @@ def scrape_league(
         f"=== {league_name} done: {stats_ok} with player stats, "
         f"{stats_skipped} without ==="
     )
+
+    # Post-Sofascore: pull xGChain/xGBuildup from Understat for midfielders.
+    # Only fires when new match data was actually processed (avoids unnecessary requests).
+    if understat_slug and stats_ok > 0:
+        _update_understat_stats(db, understat_slug, season)
 
 
 def _store_standings(db: DB, fotmob_league_id: int, league_id: int, season: str):
@@ -595,6 +603,79 @@ def _store_shotmap(
                 shot["sofascore_id"],
             ),
         )
+
+
+def _match_player_by_understat_id(db: DB, understat_id: int) -> int | None:
+    row = db.query_one(
+        "SELECT id FROM players WHERE understat_id = %s", (understat_id,)
+    )
+    return row["id"] if row else None
+
+
+def _match_player_by_name(db: DB, name: str) -> int | None:
+    """Case-insensitive exact name match."""
+    row = db.query_one(
+        "SELECT id FROM players WHERE LOWER(name) = LOWER(%s)",
+        (name,),
+    )
+    return row["id"] if row else None
+
+
+def _update_understat_stats(db: DB, understat_slug: str, season: str) -> None:
+    """
+    Fetch Understat season stats for a league and upsert xGChain/xGBuildup
+    for midfielder positions (CAM, CM, CDM, LM, RM, AM) only.
+    """
+    if not understat_slug:
+        return
+    # Our seasons are "2024/2025"; Understat uses the start year integer.
+    season_int = int(season.split("/")[0])
+
+    try:
+        players = fetch_league_player_stats(understat_slug, season_int)
+    except Exception as e:
+        log.error(f"Understat fetch failed for {understat_slug} {season_int}: {e}")
+        return
+
+    upserted = 0
+    for p in players:
+        player_id = _match_player_by_understat_id(db, p["understat_id"])
+        if not player_id:
+            player_id = _match_player_by_name(db, p["player_name"])
+        if not player_id:
+            continue
+
+        # Persist understat_id for faster future lookups
+        db.execute(
+            "UPDATE players SET understat_id = %s WHERE id = %s AND understat_id IS NULL",
+            (p["understat_id"], player_id),
+        )
+
+        db.execute(
+            """INSERT INTO player_season_understat
+               (player_id, season, xg_chain, xg_buildup, xg_chain_per90,
+                xg_buildup_per90, minutes_played, fetched_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+               ON CONFLICT (player_id, season) DO UPDATE SET
+                 xg_chain         = EXCLUDED.xg_chain,
+                 xg_buildup       = EXCLUDED.xg_buildup,
+                 xg_chain_per90   = EXCLUDED.xg_chain_per90,
+                 xg_buildup_per90 = EXCLUDED.xg_buildup_per90,
+                 minutes_played   = EXCLUDED.minutes_played,
+                 fetched_at       = NOW()""",
+            (
+                player_id,
+                season,
+                p["xg_chain"],
+                p["xg_buildup"],
+                p["xg_chain_per90"],
+                p["xg_buildup_per90"],
+                p["minutes"],
+            ),
+        )
+        upserted += 1
+
+    log.info(f"Understat: upserted {upserted} records for {understat_slug} {season}")
 
 
 def main():

@@ -13,7 +13,6 @@ Optimizations:
 
 import asyncio
 import time
-from concurrent.futures import ThreadPoolExecutor
 from curl_cffi.requests import AsyncSession, Session
 from datetime import datetime
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -64,29 +63,39 @@ _POS_LINE_ORDER = {"G": 0, "D": 1, "M": 2, "F": 3}
 # Tactical line number for detailed positions (used for cost-based slot matching)
 _POS_LINE = {
     "GK": 0,
-    "CB": 1, "LB": 1, "RB": 1, "LWB": 1, "RWB": 1,
-    "CDM": 2, "CM": 2, "LM": 2, "RM": 2,
-    "CAM": 3, "LW": 3, "RW": 3,
-    "CF": 4, "ST": 4,
+    "CB": 1,
+    "LB": 1,
+    "RB": 1,
+    "LWB": 1,
+    "RWB": 1,
+    "CDM": 2,
+    "CM": 2,
+    "LM": 2,
+    "RM": 2,
+    "CAM": 3,
+    "LW": 3,
+    "RW": 3,
+    "CF": 4,
+    "ST": 4,
 }
 
 # Positionally adjacent positions (one step away tactically)
 _POS_ADJACENCY: dict[str, frozenset] = {
-    "GK":  frozenset(),
-    "CB":  frozenset({"CDM", "LB", "RB"}),
-    "LB":  frozenset({"CB", "LM", "LWB"}),
-    "RB":  frozenset({"CB", "RM", "RWB"}),
+    "GK": frozenset(),
+    "CB": frozenset({"CDM", "LB", "RB"}),
+    "LB": frozenset({"CB", "LM", "LWB"}),
+    "RB": frozenset({"CB", "RM", "RWB"}),
     "LWB": frozenset({"LB", "LM"}),
     "RWB": frozenset({"RB", "RM"}),
     "CDM": frozenset({"CM", "CB"}),
-    "CM":  frozenset({"CDM", "CAM", "LM", "RM"}),
-    "LM":  frozenset({"LW", "CM", "LB"}),
-    "RM":  frozenset({"RW", "CM", "RB"}),
+    "CM": frozenset({"CDM", "CAM", "LM", "RM"}),
+    "LM": frozenset({"LW", "CM", "LB"}),
+    "RM": frozenset({"RW", "CM", "RB"}),
     "CAM": frozenset({"CF", "CM", "LW", "RW"}),
-    "LW":  frozenset({"ST", "LM", "CAM"}),
-    "RW":  frozenset({"ST", "RM", "CAM"}),
-    "CF":  frozenset({"ST", "CAM"}),
-    "ST":  frozenset({"CF", "LW", "RW"}),
+    "LW": frozenset({"ST", "LM", "CAM"}),
+    "RW": frozenset({"ST", "RM", "CAM"}),
+    "CF": frozenset({"ST", "CAM"}),
+    "ST": frozenset({"CF", "LW", "RW"}),
 }
 
 _player_cache: dict[int, dict] = {}
@@ -493,7 +502,10 @@ def _assign_formation_positions(
         pid = player.get("player", {}).get("id")
         profile_pos = profile_map.get(pid) if pid else None
 
-        best_i = min(range(len(available)), key=lambda i: _position_cost(profile_pos, available[i]))
+        best_i = min(
+            range(len(available)),
+            key=lambda i: _position_cost(profile_pos, available[i]),
+        )
         assigned = available.pop(best_i)
         if pid:
             result[pid] = assigned

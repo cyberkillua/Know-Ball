@@ -29,8 +29,12 @@ const POSITION_LABELS: Record<string, string> = {
   CAM: 'Attacking Midfielders',
   CM: 'Central Midfielders',
   CDM: 'Defensive Midfielders',
+  LM: 'Left Midfielders',
+  RM: 'Right Midfielders',
   LB: 'Left Backs',
   RB: 'Right Backs',
+  LWB: 'Left Wing-Backs',
+  RWB: 'Right Wing-Backs',
   CB: 'Centre-Backs',
   GK: 'Goalkeepers',
 }
@@ -214,6 +218,13 @@ function PlayerProfilePage() {
   const contentClass = seasonLoading ? 'opacity-50 pointer-events-none transition-opacity' : ''
 
   const isST = player.position === 'ST' || player.position === 'CF'
+  const isCAM = player.position === 'CAM'
+  const isWinger = player.position === 'LW' || player.position === 'RW'
+  const isDefensiveWinger = player.position === 'LM' || player.position === 'RM'
+  const isCM = player.position === 'CM'
+  const isCDM = player.position === 'CDM'
+  const isDefender = player.position === 'CB' || player.position === 'LB' || player.position === 'RB' || player.position === 'LWB' || player.position === 'RWB'
+  const isSupported = isST || isCAM
 
   // Active peer rating based on scope
   const activePeerRating = peerScope === 'league' ? peerRating : allPeerRating
@@ -313,8 +324,8 @@ function PlayerProfilePage() {
       {/* Season-filtered content */}
       <div className={contentClass}>
 
-        {/* ── Detailed Stats — ST / CF only ─────────────────────────── */}
-        {isST && stats ? (
+        {/* ── Detailed Stats — all outfield positions ───────────────── */}
+        {stats ? (
           <>
             <Card className="mt-4" ref={percentileCardRef}>
               <CardContent className="p-6">
@@ -331,7 +342,7 @@ function PlayerProfilePage() {
                         Percentile rankings
                       </h3>
                       <p style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>
-                        vs {POSITION_LABELS[player.position ?? 'ST'] ?? player.position ?? 'Strikers'} in {(player.team as any)?.league?.name ?? 'this league'}
+                        vs {POSITION_LABELS[player.position ?? 'ST'] ?? player.position ?? 'Strikers'} in {seasons.find(s => `${s.league_id}|${s.season}` === season)?.league_name ?? (player.team as any)?.league?.name ?? 'this league'}
                       </p>
                       <p style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 2 }}>
                         {stats.matches} apps · {stats.minutes?.toLocaleString() ?? 0} mins
@@ -408,7 +419,7 @@ function PlayerProfilePage() {
                 ) : viewMode === 'pizza' ? (
                   <div style={{ marginBottom: 24 }}>
                     <PizzaChart
-                      data={peerQualified ? [
+                      data={peerQualified ? (isST ? [
                         // Goalscoring
                         { label: statMode === 'per90' ? 'Goals/90' : 'Goals', percentile: pct(peerRating?.goals_per90_percentile, peerRating?.goals_raw_percentile, statMode, peerQualified) },
                         { label: statMode === 'per90' ? 'Shots/90' : 'Shots', percentile: pct(peerRating?.shots_per90_percentile, peerRating?.shots_raw_percentile, statMode, peerQualified) },
@@ -447,10 +458,171 @@ function PlayerProfilePage() {
                         { label: statMode === 'per90' ? 'Tkl/90' : 'Tkl', percentile: pct(peerRating?.tackles_per90_percentile, peerRating?.tackles_raw_percentile, statMode, peerQualified) },
                         { label: statMode === 'per90' ? 'Int/90' : 'Int', percentile: pct(peerRating?.interceptions_per90_percentile, peerRating?.interceptions_raw_percentile, statMode, peerQualified) },
                         { label: 'FC/90', percentile: peerRating?.pressing_percentile ?? 0, inverted: true },
-                      ] : []}
+                      ] : isCAM ? [
+                        // CAM — Chance creation first
+                        { label: statMode === 'per90' ? 'xA/90' : 'xA', percentile: pct(peerRating?.xa_per90_percentile, peerRating?.xa_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Ast/90' : 'Ast', percentile: pct(peerRating?.assists_per90_percentile, peerRating?.assists_raw_percentile, statMode, peerQualified) },
+                        { label: 'xG+xA', percentile: pct(peerRating?.xg_plus_xa_percentile, peerRating?.xg_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'KP/90' : 'KP', percentile: pct(peerRating?.key_passes_per90_percentile, peerRating?.key_passes_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'BCC/90' : 'BCC', percentile: pct(peerRating?.big_chances_created_percentile, peerRating?.big_chances_created_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Crs/90' : 'Crs', percentile: pct(peerRating?.accurate_cross_per90_percentile, peerRating?.accurate_cross_raw_percentile, statMode, peerQualified) },
+                        // Goal threat
+                        { label: statMode === 'per90' ? 'Goals/90' : 'Goals', percentile: pct(peerRating?.goals_per90_percentile, peerRating?.goals_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'xG/90' : 'xG', percentile: pct(peerRating?.xg_per90_percentile, peerRating?.xg_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Shots/90' : 'Shots', percentile: pct(peerRating?.shots_per90_percentile, peerRating?.shots_raw_percentile, statMode, peerQualified) },
+                        { label: 'SoT%', percentile: peerRating?.shot_on_target_percentile ?? 0 },
+                        { label: 'xG/shot', percentile: peerRating?.xg_per_shot_percentile ?? 0 },
+                        { label: statMode === 'per90' ? 'npG/90' : 'np Goals', percentile: pct(peerRating?.np_goals_per90_percentile, peerRating?.np_goals_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'npxG/90' : 'np xG', percentile: pct(peerRating?.np_xg_per90_percentile, peerRating?.np_xg_raw_percentile, statMode, peerQualified) },
+                        // Ball carrying
+                        { label: 'Drb%', percentile: peerRating?.dribble_success_percentile ?? 0 },
+                        { label: statMode === 'per90' ? 'Drb/90' : 'Drb', percentile: pct(peerRating?.dribbles_per90_percentile, peerRating?.dribbles_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Fw/90' : 'Fw', percentile: pct(peerRating?.fouls_won_per90_percentile, peerRating?.fouls_won_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Tch/90' : 'Tch', percentile: pct(peerRating?.touches_per90_percentile, peerRating?.touches_raw_percentile, statMode, peerQualified) },
+                        { label: 'PossLoss', percentile: peerRating?.carrying_percentile ?? 0, inverted: true },
+                        // Physical
+                        { label: 'Air%', percentile: peerRating?.physical_percentile ?? 0 },
+                        { label: statMode === 'per90' ? 'Air/90' : 'Air', percentile: pct(peerRating?.aerials_per90_percentile, peerRating?.aerials_won_raw_percentile, statMode, peerQualified) },
+                        { label: 'Grd%', percentile: peerRating?.physical_percentile ?? 0 },
+                        { label: statMode === 'per90' ? 'Grd/90' : 'Grd', percentile: pct(peerRating?.ground_duels_won_per90_percentile, peerRating?.ground_duels_won_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Cont/90' : 'Cont', percentile: pct(peerRating?.total_contest_per90_percentile, peerRating?.total_contests_raw_percentile, statMode, peerQualified) },
+                        // Pressing
+                        { label: statMode === 'per90' ? 'Rec/90' : 'Rec', percentile: pct(peerRating?.ball_recoveries_per90_percentile, peerRating?.ball_recoveries_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Tkl/90' : 'Tkl', percentile: pct(peerRating?.tackles_per90_percentile, peerRating?.tackles_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Int/90' : 'Int', percentile: pct(peerRating?.interceptions_per90_percentile, peerRating?.interceptions_raw_percentile, statMode, peerQualified) },
+                        { label: 'FC/90', percentile: peerRating?.pressing_percentile ?? 0, inverted: true },
+                      ] : isWinger ? [
+                        // Winger — Chance creation
+                        { label: statMode === 'per90' ? 'xA/90' : 'xA', percentile: pct(peerRating?.xa_per90_percentile, peerRating?.xa_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Ast/90' : 'Ast', percentile: pct(peerRating?.assists_per90_percentile, peerRating?.assists_raw_percentile, statMode, peerQualified) },
+                        { label: 'xG+xA', percentile: pct(peerRating?.xg_plus_xa_percentile, peerRating?.xg_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'KP/90' : 'KP', percentile: pct(peerRating?.key_passes_per90_percentile, peerRating?.key_passes_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'BCC/90' : 'BCC', percentile: pct(peerRating?.big_chances_created_percentile, peerRating?.big_chances_created_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Crs/90' : 'Crs', percentile: pct(peerRating?.accurate_cross_per90_percentile, peerRating?.accurate_cross_raw_percentile, statMode, peerQualified) },
+                        // Goal threat
+                        { label: statMode === 'per90' ? 'Goals/90' : 'Goals', percentile: pct(peerRating?.goals_per90_percentile, peerRating?.goals_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Shots/90' : 'Shots', percentile: pct(peerRating?.shots_per90_percentile, peerRating?.shots_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'xG/90' : 'xG', percentile: pct(peerRating?.xg_per90_percentile, peerRating?.xg_raw_percentile, statMode, peerQualified) },
+                        { label: 'SoT%', percentile: peerRating?.shot_on_target_percentile ?? 0 },
+                        { label: 'Conv%', percentile: peerRating?.shot_conversion_percentile ?? 0 },
+                        // Ball carrying
+                        { label: 'Drb%', percentile: peerRating?.dribble_success_percentile ?? 0 },
+                        { label: statMode === 'per90' ? 'Drb/90' : 'Drb', percentile: pct(peerRating?.dribbles_per90_percentile, peerRating?.dribbles_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Fw/90' : 'Fw', percentile: pct(peerRating?.fouls_won_per90_percentile, peerRating?.fouls_won_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Tch/90' : 'Tch', percentile: pct(peerRating?.touches_per90_percentile, peerRating?.touches_raw_percentile, statMode, peerQualified) },
+                        // Physical
+                        { label: 'Air%', percentile: peerRating?.physical_percentile ?? 0 },
+                        { label: statMode === 'per90' ? 'Air/90' : 'Air', percentile: pct(peerRating?.aerials_per90_percentile, peerRating?.aerials_won_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Grd/90' : 'Grd', percentile: pct(peerRating?.ground_duels_won_per90_percentile, peerRating?.ground_duels_won_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Cont/90' : 'Cont', percentile: pct(peerRating?.total_contest_per90_percentile, peerRating?.total_contests_raw_percentile, statMode, peerQualified) },
+                        // Pressing
+                        { label: statMode === 'per90' ? 'Rec/90' : 'Rec', percentile: pct(peerRating?.ball_recoveries_per90_percentile, peerRating?.ball_recoveries_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Tkl/90' : 'Tkl', percentile: pct(peerRating?.tackles_per90_percentile, peerRating?.tackles_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Int/90' : 'Int', percentile: pct(peerRating?.interceptions_per90_percentile, peerRating?.interceptions_raw_percentile, statMode, peerQualified) },
+                      ] : isDefensiveWinger ? [
+                        // Defensive Winger — Chance creation
+                        { label: statMode === 'per90' ? 'xA/90' : 'xA', percentile: pct(peerRating?.xa_per90_percentile, peerRating?.xa_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Ast/90' : 'Ast', percentile: pct(peerRating?.assists_per90_percentile, peerRating?.assists_raw_percentile, statMode, peerQualified) },
+                        { label: 'xG+xA', percentile: pct(peerRating?.xg_plus_xa_percentile, peerRating?.xg_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'KP/90' : 'KP', percentile: pct(peerRating?.key_passes_per90_percentile, peerRating?.key_passes_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Crs/90' : 'Crs', percentile: pct(peerRating?.accurate_cross_per90_percentile, peerRating?.accurate_cross_raw_percentile, statMode, peerQualified) },
+                        // Pressing
+                        { label: statMode === 'per90' ? 'Rec/90' : 'Rec', percentile: pct(peerRating?.ball_recoveries_per90_percentile, peerRating?.ball_recoveries_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Tkl/90' : 'Tkl', percentile: pct(peerRating?.tackles_per90_percentile, peerRating?.tackles_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Int/90' : 'Int', percentile: pct(peerRating?.interceptions_per90_percentile, peerRating?.interceptions_raw_percentile, statMode, peerQualified) },
+                        { label: 'FC/90', percentile: peerRating?.pressing_percentile ?? 0, inverted: true },
+                        // Ball carrying
+                        { label: 'Drb%', percentile: peerRating?.dribble_success_percentile ?? 0 },
+                        { label: statMode === 'per90' ? 'Drb/90' : 'Drb', percentile: pct(peerRating?.dribbles_per90_percentile, peerRating?.dribbles_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Tch/90' : 'Tch', percentile: pct(peerRating?.touches_per90_percentile, peerRating?.touches_raw_percentile, statMode, peerQualified) },
+                        // Physical
+                        { label: 'Air%', percentile: peerRating?.physical_percentile ?? 0 },
+                        { label: statMode === 'per90' ? 'Grd/90' : 'Grd', percentile: pct(peerRating?.ground_duels_won_per90_percentile, peerRating?.ground_duels_won_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Cont/90' : 'Cont', percentile: pct(peerRating?.total_contest_per90_percentile, peerRating?.total_contests_raw_percentile, statMode, peerQualified) },
+                        // Goal threat
+                        { label: statMode === 'per90' ? 'Goals/90' : 'Goals', percentile: pct(peerRating?.goals_per90_percentile, peerRating?.goals_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'xG/90' : 'xG', percentile: pct(peerRating?.xg_per90_percentile, peerRating?.xg_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Shots/90' : 'Shots', percentile: pct(peerRating?.shots_per90_percentile, peerRating?.shots_raw_percentile, statMode, peerQualified) },
+                      ] : isCM ? [
+                        // CM — Chance creation
+                        { label: statMode === 'per90' ? 'xA/90' : 'xA', percentile: pct(peerRating?.xa_per90_percentile, peerRating?.xa_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Ast/90' : 'Ast', percentile: pct(peerRating?.assists_per90_percentile, peerRating?.assists_raw_percentile, statMode, peerQualified) },
+                        { label: 'xG+xA', percentile: pct(peerRating?.xg_plus_xa_percentile, peerRating?.xg_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'KP/90' : 'KP', percentile: pct(peerRating?.key_passes_per90_percentile, peerRating?.key_passes_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'BCC/90' : 'BCC', percentile: pct(peerRating?.big_chances_created_percentile, peerRating?.big_chances_created_raw_percentile, statMode, peerQualified) },
+                        // Goal threat
+                        { label: statMode === 'per90' ? 'Goals/90' : 'Goals', percentile: pct(peerRating?.goals_per90_percentile, peerRating?.goals_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'xG/90' : 'xG', percentile: pct(peerRating?.xg_per90_percentile, peerRating?.xg_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Shots/90' : 'Shots', percentile: pct(peerRating?.shots_per90_percentile, peerRating?.shots_raw_percentile, statMode, peerQualified) },
+                        { label: 'SoT%', percentile: peerRating?.shot_on_target_percentile ?? 0 },
+                        // Ball carrying
+                        { label: 'Drb%', percentile: peerRating?.dribble_success_percentile ?? 0 },
+                        { label: statMode === 'per90' ? 'Drb/90' : 'Drb', percentile: pct(peerRating?.dribbles_per90_percentile, peerRating?.dribbles_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Tch/90' : 'Tch', percentile: pct(peerRating?.touches_per90_percentile, peerRating?.touches_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Fw/90' : 'Fw', percentile: pct(peerRating?.fouls_won_per90_percentile, peerRating?.fouls_won_raw_percentile, statMode, peerQualified) },
+                        // Physical
+                        { label: 'Air%', percentile: peerRating?.physical_percentile ?? 0 },
+                        { label: statMode === 'per90' ? 'Grd/90' : 'Grd', percentile: pct(peerRating?.ground_duels_won_per90_percentile, peerRating?.ground_duels_won_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Cont/90' : 'Cont', percentile: pct(peerRating?.total_contest_per90_percentile, peerRating?.total_contests_raw_percentile, statMode, peerQualified) },
+                        // Pressing
+                        { label: statMode === 'per90' ? 'Rec/90' : 'Rec', percentile: pct(peerRating?.ball_recoveries_per90_percentile, peerRating?.ball_recoveries_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Tkl/90' : 'Tkl', percentile: pct(peerRating?.tackles_per90_percentile, peerRating?.tackles_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Int/90' : 'Int', percentile: pct(peerRating?.interceptions_per90_percentile, peerRating?.interceptions_raw_percentile, statMode, peerQualified) },
+                        { label: 'FC/90', percentile: peerRating?.pressing_percentile ?? 0, inverted: true },
+                      ] : isCDM ? [
+                        // CDM — Pressing first
+                        { label: statMode === 'per90' ? 'Rec/90' : 'Rec', percentile: pct(peerRating?.ball_recoveries_per90_percentile, peerRating?.ball_recoveries_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Tkl/90' : 'Tkl', percentile: pct(peerRating?.tackles_per90_percentile, peerRating?.tackles_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Int/90' : 'Int', percentile: pct(peerRating?.interceptions_per90_percentile, peerRating?.interceptions_raw_percentile, statMode, peerQualified) },
+                        { label: 'FC/90', percentile: peerRating?.pressing_percentile ?? 0, inverted: true },
+                        // Physical
+                        { label: 'Air%', percentile: peerRating?.physical_percentile ?? 0 },
+                        { label: statMode === 'per90' ? 'Air/90' : 'Air', percentile: pct(peerRating?.aerials_per90_percentile, peerRating?.aerials_won_raw_percentile, statMode, peerQualified) },
+                        { label: 'Grd%', percentile: peerRating?.physical_percentile ?? 0 },
+                        { label: statMode === 'per90' ? 'Grd/90' : 'Grd', percentile: pct(peerRating?.ground_duels_won_per90_percentile, peerRating?.ground_duels_won_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Cont/90' : 'Cont', percentile: pct(peerRating?.total_contest_per90_percentile, peerRating?.total_contests_raw_percentile, statMode, peerQualified) },
+                        // Ball carrying
+                        { label: 'Drb%', percentile: peerRating?.dribble_success_percentile ?? 0 },
+                        { label: statMode === 'per90' ? 'Drb/90' : 'Drb', percentile: pct(peerRating?.dribbles_per90_percentile, peerRating?.dribbles_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Tch/90' : 'Tch', percentile: pct(peerRating?.touches_per90_percentile, peerRating?.touches_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Fw/90' : 'Fw', percentile: pct(peerRating?.fouls_won_per90_percentile, peerRating?.fouls_won_raw_percentile, statMode, peerQualified) },
+                        // Chance creation
+                        { label: statMode === 'per90' ? 'xA/90' : 'xA', percentile: pct(peerRating?.xa_per90_percentile, peerRating?.xa_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Ast/90' : 'Ast', percentile: pct(peerRating?.assists_per90_percentile, peerRating?.assists_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'KP/90' : 'KP', percentile: pct(peerRating?.key_passes_per90_percentile, peerRating?.key_passes_raw_percentile, statMode, peerQualified) },
+                        // Goal threat
+                        { label: statMode === 'per90' ? 'Goals/90' : 'Goals', percentile: pct(peerRating?.goals_per90_percentile, peerRating?.goals_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'xG/90' : 'xG', percentile: pct(peerRating?.xg_per90_percentile, peerRating?.xg_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Shots/90' : 'Shots', percentile: pct(peerRating?.shots_per90_percentile, peerRating?.shots_raw_percentile, statMode, peerQualified) },
+                      ] : isDefender ? [
+                        // Defender — Physical first
+                        { label: 'Air%', percentile: peerRating?.physical_percentile ?? 0 },
+                        { label: statMode === 'per90' ? 'Air/90' : 'Air', percentile: pct(peerRating?.aerials_per90_percentile, peerRating?.aerials_won_raw_percentile, statMode, peerQualified) },
+                        { label: 'Grd%', percentile: peerRating?.physical_percentile ?? 0 },
+                        { label: statMode === 'per90' ? 'Grd/90' : 'Grd', percentile: pct(peerRating?.ground_duels_won_per90_percentile, peerRating?.ground_duels_won_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Cont/90' : 'Cont', percentile: pct(peerRating?.total_contest_per90_percentile, peerRating?.total_contests_raw_percentile, statMode, peerQualified) },
+                        // Pressing
+                        { label: statMode === 'per90' ? 'Rec/90' : 'Rec', percentile: pct(peerRating?.ball_recoveries_per90_percentile, peerRating?.ball_recoveries_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Tkl/90' : 'Tkl', percentile: pct(peerRating?.tackles_per90_percentile, peerRating?.tackles_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Int/90' : 'Int', percentile: pct(peerRating?.interceptions_per90_percentile, peerRating?.interceptions_raw_percentile, statMode, peerQualified) },
+                        { label: 'FC/90', percentile: peerRating?.pressing_percentile ?? 0, inverted: true },
+                        // Ball carrying
+                        { label: 'Drb%', percentile: peerRating?.dribble_success_percentile ?? 0 },
+                        { label: statMode === 'per90' ? 'Tch/90' : 'Tch', percentile: pct(peerRating?.touches_per90_percentile, peerRating?.touches_raw_percentile, statMode, peerQualified) },
+                        { label: 'PossLoss', percentile: peerRating?.carrying_percentile ?? 0, inverted: true },
+                        // Chance creation
+                        { label: statMode === 'per90' ? 'xA/90' : 'xA', percentile: pct(peerRating?.xa_per90_percentile, peerRating?.xa_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Ast/90' : 'Ast', percentile: pct(peerRating?.assists_per90_percentile, peerRating?.assists_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Crs/90' : 'Crs', percentile: pct(peerRating?.accurate_cross_per90_percentile, peerRating?.accurate_cross_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'KP/90' : 'KP', percentile: pct(peerRating?.key_passes_per90_percentile, peerRating?.key_passes_raw_percentile, statMode, peerQualified) },
+                        // Goal threat
+                        { label: statMode === 'per90' ? 'Goals/90' : 'Goals', percentile: pct(peerRating?.goals_per90_percentile, peerRating?.goals_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'xG/90' : 'xG', percentile: pct(peerRating?.xg_per90_percentile, peerRating?.xg_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'Shots/90' : 'Shots', percentile: pct(peerRating?.shots_per90_percentile, peerRating?.shots_raw_percentile, statMode, peerQualified) },
+                      ] : []) : []}
                     />
                   </div>
-                ) : (
+                ) : isST ? (
                   <>
                     {/* Goalscoring */}
                     <div style={{ marginBottom: 32 }}>
@@ -462,7 +634,7 @@ function PlayerProfilePage() {
                           </span>
                         )}
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px 24px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
                         <StatRow label={statMode === 'per90' ? 'Goals per 90' : 'Goals'} value={statMode === 'per90' ? fmt(stats.goals_per90) : String(stats.goals ?? 0)} percentile={pct(peerRating?.goals_per90_percentile, peerRating?.goals_raw_percentile, statMode, peerQualified)} />
                         <StatRow label={statMode === 'per90' ? 'Shots per 90' : 'Shots'} value={statMode === 'per90' ? fmt(stats.shots_per90) : String(stats.shots ?? 0)} percentile={pct(peerRating?.shots_per90_percentile, peerRating?.shots_raw_percentile, statMode, peerQualified)} />
                         <StatRow label={statMode === 'per90' ? 'xG per 90' : 'xG'} value={statMode === 'per90' ? fmt(stats.xg_per90) : fmt(stats.xg)} percentile={pct(peerRating?.xg_per90_percentile, peerRating?.xg_raw_percentile, statMode, peerQualified)} />
@@ -487,7 +659,7 @@ function PlayerProfilePage() {
                           </span>
                         )}
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px 24px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
                         <StatRow label={statMode === 'per90' ? 'xA per 90' : 'xA'} value={statMode === 'per90' ? fmt(stats.xa_per90) : fmt(stats.xa)} percentile={pct(peerRating?.xa_per90_percentile, peerRating?.xa_raw_percentile, statMode, peerQualified)} />
                         <StatRow label={statMode === 'per90' ? 'Assists per 90' : 'Assists'} value={statMode === 'per90' ? fmt(stats.assists_per90) : String(stats.assists ?? 0)} percentile={pct(peerRating?.assists_per90_percentile, peerRating?.assists_raw_percentile, statMode, peerQualified)} />
                         <StatRow label={statMode === 'per90' ? 'xG + xA per 90' : 'xG + xA'} value={statMode === 'per90' ? fmt(stats.xg_plus_xa_per90) : fmt((Number(stats.xg) || 0) + (Number(stats.xa) || 0))} percentile={pct(peerRating?.xg_plus_xa_percentile, peerRating?.xg_raw_percentile, statMode, peerQualified)} />
@@ -507,7 +679,7 @@ function PlayerProfilePage() {
                           </span>
                         )}
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px 24px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
                         <StatRow label="Dribble success %" value={fmtPct(stats.dribble_success_rate)} percentile={peerQualified ? (peerRating?.dribble_success_percentile ?? 0) : 0} />
                         <StatRow label={statMode === 'per90' ? 'Successful dribbles / 90' : 'Successful dribbles'} value={statMode === 'per90' ? fmt(stats.dribbles_per90) : String(stats.dribbles ?? 0)} percentile={pct(peerRating?.dribbles_per90_percentile, peerRating?.dribbles_raw_percentile, statMode, peerQualified)} />
                         <StatRow label={statMode === 'per90' ? 'Fouls won / 90' : 'Fouls won'} value={statMode === 'per90' ? fmt(stats.fouls_won_per90) : String(stats.fouls_won ?? 0)} percentile={pct(peerRating?.fouls_won_per90_percentile, peerRating?.fouls_won_raw_percentile, statMode, peerQualified)} />
@@ -527,7 +699,7 @@ function PlayerProfilePage() {
                           </span>
                         )}
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px 24px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
                         <StatRow label="Aerial win %" value={fmtPct(stats.aerial_win_rate)} percentile={peerQualified ? (peerRating?.physical_percentile ?? 0) : 0} />
                         <StatRow label={statMode === 'per90' ? 'Aerial wins / 90' : 'Aerial wins'} value={statMode === 'per90' ? fmt(stats.aerials_per90) : String(stats.aerials_won ?? 0)} percentile={pct(peerRating?.aerials_per90_percentile, peerRating?.aerials_won_raw_percentile, statMode, peerQualified)} />
                         <StatRow label="Ground duel win %" value={fmtPct(stats.ground_duel_win_rate)} percentile={peerQualified ? (peerRating?.physical_percentile ?? 0) : 0} />
@@ -548,14 +720,14 @@ function PlayerProfilePage() {
                     {/* Pressing & Recovery */}
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Pressing & recovery</span>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Defending</span>
                         {peerRating?.pressing_percentile != null && (
                           <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#faece7', color: '#993c1d' }}>
                             {Math.round(peerRating.pressing_percentile)}
                           </span>
                         )}
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px 24px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
                         <StatRow label={statMode === 'per90' ? 'Ball recoveries / 90' : 'Ball recoveries'} value={statMode === 'per90' ? fmt(stats.ball_recovery_per90 ?? stats.ball_recoveries_per90) : String(stats.ball_recoveries ?? 0)} percentile={pct(peerRating?.ball_recoveries_per90_percentile, peerRating?.ball_recoveries_raw_percentile, statMode, peerQualified)} />
                         <StatRow label={statMode === 'per90' ? 'Tackles won / 90' : 'Tackles won'} value={statMode === 'per90' ? fmt(stats.tackles_per90) : String(stats.tackles ?? 0)} percentile={pct(peerRating?.tackles_per90_percentile, peerRating?.tackles_raw_percentile, statMode, peerQualified)} />
                         <StatRow label={statMode === 'per90' ? 'Interceptions / 90' : 'Interceptions'} value={statMode === 'per90' ? fmt(stats.interceptions_per90) : String(stats.interceptions ?? 0)} percentile={pct(peerRating?.interceptions_per90_percentile, peerRating?.interceptions_raw_percentile, statMode, peerQualified)} />
@@ -563,7 +735,585 @@ function PlayerProfilePage() {
                       </div>
                     </div>
                   </>
-                )}
+                ) : isCAM ? (
+                  <>
+                    {/* CAM — Chance Creation */}
+                    <div style={{ marginBottom: 32 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Chance creation</span>
+                        {peerRating?.involvement_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#e6f1fb', color: '#185fa5' }}>
+                            {Math.round(avgPercentile(peerRating.involvement_percentile, peerRating.xg_plus_xa_percentile) ?? 0)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label={statMode === 'per90' ? 'xA per 90' : 'xA'} value={statMode === 'per90' ? fmt(stats.xa_per90) : fmt(stats.xa)} percentile={pct(peerRating?.xa_per90_percentile, peerRating?.xa_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Assists per 90' : 'Assists'} value={statMode === 'per90' ? fmt(stats.assists_per90) : String(stats.assists ?? 0)} percentile={pct(peerRating?.assists_per90_percentile, peerRating?.assists_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'xG + xA per 90' : 'xG + xA'} value={statMode === 'per90' ? fmt(stats.xg_plus_xa_per90) : fmt((Number(stats.xg) || 0) + (Number(stats.xa) || 0))} percentile={pct(peerRating?.xg_plus_xa_percentile, peerRating?.xg_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Key passes per 90' : 'Key passes'} value={statMode === 'per90' ? fmt(stats.key_passes_per90) : String(stats.key_passes ?? 0)} percentile={pct(peerRating?.key_passes_per90_percentile, peerRating?.key_passes_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Big chances created / 90' : 'Big chances created'} value={statMode === 'per90' ? fmt(stats.big_chance_created_per90 ?? stats.big_chances_created_per90) : String(stats.big_chances_created ?? 0)} percentile={pct(peerRating?.big_chances_created_percentile, peerRating?.big_chances_created_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Accurate crosses / 90' : 'Accurate crosses'} value={statMode === 'per90' ? fmt(stats.accurate_cross_per90) : String(stats.accurate_cross ?? 0)} percentile={pct(peerRating?.accurate_cross_per90_percentile, peerRating?.accurate_cross_raw_percentile, statMode, peerQualified)} />
+                      </div>
+                    </div>
+
+                    {/* CAM — Goal Threat */}
+                    <div style={{ marginBottom: 32 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Goal threat</span>
+                        {peerRating?.finishing_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#d4f0e2', color: '#0f6e56' }}>
+                            {Math.round(peerRating.finishing_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label={statMode === 'per90' ? 'Goals per 90' : 'Goals'} value={statMode === 'per90' ? fmt(stats.goals_per90) : String(stats.goals ?? 0)} percentile={pct(peerRating?.goals_per90_percentile, peerRating?.goals_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'xG per 90' : 'xG'} value={statMode === 'per90' ? fmt(stats.xg_per90) : fmt(stats.xg)} percentile={pct(peerRating?.xg_per90_percentile, peerRating?.xg_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Shots per 90' : 'Shots'} value={statMode === 'per90' ? fmt(stats.shots_per90) : String(stats.shots ?? 0)} percentile={pct(peerRating?.shots_per90_percentile, peerRating?.shots_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label="Shot on target %" value={fmtPct(stats.shot_on_target_rate)} percentile={peerQualified ? (peerRating?.shot_on_target_percentile ?? 0) : 0} />
+                        <StatRow label="xG per shot" value={fmt(stats.xg_per_shot, 2)} percentile={peerQualified ? (peerRating?.xg_per_shot_percentile ?? 0) : 0} />
+                        <StatRow label={statMode === 'per90' ? 'np Goals per 90' : 'np Goals'} value={statMode === 'per90' ? fmt(stats.np_goals_per90) : String(stats.np_goals ?? 0)} percentile={pct(peerRating?.np_goals_per90_percentile, peerRating?.np_goals_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'np xG per 90' : 'np xG'} value={statMode === 'per90' ? fmt(stats.np_xg_per90) : fmt(stats.np_xg_total)} percentile={pct(peerRating?.np_xg_per90_percentile, peerRating?.np_xg_raw_percentile, statMode, peerQualified)} />
+                      </div>
+                    </div>
+
+                    {/* CAM — Ball Carrying */}
+                    <div style={{ marginBottom: 32 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Ball carrying</span>
+                        {peerRating?.carrying_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#eeedfe', color: '#534ab7' }}>
+                            {Math.round(peerRating.carrying_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label="Dribble success %" value={fmtPct(stats.dribble_success_rate)} percentile={peerQualified ? (peerRating?.dribble_success_percentile ?? 0) : 0} />
+                        <StatRow label={statMode === 'per90' ? 'Successful dribbles / 90' : 'Successful dribbles'} value={statMode === 'per90' ? fmt(stats.dribbles_per90) : String(stats.dribbles ?? 0)} percentile={pct(peerRating?.dribbles_per90_percentile, peerRating?.dribbles_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Fouls won / 90' : 'Fouls won'} value={statMode === 'per90' ? fmt(stats.fouls_won_per90) : String(stats.fouls_won ?? 0)} percentile={pct(peerRating?.fouls_won_per90_percentile, peerRating?.fouls_won_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Touches per 90' : 'Touches'} value={statMode === 'per90' ? fmt(stats.touches_per90) : String(stats.touches ?? 0)} percentile={pct(peerRating?.touches_per90_percentile, peerRating?.touches_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label="Possession loss rate" value={fmtPct(stats.possession_loss_rate)} percentile={peerQualified ? (100 - (peerRating?.carrying_percentile ?? 0)) : 0} />
+                      </div>
+                    </div>
+
+                    {/* CAM — Physical Duels */}
+                    <div style={{ marginBottom: 32 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Physical duels</span>
+                        {peerRating?.physical_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#faeeda', color: '#854f0b' }}>
+                            {Math.round(peerRating.physical_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label="Aerial win %" value={fmtPct(stats.aerial_win_rate)} percentile={peerQualified ? (peerRating?.physical_percentile ?? 0) : 0} />
+                        <StatRow label={statMode === 'per90' ? 'Aerial wins / 90' : 'Aerial wins'} value={statMode === 'per90' ? fmt(stats.aerials_per90) : String(stats.aerials_won ?? 0)} percentile={pct(peerRating?.aerials_per90_percentile, peerRating?.aerials_won_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label="Ground duel win %" value={fmtPct(stats.ground_duel_win_rate)} percentile={peerQualified ? (peerRating?.physical_percentile ?? 0) : 0} />
+                        <StatRow label={statMode === 'per90' ? 'Ground duel wins / 90' : 'Ground duel wins'} value={statMode === 'per90' ? fmt(stats.ground_duels_won_per90) : String(stats.ground_duels_won ?? 0)} percentile={pct(peerRating?.ground_duels_won_per90_percentile, peerRating?.ground_duels_won_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Total contests / 90' : 'Total contests'} value={statMode === 'per90' ? fmt(stats.total_contest_per90) : String((stats.aerials_won ?? 0) + (stats.aerials_lost ?? 0) + (stats.ground_duels_won ?? 0) + (stats.ground_duels_lost ?? 0))} percentile={pct(peerRating?.total_contest_per90_percentile, peerRating?.total_contests_raw_percentile, statMode, peerQualified)} />
+                      </div>
+                    </div>
+
+                    {/* CAM — Pressing & Recovery */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Defending</span>
+                        {peerRating?.pressing_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#faece7', color: '#993c1d' }}>
+                            {Math.round(peerRating.pressing_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label={statMode === 'per90' ? 'Ball recoveries / 90' : 'Ball recoveries'} value={statMode === 'per90' ? fmt(stats.ball_recovery_per90 ?? stats.ball_recoveries_per90) : String(stats.ball_recoveries ?? 0)} percentile={pct(peerRating?.ball_recoveries_per90_percentile, peerRating?.ball_recoveries_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Tackles won / 90' : 'Tackles won'} value={statMode === 'per90' ? fmt(stats.tackles_per90) : String(stats.tackles ?? 0)} percentile={pct(peerRating?.tackles_per90_percentile, peerRating?.tackles_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Interceptions / 90' : 'Interceptions'} value={statMode === 'per90' ? fmt(stats.interceptions_per90) : String(stats.interceptions ?? 0)} percentile={pct(peerRating?.interceptions_per90_percentile, peerRating?.interceptions_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Fouls committed / 90' : 'Fouls committed'} value={statMode === 'per90' ? fmt(stats.fouls_committed_per90) : String(stats.fouls_committed ?? 0)} percentile={pct(100 - (peerRating?.pressing_percentile ?? 0), peerRating?.fouls_committed_raw_percentile, statMode, peerQualified)} />
+                      </div>
+                    </div>
+                  </>
+                ) : isWinger ? (
+                  <>
+                    {/* Winger — Chance Creation */}
+                    <div style={{ marginBottom: 32 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Chance creation</span>
+                        {peerRating?.involvement_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#e6f1fb', color: '#185fa5' }}>
+                            {Math.round(avgPercentile(peerRating.involvement_percentile, peerRating.xg_plus_xa_percentile) ?? 0)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label={statMode === 'per90' ? 'xA per 90' : 'xA'} value={statMode === 'per90' ? fmt(stats.xa_per90) : fmt(stats.xa)} percentile={pct(peerRating?.xa_per90_percentile, peerRating?.xa_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Assists per 90' : 'Assists'} value={statMode === 'per90' ? fmt(stats.assists_per90) : String(stats.assists ?? 0)} percentile={pct(peerRating?.assists_per90_percentile, peerRating?.assists_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'xG + xA per 90' : 'xG + xA'} value={statMode === 'per90' ? fmt(stats.xg_plus_xa_per90) : fmt((Number(stats.xg) || 0) + (Number(stats.xa) || 0))} percentile={pct(peerRating?.xg_plus_xa_percentile, peerRating?.xg_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Key passes per 90' : 'Key passes'} value={statMode === 'per90' ? fmt(stats.key_passes_per90) : String(stats.key_passes ?? 0)} percentile={pct(peerRating?.key_passes_per90_percentile, peerRating?.key_passes_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Big chances created / 90' : 'Big chances created'} value={statMode === 'per90' ? fmt(stats.big_chance_created_per90 ?? stats.big_chances_created_per90) : String(stats.big_chances_created ?? 0)} percentile={pct(peerRating?.big_chances_created_percentile, peerRating?.big_chances_created_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Accurate crosses / 90' : 'Accurate crosses'} value={statMode === 'per90' ? fmt(stats.accurate_cross_per90) : String(stats.accurate_cross ?? 0)} percentile={pct(peerRating?.accurate_cross_per90_percentile, peerRating?.accurate_cross_raw_percentile, statMode, peerQualified)} />
+                      </div>
+                    </div>
+
+                    {/* Winger — Goal Threat */}
+                    <div style={{ marginBottom: 32 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Goal threat</span>
+                        {peerRating?.finishing_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#d4f0e2', color: '#0f6e56' }}>
+                            {Math.round(peerRating.finishing_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label={statMode === 'per90' ? 'Goals per 90' : 'Goals'} value={statMode === 'per90' ? fmt(stats.goals_per90) : String(stats.goals ?? 0)} percentile={pct(peerRating?.goals_per90_percentile, peerRating?.goals_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Shots per 90' : 'Shots'} value={statMode === 'per90' ? fmt(stats.shots_per90) : String(stats.shots ?? 0)} percentile={pct(peerRating?.shots_per90_percentile, peerRating?.shots_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'xG per 90' : 'xG'} value={statMode === 'per90' ? fmt(stats.xg_per90) : fmt(stats.xg)} percentile={pct(peerRating?.xg_per90_percentile, peerRating?.xg_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label="Shot on target %" value={fmtPct(stats.shot_on_target_rate)} percentile={peerQualified ? (peerRating?.shot_on_target_percentile ?? 0) : 0} />
+                        <StatRow label="xG per shot" value={fmt(stats.xg_per_shot, 2)} percentile={peerQualified ? (peerRating?.xg_per_shot_percentile ?? 0) : 0} />
+                        <StatRow label="Shot conversion %" value={fmtPct(stats.shot_conversion_rate)} percentile={peerQualified ? (peerRating?.shot_conversion_percentile ?? 0) : 0} />
+                      </div>
+                    </div>
+
+                    {/* Winger — Ball Carrying */}
+                    <div style={{ marginBottom: 32 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Ball carrying</span>
+                        {peerRating?.carrying_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#eeedfe', color: '#534ab7' }}>
+                            {Math.round(peerRating.carrying_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label="Dribble success %" value={fmtPct(stats.dribble_success_rate)} percentile={peerQualified ? (peerRating?.dribble_success_percentile ?? 0) : 0} />
+                        <StatRow label={statMode === 'per90' ? 'Successful dribbles / 90' : 'Successful dribbles'} value={statMode === 'per90' ? fmt(stats.dribbles_per90) : String(stats.dribbles ?? 0)} percentile={pct(peerRating?.dribbles_per90_percentile, peerRating?.dribbles_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Fouls won / 90' : 'Fouls won'} value={statMode === 'per90' ? fmt(stats.fouls_won_per90) : String(stats.fouls_won ?? 0)} percentile={pct(peerRating?.fouls_won_per90_percentile, peerRating?.fouls_won_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Touches per 90' : 'Touches'} value={statMode === 'per90' ? fmt(stats.touches_per90) : String(stats.touches ?? 0)} percentile={pct(peerRating?.touches_per90_percentile, peerRating?.touches_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label="Possession loss rate" value={fmtPct(stats.possession_loss_rate)} percentile={peerQualified ? (100 - (peerRating?.carrying_percentile ?? 0)) : 0} />
+                      </div>
+                    </div>
+
+                    {/* Winger — Physical Duels */}
+                    <div style={{ marginBottom: 32 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Physical duels</span>
+                        {peerRating?.physical_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#faeeda', color: '#854f0b' }}>
+                            {Math.round(peerRating.physical_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label="Aerial win %" value={fmtPct(stats.aerial_win_rate)} percentile={peerQualified ? (peerRating?.physical_percentile ?? 0) : 0} />
+                        <StatRow label={statMode === 'per90' ? 'Aerial wins / 90' : 'Aerial wins'} value={statMode === 'per90' ? fmt(stats.aerials_per90) : String(stats.aerials_won ?? 0)} percentile={pct(peerRating?.aerials_per90_percentile, peerRating?.aerials_won_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label="Ground duel win %" value={fmtPct(stats.ground_duel_win_rate)} percentile={peerQualified ? (peerRating?.physical_percentile ?? 0) : 0} />
+                        <StatRow label={statMode === 'per90' ? 'Ground duel wins / 90' : 'Ground duel wins'} value={statMode === 'per90' ? fmt(stats.ground_duels_won_per90) : String(stats.ground_duels_won ?? 0)} percentile={pct(peerRating?.ground_duels_won_per90_percentile, peerRating?.ground_duels_won_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Total contests / 90' : 'Total contests'} value={statMode === 'per90' ? fmt(stats.total_contest_per90) : String((stats.aerials_won ?? 0) + (stats.aerials_lost ?? 0) + (stats.ground_duels_won ?? 0) + (stats.ground_duels_lost ?? 0))} percentile={pct(peerRating?.total_contest_per90_percentile, peerRating?.total_contests_raw_percentile, statMode, peerQualified)} />
+                      </div>
+                    </div>
+
+                    {/* Winger — Pressing & Recovery */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Defending</span>
+                        {peerRating?.pressing_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#faece7', color: '#993c1d' }}>
+                            {Math.round(peerRating.pressing_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label={statMode === 'per90' ? 'Ball recoveries / 90' : 'Ball recoveries'} value={statMode === 'per90' ? fmt(stats.ball_recovery_per90 ?? stats.ball_recoveries_per90) : String(stats.ball_recoveries ?? 0)} percentile={pct(peerRating?.ball_recoveries_per90_percentile, peerRating?.ball_recoveries_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Tackles won / 90' : 'Tackles won'} value={statMode === 'per90' ? fmt(stats.tackles_per90) : String(stats.tackles ?? 0)} percentile={pct(peerRating?.tackles_per90_percentile, peerRating?.tackles_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Interceptions / 90' : 'Interceptions'} value={statMode === 'per90' ? fmt(stats.interceptions_per90) : String(stats.interceptions ?? 0)} percentile={pct(peerRating?.interceptions_per90_percentile, peerRating?.interceptions_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Fouls committed / 90' : 'Fouls committed'} value={statMode === 'per90' ? fmt(stats.fouls_committed_per90) : String(stats.fouls_committed ?? 0)} percentile={pct(100 - (peerRating?.pressing_percentile ?? 0), peerRating?.fouls_committed_raw_percentile, statMode, peerQualified)} />
+                      </div>
+                    </div>
+                  </>
+                ) : isDefensiveWinger ? (
+                  <>
+                    {/* Defensive Winger — Chance Creation */}
+                    <div style={{ marginBottom: 32 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Chance creation</span>
+                        {peerRating?.involvement_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#e6f1fb', color: '#185fa5' }}>
+                            {Math.round(avgPercentile(peerRating.involvement_percentile, peerRating.xg_plus_xa_percentile) ?? 0)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label={statMode === 'per90' ? 'xA per 90' : 'xA'} value={statMode === 'per90' ? fmt(stats.xa_per90) : fmt(stats.xa)} percentile={pct(peerRating?.xa_per90_percentile, peerRating?.xa_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Assists per 90' : 'Assists'} value={statMode === 'per90' ? fmt(stats.assists_per90) : String(stats.assists ?? 0)} percentile={pct(peerRating?.assists_per90_percentile, peerRating?.assists_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'xG + xA per 90' : 'xG + xA'} value={statMode === 'per90' ? fmt(stats.xg_plus_xa_per90) : fmt((Number(stats.xg) || 0) + (Number(stats.xa) || 0))} percentile={pct(peerRating?.xg_plus_xa_percentile, peerRating?.xg_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Key passes per 90' : 'Key passes'} value={statMode === 'per90' ? fmt(stats.key_passes_per90) : String(stats.key_passes ?? 0)} percentile={pct(peerRating?.key_passes_per90_percentile, peerRating?.key_passes_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Accurate crosses / 90' : 'Accurate crosses'} value={statMode === 'per90' ? fmt(stats.accurate_cross_per90) : String(stats.accurate_cross ?? 0)} percentile={pct(peerRating?.accurate_cross_per90_percentile, peerRating?.accurate_cross_raw_percentile, statMode, peerQualified)} />
+                      </div>
+                    </div>
+
+                    {/* Defensive Winger — Pressing & Recovery */}
+                    <div style={{ marginBottom: 32 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Defending</span>
+                        {peerRating?.pressing_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#faece7', color: '#993c1d' }}>
+                            {Math.round(peerRating.pressing_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label={statMode === 'per90' ? 'Ball recoveries / 90' : 'Ball recoveries'} value={statMode === 'per90' ? fmt(stats.ball_recovery_per90 ?? stats.ball_recoveries_per90) : String(stats.ball_recoveries ?? 0)} percentile={pct(peerRating?.ball_recoveries_per90_percentile, peerRating?.ball_recoveries_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Tackles won / 90' : 'Tackles won'} value={statMode === 'per90' ? fmt(stats.tackles_per90) : String(stats.tackles ?? 0)} percentile={pct(peerRating?.tackles_per90_percentile, peerRating?.tackles_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Interceptions / 90' : 'Interceptions'} value={statMode === 'per90' ? fmt(stats.interceptions_per90) : String(stats.interceptions ?? 0)} percentile={pct(peerRating?.interceptions_per90_percentile, peerRating?.interceptions_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Fouls committed / 90' : 'Fouls committed'} value={statMode === 'per90' ? fmt(stats.fouls_committed_per90) : String(stats.fouls_committed ?? 0)} percentile={pct(100 - (peerRating?.pressing_percentile ?? 0), peerRating?.fouls_committed_raw_percentile, statMode, peerQualified)} />
+                      </div>
+                    </div>
+
+                    {/* Defensive Winger — Ball Carrying */}
+                    <div style={{ marginBottom: 32 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Ball carrying</span>
+                        {peerRating?.carrying_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#eeedfe', color: '#534ab7' }}>
+                            {Math.round(peerRating.carrying_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label="Dribble success %" value={fmtPct(stats.dribble_success_rate)} percentile={peerQualified ? (peerRating?.dribble_success_percentile ?? 0) : 0} />
+                        <StatRow label={statMode === 'per90' ? 'Successful dribbles / 90' : 'Successful dribbles'} value={statMode === 'per90' ? fmt(stats.dribbles_per90) : String(stats.dribbles ?? 0)} percentile={pct(peerRating?.dribbles_per90_percentile, peerRating?.dribbles_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Touches per 90' : 'Touches'} value={statMode === 'per90' ? fmt(stats.touches_per90) : String(stats.touches ?? 0)} percentile={pct(peerRating?.touches_per90_percentile, peerRating?.touches_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label="Possession loss rate" value={fmtPct(stats.possession_loss_rate)} percentile={peerQualified ? (100 - (peerRating?.carrying_percentile ?? 0)) : 0} />
+                      </div>
+                    </div>
+
+                    {/* Defensive Winger — Physical Duels */}
+                    <div style={{ marginBottom: 32 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Physical duels</span>
+                        {peerRating?.physical_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#faeeda', color: '#854f0b' }}>
+                            {Math.round(peerRating.physical_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label="Aerial win %" value={fmtPct(stats.aerial_win_rate)} percentile={peerQualified ? (peerRating?.physical_percentile ?? 0) : 0} />
+                        <StatRow label="Ground duel win %" value={fmtPct(stats.ground_duel_win_rate)} percentile={peerQualified ? (peerRating?.physical_percentile ?? 0) : 0} />
+                        <StatRow label={statMode === 'per90' ? 'Ground duel wins / 90' : 'Ground duel wins'} value={statMode === 'per90' ? fmt(stats.ground_duels_won_per90) : String(stats.ground_duels_won ?? 0)} percentile={pct(peerRating?.ground_duels_won_per90_percentile, peerRating?.ground_duels_won_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Total contests / 90' : 'Total contests'} value={statMode === 'per90' ? fmt(stats.total_contest_per90) : String((stats.aerials_won ?? 0) + (stats.aerials_lost ?? 0) + (stats.ground_duels_won ?? 0) + (stats.ground_duels_lost ?? 0))} percentile={pct(peerRating?.total_contest_per90_percentile, peerRating?.total_contests_raw_percentile, statMode, peerQualified)} />
+                      </div>
+                    </div>
+
+                    {/* Defensive Winger — Goal Threat */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Goal threat</span>
+                        {peerRating?.finishing_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#d4f0e2', color: '#0f6e56' }}>
+                            {Math.round(peerRating.finishing_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label={statMode === 'per90' ? 'Goals per 90' : 'Goals'} value={statMode === 'per90' ? fmt(stats.goals_per90) : String(stats.goals ?? 0)} percentile={pct(peerRating?.goals_per90_percentile, peerRating?.goals_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'xG per 90' : 'xG'} value={statMode === 'per90' ? fmt(stats.xg_per90) : fmt(stats.xg)} percentile={pct(peerRating?.xg_per90_percentile, peerRating?.xg_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Shots per 90' : 'Shots'} value={statMode === 'per90' ? fmt(stats.shots_per90) : String(stats.shots ?? 0)} percentile={pct(peerRating?.shots_per90_percentile, peerRating?.shots_raw_percentile, statMode, peerQualified)} />
+                      </div>
+                    </div>
+                  </>
+                ) : isCM ? (
+                  <>
+                    {/* CM — Chance Creation */}
+                    <div style={{ marginBottom: 32 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Chance creation</span>
+                        {peerRating?.involvement_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#e6f1fb', color: '#185fa5' }}>
+                            {Math.round(avgPercentile(peerRating.involvement_percentile, peerRating.xg_plus_xa_percentile) ?? 0)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label={statMode === 'per90' ? 'xA per 90' : 'xA'} value={statMode === 'per90' ? fmt(stats.xa_per90) : fmt(stats.xa)} percentile={pct(peerRating?.xa_per90_percentile, peerRating?.xa_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Assists per 90' : 'Assists'} value={statMode === 'per90' ? fmt(stats.assists_per90) : String(stats.assists ?? 0)} percentile={pct(peerRating?.assists_per90_percentile, peerRating?.assists_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'xG + xA per 90' : 'xG + xA'} value={statMode === 'per90' ? fmt(stats.xg_plus_xa_per90) : fmt((Number(stats.xg) || 0) + (Number(stats.xa) || 0))} percentile={pct(peerRating?.xg_plus_xa_percentile, peerRating?.xg_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Key passes per 90' : 'Key passes'} value={statMode === 'per90' ? fmt(stats.key_passes_per90) : String(stats.key_passes ?? 0)} percentile={pct(peerRating?.key_passes_per90_percentile, peerRating?.key_passes_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Big chances created / 90' : 'Big chances created'} value={statMode === 'per90' ? fmt(stats.big_chance_created_per90 ?? stats.big_chances_created_per90) : String(stats.big_chances_created ?? 0)} percentile={pct(peerRating?.big_chances_created_percentile, peerRating?.big_chances_created_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Accurate crosses / 90' : 'Accurate crosses'} value={statMode === 'per90' ? fmt(stats.accurate_cross_per90) : String(stats.accurate_cross ?? 0)} percentile={pct(peerRating?.accurate_cross_per90_percentile, peerRating?.accurate_cross_raw_percentile, statMode, peerQualified)} />
+                      </div>
+                    </div>
+
+                    {/* CM — Goal Threat */}
+                    <div style={{ marginBottom: 32 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Goal threat</span>
+                        {peerRating?.finishing_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#d4f0e2', color: '#0f6e56' }}>
+                            {Math.round(peerRating.finishing_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label={statMode === 'per90' ? 'Goals per 90' : 'Goals'} value={statMode === 'per90' ? fmt(stats.goals_per90) : String(stats.goals ?? 0)} percentile={pct(peerRating?.goals_per90_percentile, peerRating?.goals_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'xG per 90' : 'xG'} value={statMode === 'per90' ? fmt(stats.xg_per90) : fmt(stats.xg)} percentile={pct(peerRating?.xg_per90_percentile, peerRating?.xg_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Shots per 90' : 'Shots'} value={statMode === 'per90' ? fmt(stats.shots_per90) : String(stats.shots ?? 0)} percentile={pct(peerRating?.shots_per90_percentile, peerRating?.shots_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label="Shot on target %" value={fmtPct(stats.shot_on_target_rate)} percentile={peerQualified ? (peerRating?.shot_on_target_percentile ?? 0) : 0} />
+                        <StatRow label="xG per shot" value={fmt(stats.xg_per_shot, 2)} percentile={peerQualified ? (peerRating?.xg_per_shot_percentile ?? 0) : 0} />
+                      </div>
+                    </div>
+
+                    {/* CM — Ball Carrying */}
+                    <div style={{ marginBottom: 32 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Ball carrying</span>
+                        {peerRating?.carrying_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#eeedfe', color: '#534ab7' }}>
+                            {Math.round(peerRating.carrying_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label="Dribble success %" value={fmtPct(stats.dribble_success_rate)} percentile={peerQualified ? (peerRating?.dribble_success_percentile ?? 0) : 0} />
+                        <StatRow label={statMode === 'per90' ? 'Successful dribbles / 90' : 'Successful dribbles'} value={statMode === 'per90' ? fmt(stats.dribbles_per90) : String(stats.dribbles ?? 0)} percentile={pct(peerRating?.dribbles_per90_percentile, peerRating?.dribbles_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Fouls won / 90' : 'Fouls won'} value={statMode === 'per90' ? fmt(stats.fouls_won_per90) : String(stats.fouls_won ?? 0)} percentile={pct(peerRating?.fouls_won_per90_percentile, peerRating?.fouls_won_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Touches per 90' : 'Touches'} value={statMode === 'per90' ? fmt(stats.touches_per90) : String(stats.touches ?? 0)} percentile={pct(peerRating?.touches_per90_percentile, peerRating?.touches_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label="Possession loss rate" value={fmtPct(stats.possession_loss_rate)} percentile={peerQualified ? (100 - (peerRating?.carrying_percentile ?? 0)) : 0} />
+                      </div>
+                    </div>
+
+                    {/* CM — Physical Duels */}
+                    <div style={{ marginBottom: 32 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Physical duels</span>
+                        {peerRating?.physical_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#faeeda', color: '#854f0b' }}>
+                            {Math.round(peerRating.physical_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label="Aerial win %" value={fmtPct(stats.aerial_win_rate)} percentile={peerQualified ? (peerRating?.physical_percentile ?? 0) : 0} />
+                        <StatRow label="Ground duel win %" value={fmtPct(stats.ground_duel_win_rate)} percentile={peerQualified ? (peerRating?.physical_percentile ?? 0) : 0} />
+                        <StatRow label={statMode === 'per90' ? 'Ground duel wins / 90' : 'Ground duel wins'} value={statMode === 'per90' ? fmt(stats.ground_duels_won_per90) : String(stats.ground_duels_won ?? 0)} percentile={pct(peerRating?.ground_duels_won_per90_percentile, peerRating?.ground_duels_won_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Total contests / 90' : 'Total contests'} value={statMode === 'per90' ? fmt(stats.total_contest_per90) : String((stats.aerials_won ?? 0) + (stats.aerials_lost ?? 0) + (stats.ground_duels_won ?? 0) + (stats.ground_duels_lost ?? 0))} percentile={pct(peerRating?.total_contest_per90_percentile, peerRating?.total_contests_raw_percentile, statMode, peerQualified)} />
+                      </div>
+                    </div>
+
+                    {/* CM — Pressing & Recovery */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Defending</span>
+                        {peerRating?.pressing_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#faece7', color: '#993c1d' }}>
+                            {Math.round(peerRating.pressing_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label={statMode === 'per90' ? 'Ball recoveries / 90' : 'Ball recoveries'} value={statMode === 'per90' ? fmt(stats.ball_recovery_per90 ?? stats.ball_recoveries_per90) : String(stats.ball_recoveries ?? 0)} percentile={pct(peerRating?.ball_recoveries_per90_percentile, peerRating?.ball_recoveries_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Tackles won / 90' : 'Tackles won'} value={statMode === 'per90' ? fmt(stats.tackles_per90) : String(stats.tackles ?? 0)} percentile={pct(peerRating?.tackles_per90_percentile, peerRating?.tackles_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Interceptions / 90' : 'Interceptions'} value={statMode === 'per90' ? fmt(stats.interceptions_per90) : String(stats.interceptions ?? 0)} percentile={pct(peerRating?.interceptions_per90_percentile, peerRating?.interceptions_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Fouls committed / 90' : 'Fouls committed'} value={statMode === 'per90' ? fmt(stats.fouls_committed_per90) : String(stats.fouls_committed ?? 0)} percentile={pct(100 - (peerRating?.pressing_percentile ?? 0), peerRating?.fouls_committed_raw_percentile, statMode, peerQualified)} />
+                      </div>
+                    </div>
+                  </>
+                ) : isCDM ? (
+                  <>
+                    {/* CDM — Pressing & Recovery (first) */}
+                    <div style={{ marginBottom: 32 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Defending</span>
+                        {peerRating?.pressing_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#faece7', color: '#993c1d' }}>
+                            {Math.round(peerRating.pressing_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label={statMode === 'per90' ? 'Ball recoveries / 90' : 'Ball recoveries'} value={statMode === 'per90' ? fmt(stats.ball_recovery_per90 ?? stats.ball_recoveries_per90) : String(stats.ball_recoveries ?? 0)} percentile={pct(peerRating?.ball_recoveries_per90_percentile, peerRating?.ball_recoveries_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Tackles won / 90' : 'Tackles won'} value={statMode === 'per90' ? fmt(stats.tackles_per90) : String(stats.tackles ?? 0)} percentile={pct(peerRating?.tackles_per90_percentile, peerRating?.tackles_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Interceptions / 90' : 'Interceptions'} value={statMode === 'per90' ? fmt(stats.interceptions_per90) : String(stats.interceptions ?? 0)} percentile={pct(peerRating?.interceptions_per90_percentile, peerRating?.interceptions_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Fouls committed / 90' : 'Fouls committed'} value={statMode === 'per90' ? fmt(stats.fouls_committed_per90) : String(stats.fouls_committed ?? 0)} percentile={pct(100 - (peerRating?.pressing_percentile ?? 0), peerRating?.fouls_committed_raw_percentile, statMode, peerQualified)} />
+                      </div>
+                    </div>
+
+                    {/* CDM — Physical Duels */}
+                    <div style={{ marginBottom: 32 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Physical duels</span>
+                        {peerRating?.physical_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#faeeda', color: '#854f0b' }}>
+                            {Math.round(peerRating.physical_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label="Aerial win %" value={fmtPct(stats.aerial_win_rate)} percentile={peerQualified ? (peerRating?.physical_percentile ?? 0) : 0} />
+                        <StatRow label={statMode === 'per90' ? 'Aerial wins / 90' : 'Aerial wins'} value={statMode === 'per90' ? fmt(stats.aerials_per90) : String(stats.aerials_won ?? 0)} percentile={pct(peerRating?.aerials_per90_percentile, peerRating?.aerials_won_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label="Ground duel win %" value={fmtPct(stats.ground_duel_win_rate)} percentile={peerQualified ? (peerRating?.physical_percentile ?? 0) : 0} />
+                        <StatRow label={statMode === 'per90' ? 'Ground duel wins / 90' : 'Ground duel wins'} value={statMode === 'per90' ? fmt(stats.ground_duels_won_per90) : String(stats.ground_duels_won ?? 0)} percentile={pct(peerRating?.ground_duels_won_per90_percentile, peerRating?.ground_duels_won_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Total contests / 90' : 'Total contests'} value={statMode === 'per90' ? fmt(stats.total_contest_per90) : String((stats.aerials_won ?? 0) + (stats.aerials_lost ?? 0) + (stats.ground_duels_won ?? 0) + (stats.ground_duels_lost ?? 0))} percentile={pct(peerRating?.total_contest_per90_percentile, peerRating?.total_contests_raw_percentile, statMode, peerQualified)} />
+                      </div>
+                    </div>
+
+                    {/* CDM — Ball Carrying */}
+                    <div style={{ marginBottom: 32 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Ball carrying</span>
+                        {peerRating?.carrying_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#eeedfe', color: '#534ab7' }}>
+                            {Math.round(peerRating.carrying_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label="Dribble success %" value={fmtPct(stats.dribble_success_rate)} percentile={peerQualified ? (peerRating?.dribble_success_percentile ?? 0) : 0} />
+                        <StatRow label={statMode === 'per90' ? 'Successful dribbles / 90' : 'Successful dribbles'} value={statMode === 'per90' ? fmt(stats.dribbles_per90) : String(stats.dribbles ?? 0)} percentile={pct(peerRating?.dribbles_per90_percentile, peerRating?.dribbles_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Fouls won / 90' : 'Fouls won'} value={statMode === 'per90' ? fmt(stats.fouls_won_per90) : String(stats.fouls_won ?? 0)} percentile={pct(peerRating?.fouls_won_per90_percentile, peerRating?.fouls_won_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Touches per 90' : 'Touches'} value={statMode === 'per90' ? fmt(stats.touches_per90) : String(stats.touches ?? 0)} percentile={pct(peerRating?.touches_per90_percentile, peerRating?.touches_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label="Possession loss rate" value={fmtPct(stats.possession_loss_rate)} percentile={peerQualified ? (100 - (peerRating?.carrying_percentile ?? 0)) : 0} />
+                      </div>
+                    </div>
+
+                    {/* CDM — Chance Creation */}
+                    <div style={{ marginBottom: 32 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Chance creation</span>
+                        {peerRating?.involvement_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#e6f1fb', color: '#185fa5' }}>
+                            {Math.round(avgPercentile(peerRating.involvement_percentile, peerRating.xg_plus_xa_percentile) ?? 0)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label={statMode === 'per90' ? 'xA per 90' : 'xA'} value={statMode === 'per90' ? fmt(stats.xa_per90) : fmt(stats.xa)} percentile={pct(peerRating?.xa_per90_percentile, peerRating?.xa_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Assists per 90' : 'Assists'} value={statMode === 'per90' ? fmt(stats.assists_per90) : String(stats.assists ?? 0)} percentile={pct(peerRating?.assists_per90_percentile, peerRating?.assists_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Key passes per 90' : 'Key passes'} value={statMode === 'per90' ? fmt(stats.key_passes_per90) : String(stats.key_passes ?? 0)} percentile={pct(peerRating?.key_passes_per90_percentile, peerRating?.key_passes_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Big chances created / 90' : 'Big chances created'} value={statMode === 'per90' ? fmt(stats.big_chance_created_per90 ?? stats.big_chances_created_per90) : String(stats.big_chances_created ?? 0)} percentile={pct(peerRating?.big_chances_created_percentile, peerRating?.big_chances_created_raw_percentile, statMode, peerQualified)} />
+                      </div>
+                    </div>
+
+                    {/* CDM — Goal Threat */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Goal threat</span>
+                        {peerRating?.finishing_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#d4f0e2', color: '#0f6e56' }}>
+                            {Math.round(peerRating.finishing_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label={statMode === 'per90' ? 'Goals per 90' : 'Goals'} value={statMode === 'per90' ? fmt(stats.goals_per90) : String(stats.goals ?? 0)} percentile={pct(peerRating?.goals_per90_percentile, peerRating?.goals_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'xG per 90' : 'xG'} value={statMode === 'per90' ? fmt(stats.xg_per90) : fmt(stats.xg)} percentile={pct(peerRating?.xg_per90_percentile, peerRating?.xg_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Shots per 90' : 'Shots'} value={statMode === 'per90' ? fmt(stats.shots_per90) : String(stats.shots ?? 0)} percentile={pct(peerRating?.shots_per90_percentile, peerRating?.shots_raw_percentile, statMode, peerQualified)} />
+                      </div>
+                    </div>
+                  </>
+                ) : isDefender ? (
+                  <>
+                    {/* Defender — Physical Duels (first) */}
+                    <div style={{ marginBottom: 32 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Physical duels</span>
+                        {peerRating?.physical_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#faeeda', color: '#854f0b' }}>
+                            {Math.round(peerRating.physical_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label="Aerial win %" value={fmtPct(stats.aerial_win_rate)} percentile={peerQualified ? (peerRating?.physical_percentile ?? 0) : 0} />
+                        <StatRow label={statMode === 'per90' ? 'Aerial wins / 90' : 'Aerial wins'} value={statMode === 'per90' ? fmt(stats.aerials_per90) : String(stats.aerials_won ?? 0)} percentile={pct(peerRating?.aerials_per90_percentile, peerRating?.aerials_won_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label="Ground duel win %" value={fmtPct(stats.ground_duel_win_rate)} percentile={peerQualified ? (peerRating?.physical_percentile ?? 0) : 0} />
+                        <StatRow label={statMode === 'per90' ? 'Ground duel wins / 90' : 'Ground duel wins'} value={statMode === 'per90' ? fmt(stats.ground_duels_won_per90) : String(stats.ground_duels_won ?? 0)} percentile={pct(peerRating?.ground_duels_won_per90_percentile, peerRating?.ground_duels_won_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Total contests / 90' : 'Total contests'} value={statMode === 'per90' ? fmt(stats.total_contest_per90) : String((stats.aerials_won ?? 0) + (stats.aerials_lost ?? 0) + (stats.ground_duels_won ?? 0) + (stats.ground_duels_lost ?? 0))} percentile={pct(peerRating?.total_contest_per90_percentile, peerRating?.total_contests_raw_percentile, statMode, peerQualified)} />
+                        <StatRow
+                          label="Overall duel win %"
+                          value={fmtPct(
+                            stats.aerials_won != null && stats.ground_duels_won != null
+                              ? (stats.aerials_won + stats.ground_duels_won) / Math.max(1, (stats.aerials_won + (stats.aerials_lost ?? 0) + stats.ground_duels_won + (stats.ground_duels_lost ?? 0)))
+                              : null
+                          )}
+                          percentile={peerQualified ? (peerRating?.physical_percentile ?? 0) : 0}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Defender — Pressing & Recovery */}
+                    <div style={{ marginBottom: 32 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Defending</span>
+                        {peerRating?.pressing_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#faece7', color: '#993c1d' }}>
+                            {Math.round(peerRating.pressing_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label={statMode === 'per90' ? 'Ball recoveries / 90' : 'Ball recoveries'} value={statMode === 'per90' ? fmt(stats.ball_recovery_per90 ?? stats.ball_recoveries_per90) : String(stats.ball_recoveries ?? 0)} percentile={pct(peerRating?.ball_recoveries_per90_percentile, peerRating?.ball_recoveries_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Tackles won / 90' : 'Tackles won'} value={statMode === 'per90' ? fmt(stats.tackles_per90) : String(stats.tackles ?? 0)} percentile={pct(peerRating?.tackles_per90_percentile, peerRating?.tackles_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Interceptions / 90' : 'Interceptions'} value={statMode === 'per90' ? fmt(stats.interceptions_per90) : String(stats.interceptions ?? 0)} percentile={pct(peerRating?.interceptions_per90_percentile, peerRating?.interceptions_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Fouls committed / 90' : 'Fouls committed'} value={statMode === 'per90' ? fmt(stats.fouls_committed_per90) : String(stats.fouls_committed ?? 0)} percentile={pct(100 - (peerRating?.pressing_percentile ?? 0), peerRating?.fouls_committed_raw_percentile, statMode, peerQualified)} />
+                      </div>
+                    </div>
+
+                    {/* Defender — Ball Carrying */}
+                    <div style={{ marginBottom: 32 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Ball carrying</span>
+                        {peerRating?.carrying_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#eeedfe', color: '#534ab7' }}>
+                            {Math.round(peerRating.carrying_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label="Dribble success %" value={fmtPct(stats.dribble_success_rate)} percentile={peerQualified ? (peerRating?.dribble_success_percentile ?? 0) : 0} />
+                        <StatRow label={statMode === 'per90' ? 'Touches per 90' : 'Touches'} value={statMode === 'per90' ? fmt(stats.touches_per90) : String(stats.touches ?? 0)} percentile={pct(peerRating?.touches_per90_percentile, peerRating?.touches_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label="Possession loss rate" value={fmtPct(stats.possession_loss_rate)} percentile={peerQualified ? (100 - (peerRating?.carrying_percentile ?? 0)) : 0} />
+                      </div>
+                    </div>
+
+                    {/* Defender — Chance Creation */}
+                    <div style={{ marginBottom: 32 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Chance creation</span>
+                        {peerRating?.involvement_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#e6f1fb', color: '#185fa5' }}>
+                            {Math.round(peerRating.involvement_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label={statMode === 'per90' ? 'xA per 90' : 'xA'} value={statMode === 'per90' ? fmt(stats.xa_per90) : fmt(stats.xa)} percentile={pct(peerRating?.xa_per90_percentile, peerRating?.xa_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Assists per 90' : 'Assists'} value={statMode === 'per90' ? fmt(stats.assists_per90) : String(stats.assists ?? 0)} percentile={pct(peerRating?.assists_per90_percentile, peerRating?.assists_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Accurate crosses / 90' : 'Accurate crosses'} value={statMode === 'per90' ? fmt(stats.accurate_cross_per90) : String(stats.accurate_cross ?? 0)} percentile={pct(peerRating?.accurate_cross_per90_percentile, peerRating?.accurate_cross_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Key passes per 90' : 'Key passes'} value={statMode === 'per90' ? fmt(stats.key_passes_per90) : String(stats.key_passes ?? 0)} percentile={pct(peerRating?.key_passes_per90_percentile, peerRating?.key_passes_raw_percentile, statMode, peerQualified)} />
+                      </div>
+                    </div>
+
+                    {/* Defender — Goal Threat */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--foreground)' }}>Goal threat</span>
+                        {peerRating?.finishing_percentile != null && (
+                          <span style={{ fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 'var(--radius-md)', background: '#d4f0e2', color: '#0f6e56' }}>
+                            {Math.round(peerRating.finishing_percentile)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                        <StatRow label={statMode === 'per90' ? 'Goals per 90' : 'Goals'} value={statMode === 'per90' ? fmt(stats.goals_per90) : String(stats.goals ?? 0)} percentile={pct(peerRating?.goals_per90_percentile, peerRating?.goals_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'xG per 90' : 'xG'} value={statMode === 'per90' ? fmt(stats.xg_per90) : fmt(stats.xg)} percentile={pct(peerRating?.xg_per90_percentile, peerRating?.xg_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'Shots per 90' : 'Shots'} value={statMode === 'per90' ? fmt(stats.shots_per90) : String(stats.shots ?? 0)} percentile={pct(peerRating?.shots_per90_percentile, peerRating?.shots_raw_percentile, statMode, peerQualified)} />
+                      </div>
+                    </div>
+                  </>
+                ) : null}
 {/* ── Watermark ───────────────────────────── */}
 <div style={{ marginTop: 20, paddingTop: 12, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 10, color: 'var(--muted-foreground)' }}>
 <span>{seasons.find(s => `${s.league_id}|${s.season}` === season)?.league_name} {seasons.find(s => `${s.league_id}|${s.season}` === season)?.season}</span>
@@ -649,7 +1399,7 @@ function PlayerProfilePage() {
           </Card>
           </>
         ) : (
-          !isST && (
+          !isSupported && (
             <div style={{ padding: '2rem', color: 'var(--muted-foreground)', fontSize: 14 }}>
               Detailed stats coming soon for this position.
             </div>

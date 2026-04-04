@@ -26,7 +26,7 @@ export default function RatingBadge({
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-md border font-semibold tabular-nums',
+        'inline-flex items-center rounded-none border font-semibold tabular-nums',
         getRatingColor(rating),
         sizeClasses[size],
         className,

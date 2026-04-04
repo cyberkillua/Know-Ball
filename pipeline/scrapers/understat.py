@@ -11,7 +11,6 @@ import json
 import re
 import time
 import httpx
-from bs4 import BeautifulSoup
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from pipeline.logger import get_logger
@@ -21,8 +20,8 @@ log = get_logger("understat")
 BASE_URL = "https://understat.com"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                  "AppleWebKit/537.36 (KHTML, like Gecko) "
-                  "Chrome/120.0.0.0 Safari/537.36",
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/120.0.0.0 Safari/537.36",
 }
 REQUEST_DELAY = 3
 
@@ -59,6 +58,11 @@ def _extract_json_var(html: str, var_name: str) -> list | dict:
     return json.loads(decoded)
 
 
+def _list_json_vars(html: str) -> list[str]:
+    """Return all JSON.parse variable names embedded in the page (for debugging)."""
+    return re.findall(r"var\s+(\w+)\s*=\s*JSON\.parse\(", html)
+
+
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=5, max=30))
 def _fetch_page(path: str) -> str:
     """Fetch an Understat page and return its HTML."""
@@ -90,16 +94,18 @@ def fetch_league_matches(slug: str, season: int) -> list[dict]:
     for m in matches_data:
         if not m.get("isResult", False):
             continue
-        matches.append({
-            "understat_id": int(m["id"]),
-            "date": m.get("datetime", "")[:10],
-            "home_team": m.get("h", {}).get("title", ""),
-            "home_team_id": int(m.get("h", {}).get("id", 0)),
-            "home_score": int(m.get("goals", {}).get("h", 0)),
-            "away_team": m.get("a", {}).get("title", ""),
-            "away_team_id": int(m.get("a", {}).get("id", 0)),
-            "away_score": int(m.get("goals", {}).get("a", 0)),
-        })
+        matches.append(
+            {
+                "understat_id": int(m["id"]),
+                "date": m.get("datetime", "")[:10],
+                "home_team": m.get("h", {}).get("title", ""),
+                "home_team_id": int(m.get("h", {}).get("id", 0)),
+                "home_score": int(m.get("goals", {}).get("h", 0)),
+                "away_team": m.get("a", {}).get("title", ""),
+                "away_team_id": int(m.get("a", {}).get("id", 0)),
+                "away_score": int(m.get("goals", {}).get("a", 0)),
+            }
+        )
 
     log.info(f"Found {len(matches)} completed matches")
     time.sleep(REQUEST_DELAY)
@@ -130,25 +136,81 @@ def fetch_match_shots(match_id: int) -> list[dict]:
         all_shots = []
 
     for s in all_shots:
-        shots.append({
-            "understat_id": int(s.get("id", 0)),
-            "minute": int(s.get("minute", 0)),
-            "x": float(s.get("X", 0)),
-            "y": float(s.get("Y", 0)),
-            "xg": float(s.get("xG", 0)),
-            "result": s.get("result", ""),
-            "shot_type": s.get("shotType", ""),
-            "situation": s.get("situation", ""),
-            "last_action": s.get("lastAction", ""),
-            "player": s.get("player", ""),
-            "player_id": int(s.get("player_id", 0)),
-            "player_assisted": s.get("player_assisted", ""),
-            "home_away": s.get("h_a", ""),
-        })
+        shots.append(
+            {
+                "understat_id": int(s.get("id", 0)),
+                "minute": int(s.get("minute", 0)),
+                "x": float(s.get("X", 0)),
+                "y": float(s.get("Y", 0)),
+                "xg": float(s.get("xG", 0)),
+                "result": s.get("result", ""),
+                "shot_type": s.get("shotType", ""),
+                "situation": s.get("situation", ""),
+                "last_action": s.get("lastAction", ""),
+                "player": s.get("player", ""),
+                "player_id": int(s.get("player_id", 0)),
+                "player_assisted": s.get("player_assisted", ""),
+                "home_away": s.get("h_a", ""),
+            }
+        )
 
     log.info(f"Extracted {len(shots)} shots")
     time.sleep(REQUEST_DELAY)
     return shots
+
+
+def fetch_league_player_stats(slug: str, season: int) -> list[dict]:
+    """
+    Fetch season-level player stats for a league from Understat.
+
+    Uses the POST API endpoint — data is no longer embedded in page HTML.
+    One request per league/season — returns xGChain, xGBuildup, and minutes
+    for every player. Per-90 values are computed from raw totals.
+
+    Args:
+        slug: Understat league slug (e.g. "EPL", "La_liga")
+        season: Start year of season (e.g. 2024 for 2024/25)
+    """
+    log.info(f"Fetching Understat player stats for {slug} {season}")
+    url = f"{BASE_URL}/main/getPlayersStats/"
+    post_headers = {
+        **HEADERS,
+        "Referer": f"{BASE_URL}/league/{slug}/{season}",
+        "X-Requested-With": "XMLHttpRequest",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+    with httpx.Client(headers=post_headers, timeout=30, follow_redirects=True) as client:
+        resp = client.post(url, data={"league": slug, "season": str(season)})
+        resp.raise_for_status()
+        data = resp.json()
+
+    if not data.get("success"):
+        raise ValueError(f"Understat API error for {slug} {season}: {data}")
+
+    results = []
+    for p in data.get("players", []):
+        minutes = int(p.get("time", 0))
+        xg_chain = float(p.get("xGChain", 0))
+        xg_buildup = float(p.get("xGBuildup", 0))
+        results.append(
+            {
+                "understat_id": int(p["id"]),
+                "player_name": p.get("player_name", ""),
+                "minutes": minutes,
+                "xg_chain": xg_chain,
+                "xg_buildup": xg_buildup,
+                "xg_chain_per90": round(xg_chain / minutes * 90, 4)
+                if minutes >= 90
+                else None,
+                "xg_buildup_per90": round(xg_buildup / minutes * 90, 4)
+                if minutes >= 90
+                else None,
+            }
+        )
+
+    log.info(f"Fetched {len(results)} players for {slug} {season}")
+    time.sleep(REQUEST_DELAY)
+    return results
 
 
 def fetch_player_shots(player_id: int) -> list[dict]:
@@ -163,20 +225,22 @@ def fetch_player_shots(player_id: int) -> list[dict]:
     shots = []
     if isinstance(shots_data, list):
         for s in shots_data:
-            shots.append({
-                "understat_id": int(s.get("id", 0)),
-                "minute": int(s.get("minute", 0)),
-                "x": float(s.get("X", 0)),
-                "y": float(s.get("Y", 0)),
-                "xg": float(s.get("xG", 0)),
-                "result": s.get("result", ""),
-                "shot_type": s.get("shotType", ""),
-                "situation": s.get("situation", ""),
-                "last_action": s.get("lastAction", ""),
-                "match_id": int(s.get("match_id", 0)),
-                "player_assisted": s.get("player_assisted", ""),
-                "season": s.get("season", ""),
-            })
+            shots.append(
+                {
+                    "understat_id": int(s.get("id", 0)),
+                    "minute": int(s.get("minute", 0)),
+                    "x": float(s.get("X", 0)),
+                    "y": float(s.get("Y", 0)),
+                    "xg": float(s.get("xG", 0)),
+                    "result": s.get("result", ""),
+                    "shot_type": s.get("shotType", ""),
+                    "situation": s.get("situation", ""),
+                    "last_action": s.get("lastAction", ""),
+                    "match_id": int(s.get("match_id", 0)),
+                    "player_assisted": s.get("player_assisted", ""),
+                    "season": s.get("season", ""),
+                }
+            )
 
     log.info(f"Extracted {len(shots)} shots for player {player_id}")
     time.sleep(REQUEST_DELAY)

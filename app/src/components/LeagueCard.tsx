@@ -33,7 +33,7 @@ export default function LeagueCard({ league, playerCount }: LeagueCardProps) {
     <Link
       to="/league/$id"
       params={{ id: String(league.id) }}
-      className={`block rounded-xl border p-4 transition-all no-underline ${colorClasses}`}
+      className={`block rounded-none border p-4 transition-all no-underline ${colorClasses}`}
     >
       <div className="flex items-center gap-3 mb-2">
         <span className="text-2xl">{flag}</span>

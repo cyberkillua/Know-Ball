@@ -61,11 +61,11 @@ export default function TopPerformerCard({
 
   return (
     <div
-      className={`${isTop3 ? 'card-glow-gold' : 'card-glow'} rounded-xl border border-border bg-card transition-all ${isExpanded ? 'ring-1 ring-primary/30' : ''}`}
+      className={`${isTop3 ? 'card-glow-gold' : 'card-glow'} rounded-none border border-border bg-card transition-all ${isExpanded ? 'ring-1 ring-primary/30' : ''}`}
     >
       <button
         onClick={handleToggle}
-        className="group flex w-full items-center gap-3 p-3 text-left transition-all hover:bg-accent/30 rounded-xl"
+        className="group flex w-full items-center gap-3 p-3 text-left transition-all hover:bg-accent/30 rounded-none"
       >
         <div
           className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${

@@ -8,7 +8,7 @@ interface Props {
 
 export default function StatCard({ label, value, sub, color, icon }: Props) {
   return (
-    <div className="card-glow rounded-xl border border-border bg-card p-4">
+    <div className="card-glow rounded-none border border-border bg-card p-4">
       <div className="flex items-center gap-2">
         {icon && <div className="text-muted-foreground">{icon}</div>}
         <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</span>
