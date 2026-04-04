@@ -33,8 +33,14 @@ class DB:
 
     def execute(self, sql: str, params: tuple = ()) -> None:
         """Execute a non-returning statement."""
-        with self.conn.cursor() as cur:
-            cur.execute(sql, params)
+        if params and isinstance(params, dict):
+            with self.conn.cursor() as cur:
+                cur.execute(sql, params)
+        elif params and isinstance(params[0], (list, tuple)) and len(params) == 1:
+            psycopg2.extras.execute_values(self.conn.cursor(), sql, params[0])
+        else:
+            with self.conn.cursor() as cur:
+                cur.execute(sql, params)
 
     def insert_returning(self, sql: str, params: tuple = ()) -> dict:
         """Execute an INSERT ... RETURNING and return the row."""

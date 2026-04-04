@@ -84,7 +84,11 @@ function KeyStatsRow({
   const total = shots.length;
   const goals = shots.filter((s) => s.result === "Goal").length;
   const conversion = total > 0 ? (goals / total) * 100 : null;
-  const avgXg = total > 0 ? avg(shots.map((s) => Number(s.xg))) : null;
+  const npShots = shots.filter((s) => s.situation !== "penalty");
+  const avgNpXg = npShots.length > 0 ? avg(npShots.map((s) => Number(s.xg))) : null;
+  const npGoals = npShots.filter((s) => s.result === "Goal").length;
+  const npXgTotal = npShots.reduce((s, sh) => s + Number(sh.xg), 0);
+  const npGvNpXg = npShots.length > 0 ? npGoals - npXgTotal : null;
 
   const xgotLabel =
     xgotDelta == null
@@ -115,11 +119,11 @@ function KeyStatsRow({
           : null,
     },
     {
-      label: "Avg xG / shot",
-      value: avgXg != null ? avgXg.toFixed(3) : "—",
+      label: "avg np xG/shot",
+      value: avgNpXg != null ? avgNpXg.toFixed(2) : "—",
       sub:
-        avgXg != null
-          ? avgXg >= 0.12
+        avgNpXg != null
+          ? avgNpXg >= 0.12
             ? "Good positions"
             : "Speculative"
           : null,
@@ -144,26 +148,26 @@ function KeyStatsRow({
           : null,
     },
     {
-      label: "vs xG",
+      label: "np G vs np xG",
       value:
-        xgOverVal != null
-          ? xgOverVal >= 0
-            ? `+${xgOverVal.toFixed(2)}`
-            : xgOverVal.toFixed(2)
+        npGvNpXg != null
+          ? npGvNpXg >= 0
+            ? `+${npGvNpXg.toFixed(2)}`
+            : npGvNpXg.toFixed(2)
           : "—",
       sub:
-        xgOverVal != null
-          ? xgOverVal > 0
+        npGvNpXg != null
+          ? npGvNpXg > 0
             ? "Outperforming"
-            : xgOverVal < 0
+            : npGvNpXg < 0
               ? "Underperforming"
               : "On par"
           : null,
       color:
-        xgOverVal != null
-          ? xgOverVal > 0
+        npGvNpXg != null
+          ? npGvNpXg > 0
             ? "#22c55e"
-            : xgOverVal < 0
+            : npGvNpXg < 0
               ? "#ef4444"
               : "#f59e0b"
           : null,

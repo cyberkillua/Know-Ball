@@ -16,28 +16,27 @@ MIN_MINUTES = 10
 
 
 def get_unrated_records(db: DB) -> list[dict]:
-    return db.query("""
+    return db.query(
+        """
         SELECT mps.*,
                mts.possession_pct  AS team_possession_pct,
-               mts.total_shots     AS team_total_shots
+               mts.total_shots     AS team_total_shots,
+               mps.position_played AS player_position
         FROM match_player_stats mps
         LEFT JOIN match_ratings mr  ON mr.match_id  = mps.match_id AND mr.player_id  = mps.player_id
         LEFT JOIN match_team_stats mts ON mts.match_id = mps.match_id AND mts.team_id = mps.team_id
         WHERE mr.id IS NULL
           AND mps.minutes_played >= %s
-    """, (MIN_MINUTES,))
-
-
-def get_player_position(db: DB, player_id: int) -> str | None:
-    row = db.query_one("SELECT position FROM players WHERE id = %s", (player_id,))
-    return row["position"] if row else None
+    """,
+        (MIN_MINUTES,),
+    )
 
 
 def _normalize_position(position: str) -> str:
     pos = position.upper().strip()
     # Specific lineup positions from FotMob (granular)
     # Only true centre-forwards / strikers map to ST
-    if pos in {"ST", "CF"}:
+    if pos in {"ST", "CF", "SS"}:
         return "ST"
     # Wingers are NOT strikers — they'll get their own config later
     if pos in {"LW", "RW", "LM", "RM"}:
@@ -76,17 +75,17 @@ def _normalize_position(position: str) -> str:
     return pos
 
 
-def rate_record(db: DB, record: dict, configs: dict) -> bool:
+def rate_record(record: dict, configs: dict) -> tuple[bool, tuple | None]:
     player_id = record["player_id"]
     match_id = record["match_id"]
 
-    position = get_player_position(db, player_id)
+    position = record.get("player_position")
     if not position:
-        return False
+        return False, None
 
     position_key = _normalize_position(position)
     if position_key not in configs:
-        return False
+        return False, None
 
     config = configs[position_key]
 
@@ -126,22 +125,25 @@ def rate_record(db: DB, record: dict, configs: dict) -> bool:
 
     final_rating, scores = calculate_match_rating(stats, config)
 
-    db.execute(
-        """INSERT INTO match_ratings
-           (match_id, player_id, position,
-            finishing_raw, involvement_raw, carrying_raw, physical_raw, pressing_raw,
-            finishing_norm, involvement_norm, carrying_norm, physical_norm, pressing_norm,
-            final_rating, sofascore_rating)
-           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-           ON CONFLICT (match_id, player_id) DO NOTHING""",
-        (match_id, player_id, position_key,
-         scores.finishing_raw, scores.involvement_raw, scores.carrying_raw,
-         scores.physical_raw, scores.pressing_raw,
-         scores.finishing_norm, scores.involvement_norm, scores.carrying_norm,
-         scores.physical_norm, scores.pressing_norm,
-         final_rating, float(record.get("sofascore_rating") or 0)),
+    return True, (
+        match_id,
+        player_id,
+        position_key,
+        scores.finishing_raw,
+        scores.creation_raw,
+        scores.involvement_raw,
+        scores.carrying_raw,
+        scores.physical_raw,
+        scores.pressing_raw,
+        scores.finishing_norm,
+        scores.creation_norm,
+        scores.involvement_norm,
+        scores.carrying_norm,
+        scores.physical_norm,
+        scores.pressing_norm,
+        final_rating,
+        float(record.get("sofascore_rating") or 0),
     )
-    return True
 
 
 def main():
@@ -159,16 +161,34 @@ def main():
 
     rated_count = 0
     skipped_count = 0
+    insert_batch = []
 
     for record in unrated:
         try:
-            if rate_record(db, record, configs):
+            success, rating_data = rate_record(record, configs)
+            if success:
                 rated_count += 1
+                insert_batch.append(rating_data)
             else:
                 skipped_count += 1
         except Exception as e:
-            log.error(f"Error rating player {record['player_id']} match {record['match_id']}: {e}")
+            log.error(
+                f"Error rating player {record['player_id']} match {record['match_id']}: {e}"
+            )
             skipped_count += 1
+
+    if insert_batch:
+        db.execute(
+            """INSERT INTO match_ratings
+               (match_id, player_id, position,
+                finishing_raw, creation_raw, involvement_raw, carrying_raw, physical_raw, pressing_raw,
+                finishing_norm, creation_norm, involvement_norm, carrying_norm, physical_norm, pressing_norm,
+                final_rating, sofascore_rating)
+               VALUES %s
+               ON CONFLICT (match_id, player_id) DO NOTHING""",
+            (insert_batch,),
+        )
+        log.info(f"Inserted {len(insert_batch)} ratings in batch")
 
     db.close()
     log.info(f"Rating complete: {rated_count} rated, {skipped_count} skipped")

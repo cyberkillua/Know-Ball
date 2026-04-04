@@ -96,7 +96,7 @@ function LeagueOverviewPage() {
               />
               <StatCard
                 label="Highest Rating"
-                value={Number(leagueStats.highest_rating ?? 0).toFixed(1)}
+                value={Number(leagueStats.highest_rating ?? 0).toFixed(2)}
                 icon={<Zap size={16} />}
                 color="var(--cat-carrying)"
               />

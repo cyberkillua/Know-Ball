@@ -32,7 +32,7 @@ export default function RatingBadge({
         className,
       )}
     >
-      {rating.toFixed(1)}
+      {rating.toFixed(2)}
     </span>
   )
 }

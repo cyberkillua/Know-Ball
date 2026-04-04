@@ -156,14 +156,15 @@ function PlayerProfilePage() {
     if (!season) return
     const playerId = Number(id)
     const [leagueId, seasonStr] = season.split('|')
+    const leagueIdNum = Number(leagueId)
     setSeasonLoading(true)
     Promise.all([
-      getPlayerRatings({ data: { playerId, season: seasonStr } }),
-      getPlayerPeerRating({ data: { playerId, season: seasonStr, scope: 'league' } }),
-      getPlayerPeerRating({ data: { playerId, season: seasonStr, scope: 'all' } }),
-      getPlayerStats({ data: { playerId, season: seasonStr } }),
-      getPlayerShots({ data: { playerId, season: seasonStr } }),
-      getPlayerXgotDelta({ data: { playerId, season: seasonStr } }),
+      getPlayerRatings({ data: { playerId, season: seasonStr, leagueId: leagueIdNum } }),
+      getPlayerPeerRating({ data: { playerId, season: seasonStr, leagueId: leagueIdNum, scope: 'league' } }),
+      getPlayerPeerRating({ data: { playerId, season: seasonStr, leagueId: leagueIdNum, scope: 'all' } }),
+      getPlayerStats({ data: { playerId, season: seasonStr, leagueId: leagueIdNum } }),
+      getPlayerShots({ data: { playerId, season: seasonStr, leagueId: leagueIdNum } }),
+      getPlayerXgotDelta({ data: { playerId, season: seasonStr, leagueId: leagueIdNum } }),
     ]).then(([r, pr, apr, st, sh, xgd]) => {
       setRatings(r)
       setPeerRating(pr as PeerRating | null)
@@ -282,7 +283,7 @@ function PlayerProfilePage() {
               {avgRating > 0 && (
                 <>
                   <div className="text-xs text-muted-foreground">Avg Rating</div>
-                  <RatingBadge rating={Number(avgRating.toFixed(1))} size="lg" />
+                  <RatingBadge rating={Number(avgRating.toFixed(2))} size="lg" />
                   {last5.length >= 3 && (
                     <div
                       className={`mt-1 text-xs font-medium ${
@@ -416,7 +417,10 @@ function PlayerProfilePage() {
                         { label: 'xG/shot', percentile: peerRating?.xg_per_shot_percentile ?? 0 },
                         { label: 'Conv%', percentile: peerRating?.shot_conversion_percentile ?? 0 },
                         { label: statMode === 'per90' ? 'xGOT/90' : 'xGOT', percentile: pct(peerRating?.xgot_per90_percentile, peerRating?.xg_raw_percentile, statMode, peerQualified) },
-                        { label: statMode === 'per90' ? 'BCM/90' : 'BCM', percentile: 100 - pct(peerRating?.big_chances_missed_percentile, peerRating?.big_chances_missed_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'BCM/90' : 'BCM', percentile: pct(peerRating?.big_chances_missed_percentile, peerRating?.big_chances_missed_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'npG/90' : 'np Goals', percentile: pct(peerRating?.np_goals_per90_percentile, peerRating?.np_goals_raw_percentile, statMode, peerQualified) },
+                        { label: statMode === 'per90' ? 'npxG/90' : 'np xG', percentile: pct(peerRating?.np_xg_per90_percentile, peerRating?.np_xg_raw_percentile, statMode, peerQualified) },
+                        { label: 'npxG/sh', percentile: peerRating?.np_xg_per_shot_percentile ?? 0 },
                         // Chance creation
                         { label: statMode === 'per90' ? 'xA/90' : 'xA', percentile: pct(peerRating?.xa_per90_percentile, peerRating?.xa_raw_percentile, statMode, peerQualified) },
                         { label: statMode === 'per90' ? 'Ast/90' : 'Ast', percentile: pct(peerRating?.assists_per90_percentile, peerRating?.assists_raw_percentile, statMode, peerQualified) },
@@ -429,16 +433,20 @@ function PlayerProfilePage() {
                         { label: statMode === 'per90' ? 'Drb/90' : 'Drb', percentile: pct(peerRating?.dribbles_per90_percentile, peerRating?.dribbles_raw_percentile, statMode, peerQualified) },
                         { label: statMode === 'per90' ? 'Fw/90' : 'Fw', percentile: pct(peerRating?.fouls_won_per90_percentile, peerRating?.fouls_won_raw_percentile, statMode, peerQualified) },
                         { label: statMode === 'per90' ? 'Tch/90' : 'Tch', percentile: pct(peerRating?.touches_per90_percentile, peerRating?.touches_raw_percentile, statMode, peerQualified) },
+                        { label: 'PossLoss', percentile: peerRating?.carrying_percentile ?? 0, inverted: true },
+                        { label: 'Pens', percentile: peerRating?.carrying_percentile ?? 0 },
                         // Physical
                         { label: 'Air%', percentile: peerRating?.physical_percentile ?? 0 },
                         { label: statMode === 'per90' ? 'Air/90' : 'Air', percentile: pct(peerRating?.aerials_per90_percentile, peerRating?.aerials_won_raw_percentile, statMode, peerQualified) },
                         { label: 'Grd%', percentile: peerRating?.physical_percentile ?? 0 },
                         { label: statMode === 'per90' ? 'Grd/90' : 'Grd', percentile: pct(peerRating?.ground_duels_won_per90_percentile, peerRating?.ground_duels_won_raw_percentile, statMode, peerQualified) },
                         { label: statMode === 'per90' ? 'Cont/90' : 'Cont', percentile: pct(peerRating?.total_contest_per90_percentile, peerRating?.total_contests_raw_percentile, statMode, peerQualified) },
+                        { label: 'Ovr%', percentile: peerRating?.physical_percentile ?? 0 },
                         // Pressing
                         { label: statMode === 'per90' ? 'Rec/90' : 'Rec', percentile: pct(peerRating?.ball_recoveries_per90_percentile, peerRating?.ball_recoveries_raw_percentile, statMode, peerQualified) },
                         { label: statMode === 'per90' ? 'Tkl/90' : 'Tkl', percentile: pct(peerRating?.tackles_per90_percentile, peerRating?.tackles_raw_percentile, statMode, peerQualified) },
                         { label: statMode === 'per90' ? 'Int/90' : 'Int', percentile: pct(peerRating?.interceptions_per90_percentile, peerRating?.interceptions_raw_percentile, statMode, peerQualified) },
+                        { label: 'FC/90', percentile: peerRating?.pressing_percentile ?? 0, inverted: true },
                       ] : []}
                     />
                   </div>
@@ -463,6 +471,9 @@ function PlayerProfilePage() {
                         <StatRow label="Shot conversion %" value={fmtPct(stats.shot_conversion_rate)} percentile={peerQualified ? (peerRating?.shot_conversion_percentile ?? 0) : 0} />
                         <StatRow label={statMode === 'per90' ? 'xGOT per 90' : 'xGOT'} value={statMode === 'per90' ? fmt(stats.xgot_per90) : fmt(stats.xg)} percentile={pct(peerRating?.xgot_per90_percentile, peerRating?.xg_raw_percentile, statMode, peerQualified)} />
                         <StatRow label={statMode === 'per90' ? 'Big chances missed / 90' : 'Big chances missed'} value={statMode === 'per90' ? fmt(stats.big_chances_missed_per90) : String(stats.big_chances_missed ?? 0)} percentile={pct(peerRating?.big_chances_missed_percentile, peerRating?.big_chances_missed_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'np Goals per 90' : 'np Goals'} value={statMode === 'per90' ? fmt(stats.np_goals_per90) : String(stats.np_goals ?? 0)} percentile={pct(peerRating?.np_goals_per90_percentile, peerRating?.np_goals_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label={statMode === 'per90' ? 'np xG per 90' : 'np xG'} value={statMode === 'per90' ? fmt(stats.np_xg_per90) : fmt(stats.np_xg_total)} percentile={pct(peerRating?.np_xg_per90_percentile, peerRating?.np_xg_raw_percentile, statMode, peerQualified)} />
+                        <StatRow label="np xG per shot" value={fmt(stats.np_xg_per_shot, 2)} percentile={peerQualified ? (peerRating?.np_xg_per_shot_percentile ?? 0) : 0} />
                       </div>
                     </div>
 
@@ -581,10 +592,13 @@ function PlayerProfilePage() {
                   </button>
                 </div>
               </div>
-              {activePeerRating == null || (activePeerRating.matches_played ?? 0) < 5 ? (
+              {activePeerRating == null ? (
                 <div style={{ fontSize: 13, color: 'var(--muted-foreground)', padding: '1rem 0' }}>
-                  Percentile data requires 5+ appearances.
-                  {activePeerRating ? ` ${5 - activePeerRating.matches_played} more to go.` : ''}
+                  No peer comparison data available.
+                </div>
+              ) : (activePeerRating.rated_minutes ?? 0) < 300 ? (
+                <div style={{ fontSize: 13, color: 'var(--muted-foreground)', padding: '1rem 0' }}>
+                  Peer comparison requires 300+ minutes rated as {POSITION_LABELS[player.position ?? 'ST'] ?? player.position ?? 'Striker'}. Currently {activePeerRating.rated_minutes ?? 0} mins.
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -624,7 +638,7 @@ function PlayerProfilePage() {
                           />
                         </div>
                         <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--foreground)', textAlign: 'right' }}>
-                          {value != null ? ordinal(Math.round(value)) : '—'}
+                          {value != null ? Math.round(value) : '—'}
                         </span>
                       </div>
                     )

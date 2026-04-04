@@ -53,13 +53,41 @@ _POSITIONS_DETAILED_MAP = {
     "AMC": "CAM",
     "RW": "RW",
     "LW": "LW",
-    "CF": "CF",
+    "CF": "ST",
     "ST": "ST",
     "SS": "ST",
     "G": "GK",
 }
 
 _POS_LINE_ORDER = {"G": 0, "D": 1, "M": 2, "F": 3}
+
+# Tactical line number for detailed positions (used for cost-based slot matching)
+_POS_LINE = {
+    "GK": 0,
+    "CB": 1, "LB": 1, "RB": 1, "LWB": 1, "RWB": 1,
+    "CDM": 2, "CM": 2, "LM": 2, "RM": 2,
+    "CAM": 3, "LW": 3, "RW": 3,
+    "CF": 4, "ST": 4,
+}
+
+# Positionally adjacent positions (one step away tactically)
+_POS_ADJACENCY: dict[str, frozenset] = {
+    "GK":  frozenset(),
+    "CB":  frozenset({"CDM", "LB", "RB"}),
+    "LB":  frozenset({"CB", "LM", "LWB"}),
+    "RB":  frozenset({"CB", "RM", "RWB"}),
+    "LWB": frozenset({"LB", "LM"}),
+    "RWB": frozenset({"RB", "RM"}),
+    "CDM": frozenset({"CM", "CB"}),
+    "CM":  frozenset({"CDM", "CAM", "LM", "RM"}),
+    "LM":  frozenset({"LW", "CM", "LB"}),
+    "RM":  frozenset({"RW", "CM", "RB"}),
+    "CAM": frozenset({"CF", "CM", "LW", "RW"}),
+    "LW":  frozenset({"ST", "LM", "CAM"}),
+    "RW":  frozenset({"ST", "RM", "CAM"}),
+    "CF":  frozenset({"ST", "CAM"}),
+    "ST":  frozenset({"CF", "LW", "RW"}),
+}
 
 _player_cache: dict[int, dict] = {}
 _season_cache: dict[
@@ -411,9 +439,92 @@ def _basic_pos(player: dict) -> str:
     return "M"
 
 
-def extract_player_stats(detail: dict, match_info: dict = None) -> list[dict]:
+def _position_cost(profile_pos: str | None, slot: str) -> int:
+    """
+    Cost of assigning a player with a known profile position to a formation slot.
+    Lower is better. GK mismatches are penalised heavily to prevent swaps.
+    """
+    if not profile_pos:
+        return 3  # no information — neutral
+    if profile_pos == slot:
+        return 0
+    if slot in _POS_ADJACENCY.get(profile_pos, frozenset()):
+        return 1
+    if _POS_LINE.get(profile_pos) == _POS_LINE.get(slot):
+        return 2
+    if slot == "GK" or profile_pos == "GK":
+        return 100
+    return 5
+
+
+def _assign_formation_positions(
+    slots: list[str],
+    starters: list[dict],
+    profile_map: dict[int, str],
+) -> dict[int, str]:
+    """
+    Match starters to formation slots using player profile positions.
+
+    Players with known profile positions are assigned first so they anchor
+    the best-fit slots, leaving the remaining slots to be filled by players
+    without profile data. Shirt number is never used.
+
+    Args:
+        slots: Ordered slot names from _infer_positions_from_formation
+        starters: Starter player dicts from the Sofascore lineup API
+        profile_map: sofascore_id → stored profile position (e.g. "RW", "CDM")
+
+    Returns:
+        Dict mapping sofascore player_id → assigned position string
+    """
+    available = list(slots)
+    result: dict[int, str] = {}
+
+    # Process players with a known profile position first so they claim
+    # their best-fit slots before unknowns fill the gaps.
+    def sort_key(p: dict):
+        pid = p.get("player", {}).get("id")
+        has_profile = pid in profile_map
+        return (0 if has_profile else 1, _POS_LINE_ORDER.get(_basic_pos(p), 2))
+
+    for player in sorted(starters, key=sort_key):
+        if not available:
+            break
+        pid = player.get("player", {}).get("id")
+        profile_pos = profile_map.get(pid) if pid else None
+
+        best_i = min(range(len(available)), key=lambda i: _position_cost(profile_pos, available[i]))
+        assigned = available.pop(best_i)
+        if pid:
+            result[pid] = assigned
+
+    return result
+
+
+def extract_player_stats(
+    detail: dict,
+    match_info: dict = None,
+    profile_map: dict[int, str] | None = None,
+) -> list[dict]:
     lineups = detail.get("lineups", {})
     incidents = detail.get("incidents", [])
+
+    # Build penalty goals map from incidents
+    penalty_goals_map: dict[int, int] = {}
+    for inc in incidents:
+        if inc.get("incidentType") == "goal" and inc.get("incidentClass") == "penalty":
+            inc_pid = inc.get("player", {}).get("id")
+            if inc_pid:
+                penalty_goals_map[inc_pid] = penalty_goals_map.get(inc_pid, 0) + 1
+
+    # Build np_xg and np_shots maps from shotmap
+    np_xg_map: dict[int, float] = {}
+    np_shots_map: dict[int, int] = {}
+    for shot in detail.get("shotmap", []):
+        shot_pid = shot.get("player", {}).get("id")
+        if shot_pid and shot.get("situation") != "penalty":
+            np_xg_map[shot_pid] = np_xg_map.get(shot_pid, 0.0) + (shot.get("xg") or 0.0)
+            np_shots_map[shot_pid] = np_shots_map.get(shot_pid, 0) + 1
 
     sub_map_in_to_out = {}
     for inc in incidents:
@@ -444,21 +555,13 @@ def extract_player_stats(detail: dict, match_info: dict = None) -> list[dict]:
         formation = team_data.get("formation", "")
         team_players = team_data.get("players", [])
 
-        starters = sorted(
-            [p for p in team_players if not p.get("substitute", False)],
-            key=lambda p: (
-                _POS_LINE_ORDER.get(_basic_pos(p), 2),
-                p.get("shirtNumber", 99),
-            ),
-        )
+        starters = [p for p in team_players if not p.get("substitute", False)]
         subs = [p for p in team_players if p.get("substitute", False)]
 
-        starter_pos_map: dict[int, str] = {}
         formation_positions = _infer_positions_from_formation(formation, starters)
-        for idx, player in enumerate(starters):
-            pid = player.get("player", {}).get("id")
-            if pid and idx < len(formation_positions):
-                starter_pos_map[pid] = formation_positions[idx]
+        starter_pos_map = _assign_formation_positions(
+            formation_positions, starters, profile_map or {}
+        )
 
         for idx, player in enumerate(team_players):
             stats = player.get("statistics", {})
@@ -549,6 +652,9 @@ def extract_player_stats(detail: dict, match_info: dict = None) -> list[dict]:
                 "penalty_won": stats.get("penaltyWon", 0) or 0,
                 "penalty_conceded": stats.get("penaltyConceded", 0) or 0,
                 "own_goals": stats.get("ownGoals", 0) or 0,
+                "penalty_goals": penalty_goals_map.get(pid, 0),
+                "np_xg": round(np_xg_map.get(pid, 0.0), 4),
+                "np_shots": np_shots_map.get(pid, 0),
             }
 
             if player.get("position") == "G":

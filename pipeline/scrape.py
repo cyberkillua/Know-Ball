@@ -273,6 +273,35 @@ def _store_standings(db: DB, fotmob_league_id: int, league_id: int, season: str)
     log.info(f"Updated standings: {len(standings)} teams")
 
 
+def _get_profile_map_from_detail(db: DB, detail: dict) -> dict[int, str]:
+    """
+    Return a sofascore_id → position map for every player in the lineup
+    whose detailed position is already stored in the DB.
+
+    Used to seed the formation-slot matching algorithm so that known players
+    (e.g. a right-back whose profile says "RB") anchor the correct slot
+    instead of being assigned by shirt-number order.
+    """
+    sofascore_ids = []
+    for side in ("home", "away"):
+        for p in detail.get("lineups", {}).get(side, {}).get("players", []):
+            pid = p.get("player", {}).get("id")
+            if pid:
+                sofascore_ids.append(pid)
+
+    if not sofascore_ids:
+        return {}
+
+    rows = db.query(
+        """SELECT sofascore_id, position FROM players
+           WHERE sofascore_id IN %s
+             AND position IS NOT NULL
+             AND position NOT IN ('G', 'D', 'M', 'F')""",
+        (tuple(sofascore_ids),),
+    )
+    return {row["sofascore_id"]: row["position"] for row in rows}
+
+
 def _process_match(db: DB, match: dict, league_id: int, season: str) -> bool:
     sofascore_id = match["sofascore_id"]
     log.info(
@@ -308,7 +337,8 @@ def _process_match(db: DB, match: dict, league_id: int, season: str) -> bool:
         )
         return False
 
-    player_stats = extract_player_stats(detail, match)
+    profile_map = _get_profile_map_from_detail(db, detail)
+    player_stats = extract_player_stats(detail, match, profile_map=profile_map)
 
     team_id_map = {
         match["home_team_id"]: home_team_id,
@@ -344,8 +374,9 @@ def _process_match(db: DB, match: dict, league_id: int, season: str) -> bool:
                 clearances, head_clearance, outfielder_block, ball_recovery,
                 error_lead_to_goal, error_lead_to_shot,
                 possession_lost_ctrl, total_contest,
-                penalty_won, penalty_conceded, own_goals)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                penalty_won, penalty_conceded, own_goals,
+                penalty_goals, np_xg, np_shots)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                ON CONFLICT (match_id, player_id) DO NOTHING""",
             (
                 match_db_id,
@@ -398,6 +429,9 @@ def _process_match(db: DB, match: dict, league_id: int, season: str) -> bool:
                 ps["penalty_won"],
                 ps["penalty_conceded"],
                 ps["own_goals"],
+                ps["penalty_goals"],
+                ps["np_xg"],
+                ps["np_shots"],
             ),
         )
 

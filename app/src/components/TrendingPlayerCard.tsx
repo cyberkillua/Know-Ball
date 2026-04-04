@@ -34,7 +34,7 @@ export default function TrendingPlayerCard({ playerName, teamName, rating, rank 
       </div>
 
       <div className="text-xl font-bold text-primary shrink-0 w-12 text-right">
-        {rating.toFixed(1)}
+        {rating.toFixed(2)}
       </div>
     </div>
   )

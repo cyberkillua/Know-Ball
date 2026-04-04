@@ -30,7 +30,7 @@ def main():
     log.info("Fetching ST raw scores from match_ratings")
 
     rows = db.query("""
-        SELECT finishing_raw, involvement_raw, carrying_raw, physical_raw, pressing_raw
+        SELECT finishing_raw, creation_raw, involvement_raw, carrying_raw, physical_raw, pressing_raw
         FROM match_ratings
         WHERE position = 'ST'
     """)
@@ -43,11 +43,12 @@ def main():
     log.info(f"Found {len(rows)} ST match ratings")
 
     raw_by_category = {
-        "finishing":  [float(r["finishing_raw"])  for r in rows],
+        "finishing":   [float(r["finishing_raw"])   for r in rows],
+        "creation":    [float(r["creation_raw"])    for r in rows],
         "involvement": [float(r["involvement_raw"]) for r in rows],
-        "carrying":   [float(r["carrying_raw"])   for r in rows],
-        "physical":   [float(r["physical_raw"])   for r in rows],
-        "pressing":   [float(r["pressing_raw"])   for r in rows],
+        "carrying":    [float(r["carrying_raw"])    for r in rows],
+        "physical":    [float(r["physical_raw"])    for r in rows],
+        "pressing":    [float(r["pressing_raw"])    for r in rows],
     }
 
     midpoints = calibrate_from_raw_scores(raw_by_category)

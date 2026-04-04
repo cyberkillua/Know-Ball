@@ -208,9 +208,16 @@ export interface PeerRating {
   interceptions_raw_percentile: number | null
   ball_recoveries_raw_percentile: number | null
   fouls_committed_raw_percentile: number | null
+  // Non-penalty percentiles
+  np_goals_per90_percentile: number | null
+  np_xg_per90_percentile: number | null
+  np_xg_per_shot_percentile: number | null
+  np_goals_raw_percentile: number | null
+  np_xg_raw_percentile: number | null
   // Metadata
   matches_played: number
   minutes_played: number
+  rated_minutes: number | null
   avg_match_rating: number
 }
 
@@ -302,6 +309,12 @@ export interface PlayerStats {
   ground_duels_won_per90: number | null
   total_contest_per90: number | null
   fouls_committed_per90: number | null
+  // Non-penalty stats
+  np_goals: number | null
+  np_xg_total: number | null
+  np_goals_per90: number | null
+  np_xg_per90: number | null
+  np_xg_per_shot: number | null
 }
 
 export interface Shot {

@@ -135,7 +135,7 @@ export const getPlayerSeasons = createServerFn({ method: 'GET' })
   })
 
 export const getPlayerRatings = createServerFn({ method: 'GET' })
-  .inputValidator((d: { playerId: number; season: string }) => d)
+  .inputValidator((d: { playerId: number; season: string; leagueId: number }) => d)
   .handler(async ({ data }) => {
     return query<MatchRating>(
       `SELECT mr.*,
@@ -147,14 +147,14 @@ export const getPlayerRatings = createServerFn({ method: 'GET' })
        JOIN matches mat ON mat.id = mr.match_id
        JOIN teams ht ON ht.id = mat.home_team_id
        JOIN teams at ON at.id = mat.away_team_id
-       WHERE mr.player_id = $1 AND mat.season = $2
+       WHERE mr.player_id = $1 AND mat.season = $2 AND mat.league_id = $3
        ORDER BY mat.date ASC`,
-      [data.playerId, data.season],
+      [data.playerId, data.season, data.leagueId],
     )
   })
 
 export const getPlayerPeerRating = createServerFn({ method: 'GET' })
-  .inputValidator((d: { playerId: number; season: string; scope?: 'league' | 'all' }) => d)
+  .inputValidator((d: { playerId: number; season: string; leagueId: number; scope?: 'league' | 'all' }) => d)
   .handler(async ({ data }) => {
     const scope = data.scope ?? 'league'
     if (scope === 'all') {
@@ -164,20 +164,20 @@ export const getPlayerPeerRating = createServerFn({ method: 'GET' })
       )
     }
     return queryOne<PeerRating>(
-      'SELECT * FROM peer_ratings WHERE player_id = $1 AND season = $2 AND league_id IS NOT NULL',
-      [data.playerId, data.season],
+      'SELECT * FROM peer_ratings WHERE player_id = $1 AND season = $2 AND league_id = $3',
+      [data.playerId, data.season, data.leagueId],
     )
   })
 
 export const getPlayerShots = createServerFn({ method: 'GET' })
-  .inputValidator((d: { playerId: number; season: string }) => d)
+  .inputValidator((d: { playerId: number; season: string; leagueId: number }) => d)
   .handler(async ({ data }) => {
     return query<Shot>(
       `SELECT s.*
        FROM shots s
        JOIN matches mat ON mat.id = s.match_id
-       WHERE s.player_id = $1 AND mat.season = $2`,
-      [data.playerId, data.season],
+       WHERE s.player_id = $1 AND mat.season = $2 AND mat.league_id = $3`,
+      [data.playerId, data.season, data.leagueId],
     )
   })
 
@@ -325,7 +325,7 @@ export const getLeagueCategoryLeaders = createServerFn({ method: 'GET' })
   })
 
 export const getPlayerStats = createServerFn({ method: 'GET' })
-  .inputValidator((d: { playerId: number; season: string }) => d)
+  .inputValidator((d: { playerId: number; season: string; leagueId: number }) => d)
   .handler(async ({ data }) => {
     return queryOne(
       `WITH player_team AS (
@@ -337,8 +337,9 @@ export const getPlayerStats = createServerFn({ method: 'GET' })
         SELECT COUNT(*)::int as match_count, COUNT(*)::int * 90 as minutes_available
         FROM matches m
         WHERE m.season = $2
+          AND m.league_id = $3
           AND m.home_score IS NOT NULL
-          AND (m.home_team_id = (SELECT current_team_id FROM player_team) 
+          AND (m.home_team_id = (SELECT current_team_id FROM player_team)
                OR m.away_team_id = (SELECT current_team_id FROM player_team))
       )
       SELECT
@@ -439,23 +440,28 @@ export const getPlayerStats = createServerFn({ method: 'GET' })
           ROUND(SUM(mps.accurate_cross)::numeric / NULLIF(SUM(mps.minutes_played) / 90.0, 0), 2) AS accurate_cross_per90,
           ROUND(SUM(mps.ground_duels_won)::numeric / NULLIF(SUM(mps.minutes_played) / 90.0, 0), 2) AS ground_duels_won_per90,
           ROUND(SUM(mps.total_contest)::numeric / NULLIF(SUM(mps.minutes_played) / 90.0, 0), 2) AS total_contest_per90,
-          ROUND(SUM(mps.fouls_committed)::numeric / NULLIF(SUM(mps.minutes_played) / 90.0, 0), 2) AS fouls_committed_per90
+          ROUND(SUM(mps.fouls_committed)::numeric / NULLIF(SUM(mps.minutes_played) / 90.0, 0), 2) AS fouls_committed_per90,
+          (SUM(mps.goals) - SUM(mps.penalty_goals))::int AS np_goals,
+          ROUND(SUM(mps.np_xg)::numeric, 2) AS np_xg_total,
+          ROUND((SUM(mps.goals) - SUM(mps.penalty_goals))::numeric / NULLIF(SUM(mps.minutes_played), 0) * 90, 2) AS np_goals_per90,
+          ROUND(SUM(mps.np_xg)::numeric / NULLIF(SUM(mps.minutes_played), 0) * 90, 2) AS np_xg_per90,
+          ROUND(SUM(mps.np_xg)::numeric / NULLIF(SUM(mps.np_shots), 0), 3) AS np_xg_per_shot
         FROM match_player_stats mps
         JOIN matches mat ON mat.id = mps.match_id
-        WHERE mps.player_id = $1 AND mat.season = $2`,
-      [data.playerId, data.season],
+        WHERE mps.player_id = $1 AND mat.season = $2 AND mat.league_id = $3`,
+      [data.playerId, data.season, data.leagueId],
     )
   })
 
 export const getPlayerXgotDelta = createServerFn({ method: 'GET' })
-  .inputValidator((d: { playerId: number; season: string }) => d)
+  .inputValidator((d: { playerId: number; season: string; leagueId: number }) => d)
   .handler(async ({ data }) => {
     return queryOne<{ delta: number | null }>(
       `SELECT ROUND((SUM(mps.xgot) - SUM(mps.xg))::numeric, 2) as delta
        FROM match_player_stats mps
        JOIN matches mat ON mat.id = mps.match_id
-       WHERE mps.player_id = $1 AND mat.season = $2`,
-      [data.playerId, data.season],
+       WHERE mps.player_id = $1 AND mat.season = $2 AND mat.league_id = $3`,
+      [data.playerId, data.season, data.leagueId],
     )
   })
 

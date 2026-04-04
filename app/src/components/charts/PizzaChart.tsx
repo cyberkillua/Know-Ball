@@ -1,7 +1,7 @@
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 
 interface PizzaChartProps {
-  data: { label: string; percentile: number }[]
+  data: { label: string; percentile: number; inverted?: boolean }[]
   size?: number
 }
 
@@ -21,7 +21,7 @@ const COLOR_RANGES = [
   { min: 0, max: 20, color: '#e24b4a', label: '0-20' },
 ]
 
-export default function PizzaChart({ data, size = 450 }: PizzaChartProps) {
+export default function PizzaChart({ data, size = 540 }: PizzaChartProps) {
   const numSlices = data.length
   const anglePerSlice = 360 / numSlices
   const center = size / 2
@@ -109,14 +109,15 @@ export default function PizzaChart({ data, size = 450 }: PizzaChartProps) {
 
         {/* Filled slices */}
         {data.map((d, i) => {
-          const { fillPath } = generateSlicePath(i, d.percentile)
+          const displayPct = d.inverted ? 100 - d.percentile : d.percentile
+          const { fillPath } = generateSlicePath(i, displayPct)
           return (
             <path
               key={`fill-${i}`}
               d={fillPath}
-              fill={getPercentileColor(d.percentile)}
+              fill={getPercentileColor(displayPct)}
               fillOpacity={0.85}
-              stroke={getPercentileColor(d.percentile)}
+              stroke={getPercentileColor(displayPct)}
               strokeWidth={1}
             />
           )
@@ -188,7 +189,7 @@ export default function PizzaChart({ data, size = 450 }: PizzaChartProps) {
         {/* Labels outside the chart */}
         {data.map((d, i) => {
           const pos = getLabelPosition(i)
-          
+
           return (
             <text
               key={`label-${i}`}
@@ -198,11 +199,11 @@ export default function PizzaChart({ data, size = 450 }: PizzaChartProps) {
               dominantBaseline="middle"
               style={{
                 fontSize: 9,
-                fill: 'var(--foreground)',
+                fill: d.inverted ? 'var(--muted-foreground)' : 'var(--foreground)',
                 fontWeight: 500,
               }}
             >
-              {d.label}
+              {d.inverted ? `▼ ${d.label}` : d.label}
             </text>
           )
         })}

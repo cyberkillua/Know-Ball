@@ -35,18 +35,17 @@ def compute_st_peer_ratings(db: DB, league_scope: str = "league") -> None:
     This function always computes league-scoped percentiles (stored in peer_ratings).
     Cross-league percentiles are computed at query time in the frontend toggle.
     """
-    log.info("Fetching ST aggregate data")
+    # ── Aggregation A: Stats from all apps (profile position filter only) ──────
+    log.info("Fetching ST stats (all apps, profile position filter)")
 
-    rows = db.query("""
+    stat_rows = db.query("""
         SELECT
             mps.player_id,
             mat.league_id,
             mat.season,
 
-            -- Counts
             COUNT(DISTINCT mps.match_id)::int                    AS matches_played,
             SUM(mps.minutes_played)::int                         AS minutes_played,
-            ROUND(AVG(mr.final_rating)::numeric, 2)              AS avg_match_rating,
 
             -- Raw season totals (for raw percentiles)
             SUM(mps.goals)::int                                  AS goals_total,
@@ -64,7 +63,7 @@ def compute_st_peer_ratings(db: DB, league_scope: str = "league") -> None:
             SUM(mps.ground_duels_lost)::int                      AS ground_duels_lost,
             SUM(mps.tackles_won)::int                            AS tackles_total,
             SUM(mps.big_chance_created)::int                     AS big_chances_created,
-            SUM(mps.big_chance_missed)::int                       AS big_chances_missed,
+            SUM(mps.big_chance_missed)::int                      AS big_chances_missed,
             SUM(mps.ball_recovery)::int                          AS ball_recoveries,
             SUM(mps.key_passes)::int                             AS key_passes_total,
             SUM(mps.accurate_cross)::int                         AS accurate_cross_total,
@@ -72,29 +71,56 @@ def compute_st_peer_ratings(db: DB, league_scope: str = "league") -> None:
             SUM(mps.touches)::int                                AS touches_total,
             SUM(mps.interceptions)::int                          AS interceptions_total,
             SUM(mps.fouls_committed)::int                        AS fouls_committed_total,
+            (SUM(mps.goals) - SUM(mps.penalty_goals))::int      AS np_goals_total,
+            ROUND(SUM(mps.np_xg)::numeric, 4)                   AS np_xg_total,
+            SUM(mps.np_shots)::int                               AS np_shots_total
+        FROM match_player_stats mps
+        JOIN matches mat ON mat.id = mps.match_id
+        JOIN players p ON p.id = mps.player_id
+        WHERE p.position = 'ST'
+        GROUP BY mps.player_id, mat.league_id, mat.season
+    """)
 
-            -- Avg category norms (for percentile ranking)
+    if not stat_rows:
+        log.info("No ST records found, nothing to compute")
+        return
+
+    log.info(f"Found {len(stat_rows)} player-league-season groups (stats)")
+
+    # ── Aggregation B: Norms from matches rated as ST ────────────────────────
+    log.info("Fetching ST norms (rated matches only)")
+
+    norm_rows = db.query("""
+        SELECT
+            mr.player_id,
+            mat.league_id,
+            mat.season,
+            SUM(mps.minutes_played)::int                         AS rated_minutes,
+            ROUND(AVG(mr.final_rating)::numeric, 2)              AS avg_match_rating,
             ROUND(AVG(mr.finishing_norm)::numeric, 4)            AS avg_finishing_norm,
             ROUND(AVG(mr.involvement_norm)::numeric, 4)          AS avg_involvement_norm,
             ROUND(AVG(mr.carrying_norm)::numeric, 4)             AS avg_carrying_norm,
             ROUND(AVG(mr.physical_norm)::numeric, 4)             AS avg_physical_norm,
             ROUND(AVG(mr.pressing_norm)::numeric, 4)             AS avg_pressing_norm
-        FROM match_player_stats mps
-        JOIN matches mat ON mat.id = mps.match_id
-        JOIN match_ratings mr ON mr.match_id = mps.match_id AND mr.player_id = mps.player_id
+        FROM match_ratings mr
+        JOIN matches mat ON mat.id = mr.match_id
+        JOIN match_player_stats mps ON mps.match_id = mr.match_id AND mps.player_id = mr.player_id
+        JOIN players p ON p.id = mr.player_id
         WHERE mr.position = 'ST'
-        GROUP BY mps.player_id, mat.league_id, mat.season
+          AND p.position = 'ST'
+        GROUP BY mr.player_id, mat.league_id, mat.season
     """)
 
-    if not rows:
-        log.info("No ST records found, nothing to compute")
-        return
+    # Build lookup: (player_id, league_id, season) -> norm data
+    norm_lookup: dict[tuple, dict] = {
+        (r["player_id"], r["league_id"], r["season"]): r for r in norm_rows
+    }
 
-    log.info(f"Found {len(rows)} player-league-season groups")
+    log.info(f"Found {len(norm_rows)} player-league-season groups (norms)")
 
     # Compute derived stats for each player
     players: list[dict] = []
-    for r in rows:
+    for r in stat_rows:
         minutes = r["minutes_played"] or 1
         per90 = minutes / 90.0
 
@@ -121,6 +147,12 @@ def compute_st_peer_ratings(db: DB, league_scope: str = "league") -> None:
         tackles = r["tackles_total"] or 0
         interceptions = r["interceptions_total"] or 0
         fouls_committed = r["fouls_committed_total"] or 0
+        np_goals = r["np_goals_total"] or 0
+        np_xg = float(r["np_xg_total"] or 0)
+        np_shots = r["np_shots_total"] or 0
+
+        norm = norm_lookup.get((r["player_id"], r["league_id"], r["season"]), {})
+        rated_minutes = norm.get("rated_minutes") or 0
 
         p = {
             "player_id": r["player_id"],
@@ -129,7 +161,8 @@ def compute_st_peer_ratings(db: DB, league_scope: str = "league") -> None:
             "position": "ST",
             "matches_played": r["matches_played"],
             "minutes_played": minutes,
-            "avg_match_rating": float(r["avg_match_rating"] or 0),
+            "rated_minutes": rated_minutes,
+            "avg_match_rating": float(norm.get("avg_match_rating") or 0),
             # Per-90s (stored for display / existing columns)
             "goals_per90": round(goals / per90, 2),
             "shots_per90": round(shots / per90, 2),
@@ -161,7 +194,15 @@ def compute_st_peer_ratings(db: DB, league_scope: str = "league") -> None:
             "shot_on_target_rate": round(shots_on / max(shots, 1), 3),
             "ball_recovery_per90": round(recoveries / per90, 2),
             "xg_per_shot": round(xg / max(shots, 1), 3),
+            # Non-penalty stats
+            "np_goals_per90": round(np_goals / per90, 2),
+            "np_xg_per90": round(np_xg / per90, 2),
+            "np_xg_per_shot": round(np_xg / max(np_shots, 1), 3),
+            "np_goals_raw": np_goals,
+            "np_xg_raw": np_xg,
             # Raw totals for raw percentiles
+            "_np_goals_raw": np_goals,
+            "_np_xg_raw": np_xg,
             "_goals_raw": goals,
             "_assists_raw": assists,
             "_shots_raw": shots,
@@ -181,12 +222,12 @@ def compute_st_peer_ratings(db: DB, league_scope: str = "league") -> None:
             "_interceptions_raw": interceptions,
             "_ball_recoveries_raw": recoveries,
             "_fouls_committed_raw": fouls_committed,
-            # Category norms for percentile ranking
-            "_avg_finishing_norm": float(r["avg_finishing_norm"] or 0),
-            "_avg_involvement_norm": float(r["avg_involvement_norm"] or 0),
-            "_avg_carrying_norm": float(r["avg_carrying_norm"] or 0),
-            "_avg_physical_norm": float(r["avg_physical_norm"] or 0),
-            "_avg_pressing_norm": float(r["avg_pressing_norm"] or 0),
+            # Category norms from rated matches only (Peer comparison)
+            "_avg_finishing_norm": float(norm.get("avg_finishing_norm") or 0),
+            "_avg_involvement_norm": float(norm.get("avg_involvement_norm") or 0),
+            "_avg_carrying_norm": float(norm.get("avg_carrying_norm") or 0),
+            "_avg_physical_norm": float(norm.get("avg_physical_norm") or 0),
+            "_avg_pressing_norm": float(norm.get("avg_pressing_norm") or 0),
         }
         players.append(p)
 
@@ -256,6 +297,11 @@ def compute_st_peer_ratings(db: DB, league_scope: str = "league") -> None:
                     "interceptions_raw_percentile",
                     "ball_recoveries_raw_percentile",
                     "fouls_committed_raw_percentile",
+                    "np_goals_per90_percentile",
+                    "np_xg_per90_percentile",
+                    "np_xg_per_shot_percentile",
+                    "np_goals_raw_percentile",
+                    "np_xg_raw_percentile",
                 ):
                     p[col] = None
             continue
@@ -324,6 +370,11 @@ def compute_st_peer_ratings(db: DB, league_scope: str = "league") -> None:
         interceptions_raw_vals = vals("_interceptions_raw")
         ball_recoveries_raw_vals = vals("_ball_recoveries_raw")
         fouls_committed_raw_vals = vals("_fouls_committed_raw")
+        np_goals_per90_vals = vals("np_goals_per90")
+        np_xg_per90_vals = vals("np_xg_per90")
+        np_xg_per_shot_vals = vals("np_xg_per_shot")
+        np_goals_raw_vals = vals("_np_goals_raw")
+        np_xg_raw_vals = vals("_np_xg_raw")
 
         for p in qualified:
             overall_score = (
@@ -472,6 +523,12 @@ def compute_st_peer_ratings(db: DB, league_scope: str = "league") -> None:
             p["fouls_committed_raw_percentile"] = 100 - percentile_of(
                 p["_fouls_committed_raw"], fouls_committed_raw_vals
             )
+            # Non-penalty percentiles
+            p["np_goals_per90_percentile"] = percentile_of(p["np_goals_per90"], np_goals_per90_vals)
+            p["np_xg_per90_percentile"] = percentile_of(p["np_xg_per90"], np_xg_per90_vals)
+            p["np_xg_per_shot_percentile"] = percentile_of(p["np_xg_per_shot"], np_xg_per_shot_vals)
+            p["np_goals_raw_percentile"] = percentile_of(p["_np_goals_raw"], np_goals_raw_vals)
+            p["np_xg_raw_percentile"] = percentile_of(p["_np_xg_raw"], np_xg_raw_vals)
 
         # Unqualified players get NULL percentiles
         for p in group:
@@ -529,6 +586,11 @@ def compute_st_peer_ratings(db: DB, league_scope: str = "league") -> None:
                     "interceptions_raw_percentile",
                     "ball_recoveries_raw_percentile",
                     "fouls_committed_raw_percentile",
+                    "np_goals_per90_percentile",
+                    "np_xg_per90_percentile",
+                    "np_xg_per_shot_percentile",
+                    "np_goals_raw_percentile",
+                    "np_xg_raw_percentile",
                 ):
                     p[col] = None
 
@@ -539,7 +601,7 @@ def compute_st_peer_ratings(db: DB, league_scope: str = "league") -> None:
             """
             INSERT INTO peer_ratings (
                 player_id, league_id, season, position,
-                matches_played, minutes_played, avg_match_rating,
+                matches_played, minutes_played, rated_minutes, avg_match_rating,
                 goals_per90, shots_per90, xg_per90, xgot_per90, xa_per90,
                 assists_per90, key_passes_per90, accurate_cross_per90,
                 dribbles_per90, aerial_wins_per90, tackles_per90,
@@ -570,10 +632,14 @@ def compute_st_peer_ratings(db: DB, league_scope: str = "league") -> None:
                 aerials_won_raw_percentile, ground_duels_won_raw_percentile,
                 total_contests_raw_percentile, tackles_raw_percentile,
                 interceptions_raw_percentile, ball_recoveries_raw_percentile,
-                fouls_committed_raw_percentile
+                fouls_committed_raw_percentile,
+                np_goals_per90, np_xg_per90, np_xg_per_shot,
+                np_goals_raw, np_xg_raw,
+                np_goals_per90_percentile, np_xg_per90_percentile, np_xg_per_shot_percentile,
+                np_goals_raw_percentile, np_xg_raw_percentile
             ) VALUES (
                 %(player_id)s, %(league_id)s, %(season)s, %(position)s,
-                %(matches_played)s, %(minutes_played)s, %(avg_match_rating)s,
+                %(matches_played)s, %(minutes_played)s, %(rated_minutes)s, %(avg_match_rating)s,
                 %(goals_per90)s, %(shots_per90)s, %(xg_per90)s, %(xgot_per90)s, %(xa_per90)s,
                 %(assists_per90)s, %(key_passes_per90)s, %(accurate_cross_per90)s,
                 %(dribbles_per90)s, %(aerial_wins_per90)s, %(tackles_per90)s,
@@ -604,12 +670,17 @@ def compute_st_peer_ratings(db: DB, league_scope: str = "league") -> None:
                 %(aerials_won_raw_percentile)s, %(ground_duels_won_raw_percentile)s,
                 %(total_contests_raw_percentile)s, %(tackles_raw_percentile)s,
                 %(interceptions_raw_percentile)s, %(ball_recoveries_raw_percentile)s,
-                %(fouls_committed_raw_percentile)s
+                %(fouls_committed_raw_percentile)s,
+                %(np_goals_per90)s, %(np_xg_per90)s, %(np_xg_per_shot)s,
+                %(np_goals_raw)s, %(np_xg_raw)s,
+                %(np_goals_per90_percentile)s, %(np_xg_per90_percentile)s, %(np_xg_per_shot_percentile)s,
+                %(np_goals_raw_percentile)s, %(np_xg_raw_percentile)s
             )
             ON CONFLICT (player_id, league_id, season) DO UPDATE SET
                 position                        = EXCLUDED.position,
                 matches_played                  = EXCLUDED.matches_played,
                 minutes_played                  = EXCLUDED.minutes_played,
+                rated_minutes                   = EXCLUDED.rated_minutes,
                 avg_match_rating                = EXCLUDED.avg_match_rating,
                 goals_per90                     = EXCLUDED.goals_per90,
                 xg_per90                        = EXCLUDED.xg_per90,
@@ -680,7 +751,17 @@ def compute_st_peer_ratings(db: DB, league_scope: str = "league") -> None:
                 tackles_raw_percentile         = EXCLUDED.tackles_raw_percentile,
                 interceptions_raw_percentile    = EXCLUDED.interceptions_raw_percentile,
                 ball_recoveries_raw_percentile  = EXCLUDED.ball_recoveries_raw_percentile,
-                fouls_committed_raw_percentile  = EXCLUDED.fouls_committed_raw_percentile
+                fouls_committed_raw_percentile  = EXCLUDED.fouls_committed_raw_percentile,
+                np_goals_per90                  = EXCLUDED.np_goals_per90,
+                np_xg_per90                     = EXCLUDED.np_xg_per90,
+                np_xg_per_shot                  = EXCLUDED.np_xg_per_shot,
+                np_goals_raw                    = EXCLUDED.np_goals_raw,
+                np_xg_raw                       = EXCLUDED.np_xg_raw,
+                np_goals_per90_percentile       = EXCLUDED.np_goals_per90_percentile,
+                np_xg_per90_percentile          = EXCLUDED.np_xg_per90_percentile,
+                np_xg_per_shot_percentile       = EXCLUDED.np_xg_per_shot_percentile,
+                np_goals_raw_percentile         = EXCLUDED.np_goals_raw_percentile,
+                np_xg_raw_percentile            = EXCLUDED.np_xg_raw_percentile
         """,
             p,
         )

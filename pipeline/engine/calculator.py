@@ -12,6 +12,7 @@ from dataclasses import dataclass
 @dataclass
 class PlayerMatchStats:
     """Raw stats for a single player in a single match."""
+
     minutes_played: int = 0
     goals: int = 0
     shots_total: int = 0
@@ -52,12 +53,15 @@ class PlayerMatchStats:
 @dataclass
 class CategoryScores:
     """Raw and normalized scores per category."""
+
     finishing_raw: float = 0.0
+    creation_raw: float = 0.0
     involvement_raw: float = 0.0
     carrying_raw: float = 0.0
     physical_raw: float = 0.0
     pressing_raw: float = 0.0
     finishing_norm: float = 0.0
+    creation_norm: float = 0.0
     involvement_norm: float = 0.0
     carrying_norm: float = 0.0
     physical_norm: float = 0.0
@@ -78,53 +82,58 @@ def calc_finishing(stats: PlayerMatchStats, constants: dict) -> float:
         - (big_chance_missed * big_chance_missed_penalty)
         + max(0, shot_on_target_rate - threshold) * shot_on_target_weight
         + (xg_per_shot - league_avg_xg_per_shot) * position_quality_weight
-        + blocked_scoring_attempt * blocked_attempt_reward
+        + (shots_total * shot_volume_reward)       # volume bonus
     """
     c = constants
 
     # Contextual no-shot penalty for strikers who never attempted a shot
     if stats.shots_total == 0:
-        threshold_poss = c.get("low_possession_threshold", 35)
-        threshold_shots = c.get("low_team_shots_threshold", 8)
-        team_shut_down = (
-            stats.team_possession_pct < threshold_poss
-            or (stats.team_total_shots > 0 and stats.team_total_shots < threshold_shots)
-        )
-        if team_shut_down:
-            return c.get("no_shot_penalty_light", 0.0)
-        elif stats.touches < 20:
-            return c.get("no_shot_penalty_heavy", 0.0)
-        elif stats.assists > 0 or stats.key_passes > 0:
-            return c.get("no_shot_penalty_light", 0.0)
+        # Simplified: if you didn't create for others, you failed your job
+        if stats.assists + stats.big_chance_created < 2:
+            return c.get("no_shot_penalty", -0.15)
         else:
-            return c.get("no_shot_penalty_moderate", 0.0)
+            return 0.0  # waived if you created
 
     goal_value = stats.goals * c["goal_bonus"]
     shot_quality = stats.xgot - stats.xg
     wastage = c["wastage_factor"] * max(0, stats.xg - stats.goals)
     self_created = stats.self_created_goals * c["self_created_bonus"]
-    big_chance_penalty = stats.big_chance_missed * c.get("big_chance_missed_penalty", 0.0)
+    big_chance_penalty = stats.big_chance_missed * c.get(
+        "big_chance_missed_penalty", 0.0
+    )
 
     # Shot accuracy bonus: reward above-average on-target rate
     shot_on_target_rate = stats.shots_on_target / stats.shots_total
     threshold = c.get("shot_on_target_threshold", 0.40)
-    shot_acc_bonus = max(0.0, shot_on_target_rate - threshold) * c.get("shot_on_target_weight", 0.15)
+    shot_acc_bonus = max(0.0, shot_on_target_rate - threshold) * c.get(
+        "shot_on_target_weight", 0.15
+    )
 
     # Position quality bonus: reward taking high-xG shots
     xg_per_shot = stats.xg / stats.shots_total
     league_avg = c.get("league_avg_xg_per_shot", 0.12)
-    position_quality = (xg_per_shot - league_avg) * c.get("position_quality_weight", 0.10)
+    position_quality = (xg_per_shot - league_avg) * c.get(
+        "position_quality_weight", 0.10
+    )
 
-    # Blocked attempt reward: real attacking output even without goal
-    blocked_bonus = stats.blocked_scoring_attempt * c.get("blocked_attempt_reward", 0.04)
+    # Shot volume reward: getting shots away consistently
+    volume_bonus = stats.shots_total * c.get("shot_volume_reward", 0.07)
 
-    return (goal_value + shot_quality - wastage + self_created
-            - big_chance_penalty + shot_acc_bonus + position_quality + blocked_bonus)
+    return (
+        goal_value
+        + shot_quality
+        - wastage
+        + self_created
+        - big_chance_penalty
+        + shot_acc_bonus
+        + position_quality
+        + volume_bonus
+    )
 
 
-def calc_involvement(stats: PlayerMatchStats, constants: dict) -> float:
+def calc_creation(stats: PlayerMatchStats, constants: dict) -> float:
     """
-    Involvement & Link-up Play.
+    Chance Creation for Teammates.
 
     xa double-count fix: split xa into converted (already counted via assists)
     and unconverted (the xA on chances that didn't become assists).
@@ -132,9 +141,7 @@ def calc_involvement(stats: PlayerMatchStats, constants: dict) -> float:
     Raw = (assists * assist_bonus)
         + max(0, xa - (assists * avg_xa_per_assist))   # unconverted xA only
         + (big_chance_created * big_chance_created_reward)
-        + (key_passes * 0.08)
-        + (passes_completed / max(passes_total, 1) - 0.7) * 0.5
-        + (touches * presence_factor)
+        + (key_passes * key_pass_reward)
     """
     c = constants
     assist_value = stats.assists * c["assist_bonus"]
@@ -145,11 +152,27 @@ def calc_involvement(stats: PlayerMatchStats, constants: dict) -> float:
     xa_value = max(0.0, stats.xa - converted_xa)
 
     bcc_value = stats.big_chance_created * c.get("big_chance_created_reward", 0.18)
-    key_pass_value = stats.key_passes * 0.08
+    key_pass_value = stats.key_passes * c.get("key_pass_reward", 0.08)
+
+    return assist_value + xa_value + bcc_value + key_pass_value
+
+
+def calc_involvement(stats: PlayerMatchStats, constants: dict) -> float:
+    """
+    Involvement & Link-up Play.
+
+    Being an outlet, target man, involved in build-up.
+
+    Raw = (passes_completed / max(passes_total, 1) - 0.7) * pass_accuracy_weight
+        + (touches * presence_factor)
+    """
+    c = constants
     pass_acc = stats.passes_completed / max(stats.passes_total, 1)
-    pass_delta = (pass_acc - 0.7) * 0.5
+    pass_delta = (pass_acc - c.get("pass_accuracy_threshold", 0.7)) * c.get(
+        "pass_accuracy_weight", 0.5
+    )
     presence = stats.touches * c["presence_factor"]
-    return assist_value + xa_value + bcc_value + key_pass_value + pass_delta + presence
+    return pass_delta + presence
 
 
 def calc_carrying(stats: PlayerMatchStats, constants: dict) -> float:
@@ -170,19 +193,18 @@ def calc_carrying(stats: PlayerMatchStats, constants: dict) -> float:
     # Rate-based dribble score: rewards high success rate and volume
     dribble_volume = stats.successful_dribbles + stats.failed_dribbles
     dribble_rate = stats.successful_dribbles / max(dribble_volume, 1)
-    dribble_score = (
-        (dribble_rate - 0.50) * c.get("dribble_rate_weight", 0.30)
-        + stats.successful_dribbles * c.get("dribble_volume_reward", 0.05)
-    )
+    dribble_score = (dribble_rate - 0.50) * c.get(
+        "dribble_rate_weight", 0.30
+    ) + stats.successful_dribbles * c.get("dribble_volume_reward", 0.05)
 
     fouls = stats.fouls_won * c["foul_won_reward"]
-    penalty_pos = stats.penalty_won * c.get("penalty_won_reward", 0.0)
+    penalty_pos = stats.penalty_won * c.get("penalty_won_reward", 0.35)
 
     # Rate-based possession loss penalty
     possession_loss_rate = stats.possession_lost_ctrl / max(stats.touches, 1)
     poss_loss = possession_loss_rate * c.get("possession_loss_rate_penalty", 0.8)
 
-    error_pen = stats.error_lead_to_goal * c.get("error_lead_to_goal_penalty", 0.0)
+    error_pen = stats.error_lead_to_goal * c.get("error_lead_to_goal_penalty", 0.3)
     return dribble_score + fouls + penalty_pos - poss_loss - error_pen
 
 
@@ -196,10 +218,14 @@ def calc_physical(stats: PlayerMatchStats, constants: dict) -> float:
         - (ground_lost * ground_duel_loss_penalty)
     """
     c = constants
-    aerial = (stats.aerial_duels_won * c["aerial_win_reward"]
-              - stats.aerial_duels_lost * c["aerial_loss_penalty"])
-    ground = (stats.ground_duels_won * c["ground_duel_win_reward"]
-              - stats.ground_duels_lost * c["ground_duel_loss_penalty"])
+    aerial = (
+        stats.aerial_duels_won * c["aerial_win_reward"]
+        - stats.aerial_duels_lost * c["aerial_loss_penalty"]
+    )
+    ground = (
+        stats.ground_duels_won * c["ground_duel_win_reward"]
+        - stats.ground_duels_lost * c["ground_duel_loss_penalty"]
+    )
     return aerial + ground
 
 
@@ -215,9 +241,11 @@ def calc_pressing(stats: PlayerMatchStats, constants: dict) -> float:
         + (ball_recovery * recovery_reward)
     """
     c = constants
-    return (stats.tackles_won * c["tackle_reward"]
-            + stats.interceptions * c["interception_reward"]
-            + stats.ball_recovery * c.get("recovery_reward", 0.08))
+    return (
+        stats.tackles_won * c["tackle_reward"]
+        + stats.interceptions * c["interception_reward"]
+        + stats.ball_recovery * c.get("recovery_reward", 0.08)
+    )
 
 
 def normalize_score(raw: float, midpoint: float, scale: float) -> float:
@@ -252,13 +280,21 @@ def calculate_match_rating(
     # Calculate raw scores
     scores = CategoryScores()
     scores.finishing_raw = calc_finishing(stats, constants)
+    scores.creation_raw = calc_creation(stats, constants)
     scores.involvement_raw = calc_involvement(stats, constants)
     scores.carrying_raw = calc_carrying(stats, constants)
     scores.physical_raw = calc_physical(stats, constants)
     scores.pressing_raw = calc_pressing(stats, constants)
 
     # Normalize (pre-calibration: use midpoint=0, scale=1 as pass-through)
-    categories = ["finishing", "involvement", "carrying", "physical", "pressing"]
+    categories = [
+        "finishing",
+        "creation",
+        "involvement",
+        "carrying",
+        "physical",
+        "pressing",
+    ]
     for cat in categories:
         raw = getattr(scores, f"{cat}_raw")
         mp = midpoints.get(cat, {})
@@ -269,8 +305,7 @@ def calculate_match_rating(
 
     # Weighted sum
     weighted_sum = sum(
-        weights[cat] * getattr(scores, f"{cat}_norm")
-        for cat in categories
+        weights[cat] * getattr(scores, f"{cat}_norm") for cat in categories
     )
 
     # Final rating
