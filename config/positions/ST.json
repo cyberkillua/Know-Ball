@@ -1,31 +1,32 @@
 {
   "position": "ST",
-  "version": 6,
+  "version": 7,
   "baseline": 6.5,
   "weights": {
     "finishing": 0.35,
-    "creation": 0.25,
-    "involvement": 0.1,
-    "carrying": 0.15,
-    "physical": 0.1,
-    "pressing": 0.05
+    "shot_generation": 0.2,
+    "chance_creation": 0.15,
+    "team_function": 0.05,
+    "carrying": 0.1,
+    "duels": 0.1,
+    "defensive": 0.05
   },
   "constants": {
-    "goal_bonus": 0.5,
+    "goal_bonus": 0.4,
+    "xgot_delta_weight": 1.2,
     "assist_bonus": 0.38,
-    "big_chance_created_reward": 0.2,
     "big_chance_missed_penalty": 0.15,
-    "self_created_bonus": 0.25,
-    "wastage_factor": 0.15,
+    "xa_threshold": 0.1,
+    "self_created_bonus": 0.35,
     "shot_volume_reward": 0.07,
     "presence_factor": 0.002,
-    "key_pass_reward": 0.08,
     "pass_accuracy_threshold": 0.7,
     "pass_accuracy_weight": 0.5,
     "foul_won_reward": 0.1,
     "penalty_won_reward": 0.35,
     "possession_loss_rate_penalty": 0.8,
     "error_lead_to_goal_penalty": 0.3,
+    "duel_volume_reward": 0.02,
     "aerial_win_reward": 0.12,
     "aerial_loss_penalty": 0.06,
     "ground_duel_win_reward": 0.1,
@@ -40,39 +41,60 @@
     "avg_xa_per_assist": 0.35,
     "dribble_rate_weight": 0.3,
     "dribble_volume_reward": 0.05,
-    "no_shot_penalty": -0.15
+    "no_shot_penalty": -0.15,
+    "self_created_shot_reward": 0.15
   },
   "display_only_stats": [
     "hitWoodwork"
   ],
   "normalization": {
     "method": "median_iqr",
-    "calibrated_at": "2026-04-03",
-    "sample_size": 9557,
+    "calibrated_at": "2026-04-05",
+    "sample_size": 10032,
     "midpoints": {
       "finishing": {
-        "median": -0.0186,
-        "scale": 0.3533
+        "median": -0.15,
+        "scale": 0.1572
       },
-      "creation": {
-        "median": 0.034,
-        "scale": 0.176
+      "shot_generation": {
+        "median": 0.1356,
+        "scale": 0.213
       },
-      "involvement": {
-        "median": 0.082,
-        "scale": 0.1371
+      "chance_creation": {
+        "median": 0.0,
+        "scale": 0.1301
+      },
+      "team_function": {
+        "median": 0.0866,
+        "scale": 0.1369
       },
       "carrying": {
-        "median": -0.24,
-        "scale": 0.3286
+        "median": -0.2318,
+        "scale": 0.3322
+      },
+      "duels": {
+        "median": 0.2,
+        "scale": 0.37
+      },
+      "defensive": {
+        "median": 0.16,
+        "scale": 0.2
+      },
+      "creation": {
+        "median": 0.0,
+        "scale": 0.1301
+      },
+      "involvement": {
+        "median": 0.0866,
+        "scale": 0.1369
       },
       "physical": {
-        "median": 0.07,
-        "scale": 0.29
+        "median": 0.2,
+        "scale": 0.37
       },
       "pressing": {
         "median": 0.16,
-        "scale": 0.18
+        "scale": 0.2
       }
     }
   }

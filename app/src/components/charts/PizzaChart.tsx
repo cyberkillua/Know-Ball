@@ -1,16 +1,14 @@
-import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
-
 interface PizzaChartProps {
   data: { label: string; percentile: number; inverted?: boolean }[]
   size?: number
 }
 
 const getPercentileColor = (percentile: number): string => {
-  if (percentile >= 80) return '#1d9e75' // Green - elite
-  if (percentile >= 60) return '#5cb85c' // Light green - good
-  if (percentile >= 40) return '#ef9f27' // Amber - average
-  if (percentile >= 20) return '#e57373' // Light red - below average
-  return '#e24b4a' // Red - poor
+  if (percentile >= 80) return '#1d9e75'
+  if (percentile >= 60) return '#5cb85c'
+  if (percentile >= 40) return '#ef9f27'
+  if (percentile >= 20) return '#e57373'
+  return '#e24b4a'
 }
 
 const COLOR_RANGES = [
@@ -28,12 +26,10 @@ export default function PizzaChart({ data, size = 540 }: PizzaChartProps) {
   const maxRadius = (size / 2) - 55
   const minRadius = 40
 
-  // Convert percentile (0-100) to radius
   const getRadius = (percentile: number) => {
     return minRadius + (maxRadius - minRadius) * (Math.max(0, Math.min(100, percentile)) / 100)
   }
 
-  // Generate path for each slice
   const generateSlicePath = (index: number, percentile: number) => {
     const startAngle = 90 - (index * anglePerSlice)
     const endAngle = startAngle - anglePerSlice
@@ -44,7 +40,6 @@ export default function PizzaChart({ data, size = 540 }: PizzaChartProps) {
 
     const largeArc = anglePerSlice > 180 ? 1 : 0
 
-    // Background slice points
     const outerX1 = center + maxRadius * Math.cos(startRad)
     const outerY1 = center - maxRadius * Math.sin(startRad)
     const outerX2 = center + maxRadius * Math.cos(endRad)
@@ -54,7 +49,6 @@ export default function PizzaChart({ data, size = 540 }: PizzaChartProps) {
     const innerX2 = center + minRadius * Math.cos(endRad)
     const innerY2 = center - minRadius * Math.sin(endRad)
 
-    // Filled slice points
     const fillX1 = center + outerRadius * Math.cos(startRad)
     const fillY1 = center - outerRadius * Math.sin(startRad)
     const fillX2 = center + outerRadius * Math.cos(endRad)
@@ -66,7 +60,6 @@ export default function PizzaChart({ data, size = 540 }: PizzaChartProps) {
     }
   }
 
-  // Get position for label outside the chart
   const getLabelPosition = (index: number) => {
     const midAngle = 90 - (index * anglePerSlice) - (anglePerSlice / 2)
     const rad = (midAngle * Math.PI) / 180
@@ -74,11 +67,9 @@ export default function PizzaChart({ data, size = 540 }: PizzaChartProps) {
     return {
       x: center + labelRadius * Math.cos(rad),
       y: center - labelRadius * Math.sin(rad),
-      angle: midAngle,
     }
   }
 
-  // Get position for percentile - fixed position within slice
   const getPctPosition = (index: number) => {
     const midAngle = 90 - (index * anglePerSlice) - (anglePerSlice / 2)
     const rad = (midAngle * Math.PI) / 180
@@ -93,7 +84,7 @@ export default function PizzaChart({ data, size = 540 }: PizzaChartProps) {
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
       <svg width={size} height={size} style={{ overflow: 'visible' }}>
         {/* Background slices */}
-        {data.map((d, i) => {
+        {data.map((_, i) => {
           const { bgPath } = generateSlicePath(i, 100)
           return (
             <path
@@ -165,7 +156,7 @@ export default function PizzaChart({ data, size = 540 }: PizzaChartProps) {
         {/* Center circle */}
         <circle cx={center} cy={center} r={minRadius - 8} fill="var(--card)" stroke="var(--border)" strokeWidth={1} />
 
-        {/* Percentile values on slices - white text */}
+        {/* Percentile values on slices */}
         {data.map((d, i) => {
           const pos = getPctPosition(i)
           return (
@@ -175,11 +166,7 @@ export default function PizzaChart({ data, size = 540 }: PizzaChartProps) {
               y={pos.y}
               textAnchor="middle"
               dominantBaseline="middle"
-              style={{
-                fontSize: 11,
-                fill: 'white',
-                fontWeight: 700,
-              }}
+              style={{ fontSize: 11, fill: 'white', fontWeight: 700 }}
             >
               {Math.round(d.percentile)}
             </text>
@@ -189,7 +176,6 @@ export default function PizzaChart({ data, size = 540 }: PizzaChartProps) {
         {/* Labels outside the chart */}
         {data.map((d, i) => {
           const pos = getLabelPosition(i)
-
           return (
             <text
               key={`label-${i}`}
@@ -213,14 +199,7 @@ export default function PizzaChart({ data, size = 540 }: PizzaChartProps) {
       <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap', fontSize: 11 }}>
         {COLOR_RANGES.map((range) => (
           <div key={range.label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <div
-              style={{
-                width: 14,
-                height: 14,
-                borderRadius: 3,
-                background: range.color,
-              }}
-            />
+            <div style={{ width: 14, height: 14, borderRadius: 3, background: range.color }} />
             <span style={{ color: 'var(--muted-foreground)' }}>{range.label}</span>
           </div>
         ))}

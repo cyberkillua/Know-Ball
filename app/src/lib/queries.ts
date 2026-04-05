@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { query, queryOne } from './db.server'
-import type { League, Match, MatchRating, Player, PeerRating, Shot } from './types'
+import type { League, Match, MatchRating, Player, PeerRating, PlayerUnderstat, Shot } from './types'
 
 export const getLeagues = createServerFn({ method: 'GET' }).handler(async () => {
   return query<League>('SELECT * FROM leagues ORDER BY tier, name')
@@ -487,5 +487,16 @@ export const searchPlayers = createServerFn({ method: 'GET' })
        WHERE p.name ILIKE $1
        LIMIT 10`,
       [`%${data.query}%`],
+    )
+  })
+
+export const getPlayerUnderstat = createServerFn({ method: 'GET' })
+  .inputValidator((d: { playerId: number; season: string }) => d)
+  .handler(async ({ data }) => {
+    return queryOne<PlayerUnderstat>(
+      `SELECT xg_chain, xg_buildup, xg_chain_per90, xg_buildup_per90, minutes_played
+       FROM player_season_understat
+       WHERE player_id = $1 AND season = $2`,
+      [data.playerId, data.season],
     )
   })

@@ -214,11 +214,38 @@ export interface PeerRating {
   np_xg_per_shot_percentile: number | null
   np_goals_raw_percentile: number | null
   np_xg_raw_percentile: number | null
+  // Passing percentiles
+  passes_completed_per90_percentile: number | null
+  passes_completed_raw_percentile: number | null
+  passing_accuracy_percentile: number | null
+  accurate_long_balls_per90_percentile: number | null
+  accurate_long_balls_raw_percentile: number | null
+  long_ball_accuracy_percentile: number | null
+  xg_chain_per90_percentile: number | null
+  xg_chain_raw_percentile: number | null
+  xg_buildup_per90_percentile: number | null
+  xg_buildup_raw_percentile: number | null
+  // Know Ball model score (0–100, absolute)
+  model_score: number | null
+  // v7 dimension percentiles
+  shot_generation_percentile: number | null
+  chance_creation_percentile: number | null
+  team_function_percentile: number | null
+  duels_percentile: number | null
+  defensive_percentile: number | null
   // Metadata
   matches_played: number
   minutes_played: number
   rated_minutes: number | null
   avg_match_rating: number
+}
+
+export interface PlayerUnderstat {
+  xg_chain: number | null
+  xg_buildup: number | null
+  xg_chain_per90: number | null
+  xg_buildup_per90: number | null
+  minutes_played: number | null
 }
 
 export interface PlayerStats {
@@ -335,20 +362,39 @@ export interface Shot {
   goal_mouth_z: number | null
 }
 
-export type RatingCategory = 'finishing' | 'involvement' | 'carrying' | 'physical' | 'pressing'
+export type RatingCategory =
+  | 'finishing'
+  | 'shot_generation'
+  | 'chance_creation'
+  | 'team_function'
+  | 'carrying'
+  | 'duels'
+  | 'defensive'
+  // v6 backward-compat (still present in DB)
+  | 'involvement'
+  | 'physical'
+  | 'pressing'
 
 export const RATING_CATEGORIES: RatingCategory[] = [
   'finishing',
-  'involvement',
+  'shot_generation',
+  'chance_creation',
+  'team_function',
   'carrying',
-  'physical',
-  'pressing',
+  'duels',
+  'defensive',
 ]
 
 export const CATEGORY_LABELS: Record<RatingCategory, string> = {
   finishing: 'Finishing',
-  involvement: 'Involvement',
+  shot_generation: 'Shot Generation',
+  chance_creation: 'Chance Creation',
+  team_function: 'Team Function',
   carrying: 'Carrying',
+  duels: 'Duels',
+  defensive: 'Defensive',
+  // v6 backward-compat
+  involvement: 'Involvement',
   physical: 'Physical',
   pressing: 'Defensive Effort',
 }

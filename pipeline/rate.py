@@ -92,6 +92,7 @@ def rate_record(record: dict, configs: dict) -> tuple[bool, tuple | None]:
     stats = PlayerMatchStats(
         minutes_played=record.get("minutes_played") or 0,
         goals=record.get("goals") or 0,
+        penalty_goals=record.get("penalty_goals") or 0,
         shots_total=record.get("shots_total") or 0,
         shots_on_target=record.get("shots_on_target") or 0,
         shots_off_target=record.get("shots_off_target") or 0,
@@ -113,6 +114,7 @@ def rate_record(record: dict, configs: dict) -> tuple[bool, tuple | None]:
         tackles_won=record.get("tackles_won") or 0,
         interceptions=record.get("interceptions") or 0,
         ball_recovery=record.get("ball_recovery") or 0,
+        self_created_shots=record.get("self_created_shots") or 0,
         big_chance_missed=record.get("big_chance_missed") or 0,
         big_chance_created=record.get("big_chance_created") or 0,
         blocked_scoring_attempt=record.get("blocked_scoring_attempt") or 0,
@@ -143,6 +145,16 @@ def rate_record(record: dict, configs: dict) -> tuple[bool, tuple | None]:
         scores.pressing_norm,
         final_rating,
         float(record.get("sofascore_rating") or 0),
+        scores.shot_generation_raw,
+        scores.shot_generation_norm,
+        scores.chance_creation_raw,
+        scores.chance_creation_norm,
+        scores.team_function_raw,
+        scores.team_function_norm,
+        scores.duels_raw,
+        scores.duels_norm,
+        scores.defensive_raw,
+        scores.defensive_norm,
     )
 
 
@@ -183,7 +195,12 @@ def main():
                (match_id, player_id, position,
                 finishing_raw, creation_raw, involvement_raw, carrying_raw, physical_raw, pressing_raw,
                 finishing_norm, creation_norm, involvement_norm, carrying_norm, physical_norm, pressing_norm,
-                final_rating, sofascore_rating)
+                final_rating, sofascore_rating,
+                shot_generation_raw, shot_generation_norm,
+                chance_creation_raw, chance_creation_norm,
+                team_function_raw, team_function_norm,
+                duels_raw, duels_norm,
+                defensive_raw, defensive_norm)
                VALUES %s
                ON CONFLICT (match_id, player_id) DO NOTHING""",
             (insert_batch,),
