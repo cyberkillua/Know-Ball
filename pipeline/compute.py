@@ -117,6 +117,24 @@ NULL_PERCENTILE_COLS = (
     "impact_rate",
 )
 
+# Columns that require match_ratings data (peer comparison / model score).
+# Nulled out when a position has no rating config.
+NULL_RATING_COLS = (
+    "finishing_percentile",
+    "involvement_percentile",
+    "carrying_percentile",
+    "physical_percentile",
+    "pressing_percentile",
+    "overall_percentile",
+    "shot_generation_percentile",
+    "chance_creation_percentile",
+    "team_function_percentile",
+    "duels_percentile",
+    "defensive_percentile",
+    "model_score",
+    "impact_rate",
+)
+
 
 def compute_peer_ratings(
     db: DB,
@@ -421,48 +439,29 @@ def compute_peer_ratings(
         groups[(p["league_id"], p["season"])].append(p)
 
     for (league_id, season), group in groups.items():
-        qualified = [
+        # stat_qualified: enough minutes for stat percentiles (no match ratings needed)
+        stat_qualified = [
             p for p in group
             if p["minutes_played"] >= MIN_MINUTES
-            and p["rated_minutes"] is not None
+        ]
+        # qualified: also has match ratings — needed for model/dimension percentiles
+        qualified = [
+            p for p in stat_qualified
+            if p["rated_minutes"] is not None
             and p["rated_minutes"] > 0
         ]
 
-        if not qualified:
+        if not stat_qualified:
             for p in group:
                 for col in NULL_PERCENTILE_COLS:
                     p[col] = None
             continue
 
-        def vals(key: str) -> list[float]:
-            return [float(p[key]) for p in qualified]
+        def vals(key: str, source: list | None = None) -> list[float]:
+            src = source if source is not None else stat_qualified
+            return [float(p[key]) for p in src]
 
-        carrying_vals         = vals("_dim_carrying")
-        finishing_vals           = vals("_dim_finishing")
-        shot_generation_vals     = vals("_dim_shot_generation")
-        chance_creation_vals     = vals("_dim_chance_creation")
-        team_function_vals       = vals("_dim_team_function")
-        duels_vals               = vals("_dim_duels")
-        defensive_vals           = vals("_dim_defensive")
-
-        # Z-score each dimension within the group for overall/model score
-        dim_keys    = ["_dim_finishing", "_dim_shot_generation", "_dim_chance_creation",
-                       "_dim_team_function", "_dim_carrying", "_dim_duels", "_dim_defensive"]
-        dim_weights = [0.35, 0.20, 0.15, 0.05, 0.10, 0.10, 0.05]
-
-        def zscore_dim(key: str) -> dict:
-            v = [float(p[key]) for p in qualified]
-            mean = statistics.mean(v)
-            stdev = statistics.stdev(v) if len(v) > 1 else 1.0
-            return {p["player_id"]: (float(p[key]) - mean) / stdev if stdev else 0.0
-                    for p in qualified}
-
-        zscores = {key: zscore_dim(key) for key in dim_keys}
-
-        overall_vals = [
-            sum(w * zscores[k][p["player_id"]] for k, w in zip(dim_keys, dim_weights))
-            for p in qualified
-        ]
+        # Stat distribution vals — ranked among all players with sufficient minutes
         goals_per90_vals             = vals("goals_per90")
         shots_per90_vals             = vals("shots_per90")
         xg_per90_vals                = vals("xg_per90")
@@ -519,24 +518,42 @@ def compute_peer_ratings(
         passes_completed_raw_vals    = vals("_passes_completed_raw")
         accurate_lb_raw_vals         = vals("_accurate_long_balls_raw")
         # xGChain/xGBuildup — only rank players who have Understat data
-        xg_chain_qualified = [p for p in qualified if p["xg_chain_per90"] is not None]
-        xg_buildup_qualified = [p for p in qualified if p["xg_buildup_per90"] is not None]
-        xg_chain_per90_vals  = [float(p["xg_chain_per90"]) for p in xg_chain_qualified]
-        xg_chain_raw_vals    = [float(p["xg_chain_raw"]) for p in xg_chain_qualified]
-        xg_buildup_per90_vals = [float(p["xg_buildup_per90"]) for p in xg_buildup_qualified]
-        xg_buildup_raw_vals  = [float(p["xg_buildup_raw"]) for p in xg_buildup_qualified]
+        xg_chain_stat_q = [p for p in stat_qualified if p["xg_chain_per90"] is not None]
+        xg_buildup_stat_q = [p for p in stat_qualified if p["xg_buildup_per90"] is not None]
+        xg_chain_per90_vals  = [float(p["xg_chain_per90"]) for p in xg_chain_stat_q]
+        xg_chain_raw_vals    = [float(p["xg_chain_raw"]) for p in xg_chain_stat_q]
+        xg_buildup_per90_vals = [float(p["xg_buildup_per90"]) for p in xg_buildup_stat_q]
+        xg_buildup_raw_vals  = [float(p["xg_buildup_raw"]) for p in xg_buildup_stat_q]
 
-        for p in qualified:
-            overall_score = sum(
-                w * zscores[k][p["player_id"]]
-                for k, w in zip(dim_keys, dim_weights)
-            )
-            p["finishing_percentile"]             = percentile_of(p["_dim_finishing"],         finishing_vals)
-            p["involvement_percentile"]           = percentile_of(p["_dim_chance_creation"],   chance_creation_vals)
-            p["carrying_percentile"]              = percentile_of(p["_dim_carrying"],          carrying_vals)
-            p["physical_percentile"]              = percentile_of(p["_dim_duels"],             duels_vals)
-            p["pressing_percentile"]              = percentile_of(p["_dim_defensive"],         defensive_vals)
-            p["overall_percentile"]               = percentile_of(overall_score,               overall_vals)
+        # Dimension distribution vals — ranked only among players with match ratings
+        if qualified:
+            carrying_vals         = vals("_dim_carrying",        qualified)
+            finishing_vals        = vals("_dim_finishing",       qualified)
+            shot_generation_vals  = vals("_dim_shot_generation", qualified)
+            chance_creation_vals  = vals("_dim_chance_creation", qualified)
+            team_function_vals    = vals("_dim_team_function",   qualified)
+            duels_vals            = vals("_dim_duels",           qualified)
+            defensive_vals        = vals("_dim_defensive",       qualified)
+
+            dim_keys    = ["_dim_finishing", "_dim_shot_generation", "_dim_chance_creation",
+                           "_dim_team_function", "_dim_carrying", "_dim_duels", "_dim_defensive"]
+            dim_weights = [0.35, 0.20, 0.15, 0.05, 0.10, 0.10, 0.05]
+
+            def zscore_dim(key: str) -> dict:
+                v = [float(p[key]) for p in qualified]
+                mean = statistics.mean(v)
+                stdev = statistics.stdev(v) if len(v) > 1 else 1.0
+                return {p["player_id"]: (float(p[key]) - mean) / stdev if stdev else 0.0
+                        for p in qualified}
+
+            zscores = {key: zscore_dim(key) for key in dim_keys}
+            overall_vals = [
+                sum(w * zscores[k][p["player_id"]] for k, w in zip(dim_keys, dim_weights))
+                for p in qualified
+            ]
+
+        # Stat percentiles — all players with sufficient minutes
+        for p in stat_qualified:
             p["goals_per90_percentile"]           = percentile_of(p["goals_per90"],            goals_per90_vals)
             p["shots_per90_percentile"]           = percentile_of(p["shots_per90"],            shots_per90_vals)
             p["xg_per90_percentile"]              = percentile_of(p["xg_per90"],               xg_per90_vals)
@@ -592,12 +609,6 @@ def compute_peer_ratings(
             p["accurate_long_balls_per90_percentile"] = percentile_of(p["accurate_long_balls_per90"], accurate_lb_per90_vals)
             p["accurate_long_balls_raw_percentile"] = percentile_of(p["_accurate_long_balls_raw"], accurate_lb_raw_vals)
             p["long_ball_accuracy_percentile"]    = percentile_of(p["long_ball_accuracy"],     long_ball_accuracy_vals)
-            p["shot_generation_percentile"] = percentile_of(p["_dim_shot_generation"], shot_generation_vals)
-            p["chance_creation_percentile"] = percentile_of(p["_dim_chance_creation"], chance_creation_vals)
-            p["team_function_percentile"]   = percentile_of(p["_dim_team_function"],   team_function_vals)
-            p["duels_percentile"]           = percentile_of(p["_dim_duels"],           duels_vals)
-            p["defensive_percentile"]       = percentile_of(p["_dim_defensive"],       defensive_vals)
-            p["model_score"]                = round(max(0.0, min(100.0, (overall_score + 3.0) / 6.0 * 100)), 2)
             # xGChain/xGBuildup — None if player has no Understat data
             if p["xg_chain_per90"] is not None and xg_chain_per90_vals:
                 p["xg_chain_per90_percentile"]    = percentile_of(p["xg_chain_per90"],        xg_chain_per90_vals)
@@ -611,9 +622,33 @@ def compute_peer_ratings(
             else:
                 p["xg_buildup_per90_percentile"]  = None
                 p["xg_buildup_raw_percentile"]    = None
+            # Null model/dimension percentiles for players without match ratings
+            if not p.get("rated_minutes"):
+                for col in NULL_RATING_COLS:
+                    p[col] = None
+
+        # Model/dimension percentiles — only players with match ratings
+        if qualified:
+            for p in qualified:
+                overall_score = sum(
+                    w * zscores[k][p["player_id"]]
+                    for k, w in zip(dim_keys, dim_weights)
+                )
+                p["finishing_percentile"]       = percentile_of(p["_dim_finishing"],         finishing_vals)
+                p["involvement_percentile"]     = percentile_of(p["_dim_chance_creation"],   chance_creation_vals)
+                p["carrying_percentile"]        = percentile_of(p["_dim_carrying"],          carrying_vals)
+                p["physical_percentile"]        = percentile_of(p["_dim_duels"],             duels_vals)
+                p["pressing_percentile"]        = percentile_of(p["_dim_defensive"],         defensive_vals)
+                p["overall_percentile"]         = percentile_of(overall_score,               overall_vals)
+                p["shot_generation_percentile"] = percentile_of(p["_dim_shot_generation"],   shot_generation_vals)
+                p["chance_creation_percentile"] = percentile_of(p["_dim_chance_creation"],   chance_creation_vals)
+                p["team_function_percentile"]   = percentile_of(p["_dim_team_function"],     team_function_vals)
+                p["duels_percentile"]           = percentile_of(p["_dim_duels"],             duels_vals)
+                p["defensive_percentile"]       = percentile_of(p["_dim_defensive"],         defensive_vals)
+                p["model_score"]                = round(max(0.0, min(100.0, (overall_score + 3.0) / 6.0 * 100)), 2)
 
         for p in group:
-            if p["minutes_played"] < MIN_MINUTES or not p.get("rated_minutes"):
+            if p["minutes_played"] < MIN_MINUTES:
                 for col in NULL_PERCENTILE_COLS:
                     p[col] = None
 

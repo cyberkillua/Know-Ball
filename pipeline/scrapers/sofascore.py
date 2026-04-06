@@ -1040,7 +1040,10 @@ def fetch_standings(tournament_id: int, season_id: int) -> list[dict]:
             team = row.get("team", {})
             form_matches = row.get("descriptions", [])
             form_str = "".join(
-                {"W": "W", "D": "D", "L": "L"}.get(f, "?") for f in form_matches
+                {"W": "W", "D": "D", "L": "L"}.get(
+                    f.get("value") if isinstance(f, dict) else f, "?"
+                )
+                for f in form_matches
             )
 
             standings.append(

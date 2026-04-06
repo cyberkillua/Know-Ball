@@ -175,13 +175,7 @@ function KeyStatsRow({
   ];
 
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(6, minmax(0,1fr))",
-        gap: 8,
-      }}
-    >
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
       {cards.map((c) => (
         <div
           key={c.label}
@@ -389,7 +383,7 @@ function SituationBreakdown({ shots }: { shots: Shot[] }) {
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
         {/* Donut */}
         <div style={{ flexShrink: 0 }}>
           <PieChart width={160} height={160}>
@@ -623,13 +617,7 @@ export default function ShotProfile({
       />
 
       {/* 2-column grid: goal mouth + foot preference */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(2, minmax(0,1fr))",
-          gap: 16,
-        }}
-      >
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <SubSection title="Goal mouth placement">
           <GoalMouthMap shots={shots} />
         </SubSection>
@@ -639,13 +627,7 @@ export default function ShotProfile({
       </div>
 
       {/* 2-column grid: situation + timing */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(2, minmax(0,1fr))",
-          gap: 16,
-        }}
-      >
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <SubSection title="Situation breakdown">
           <SituationBreakdown shots={shots} />
         </SubSection>

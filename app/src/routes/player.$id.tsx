@@ -35,7 +35,7 @@ import ShotProfile from "../components/ShotProfile";
 export const Route = createFileRoute("/player/$id")({
   component: PlayerProfilePage,
 });
-console.log("Route for player profile page:", Route);
+
 const POSITION_LABELS: Record<string, string> = {
   ST: "Strikers",
   CF: "Centre-Forwards",
@@ -336,103 +336,108 @@ function PlayerProfilePage() {
               {player.name.charAt(0)}
             </div>
 
-            {/* Player identity */}
+            {/* Player identity + right section */}
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl font-bold leading-tight">{player.name}</h1>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                {player.position && (
-                  <span className="text-xs font-semibold uppercase tracking-wide text-primary">
-                    {player.position}
-                  </span>
-                )}
-                {player.team && (
-                  <>
-                    <span className="text-muted-foreground text-xs">·</span>
-                    <span className="text-sm text-muted-foreground">
-                      {(player.team as any).name}
-                    </span>
-                  </>
-                )}
-              </div>
-              <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
-                {calculateAge(player.date_of_birth) != null && (
-                  <span>{calculateAge(player.date_of_birth)} yrs</span>
-                )}
-                {player.nationality && (
-                  <>
-                    {calculateAge(player.date_of_birth) != null && (
-                      <span>·</span>
+              <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                {/* Name + meta */}
+                <div className="min-w-0">
+                  <h1 className="text-xl font-bold leading-tight">{player.name}</h1>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    {player.position && (
+                      <span className="text-xs font-semibold uppercase tracking-wide text-primary">
+                        {player.position}
+                      </span>
                     )}
-                    <span>{player.nationality}</span>
-                  </>
-                )}
-                {(player.team as any)?.league?.name && (
-                  <>
-                    {(calculateAge(player.date_of_birth) != null ||
-                      player.nationality) && <span>·</span>}
-                    <span>{(player.team as any).league.name}</span>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Season selector + rating stats */}
-            <div className="shrink-0 flex flex-col items-end gap-2">
-              {seasons.length > 0 && (
-                <select
-                  value={season}
-                  onChange={(e) => setSeason(e.target.value)}
-                  className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  {seasons.map((s) => (
-                    <option
-                      key={`${s.league_id}-${s.season}`}
-                      value={`${s.league_id}|${s.season}`}
-                    >
-                      {s.league_name} {s.season}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              {avgRating > 0 && (
-                <div className="flex items-center gap-3">
-                  <div className="text-right">
-                    {stats && (
-                      <div className="text-xs text-muted-foreground mb-1">
-                        {stats.matches} apps · {stats.minutes?.toLocaleString()}{" "}
-                        mins
-                      </div>
-                    )}
-                    {last5.length >= 3 && (
-                      <div
-                        className={`text-xs font-medium text-right ${
-                          formDelta > 0.2
-                            ? "text-emerald-400"
-                            : formDelta < -0.2
-                              ? "text-red-400"
-                              : "text-muted-foreground"
-                        }`}
-                      >
-                        {formDelta > 0.2
-                          ? "↑ In form"
-                          : formDelta < -0.2
-                            ? "↓ Out of form"
-                            : "→ Steady"}
-                      </div>
+                    {player.team && (
+                      <>
+                        <span className="text-muted-foreground text-xs">·</span>
+                        <span className="text-sm text-muted-foreground">
+                          {(player.team as any).name}
+                        </span>
+                      </>
                     )}
                   </div>
-                  <div className="flex flex-col items-center">
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                      Rating
-                    </div>
-                    <RatingBadge
-                      rating={Number(avgRating.toFixed(2))}
-                      size="lg"
-                    />
+                  <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
+                    {calculateAge(player.date_of_birth) != null && (
+                      <span>{calculateAge(player.date_of_birth)} yrs</span>
+                    )}
+                    {player.nationality && (
+                      <>
+                        {calculateAge(player.date_of_birth) != null && (
+                          <span>·</span>
+                        )}
+                        <span>{player.nationality}</span>
+                      </>
+                    )}
+                    {(player.team as any)?.league?.name && (
+                      <>
+                        {(calculateAge(player.date_of_birth) != null ||
+                          player.nationality) && <span>·</span>}
+                        <span>{(player.team as any).league.name}</span>
+                      </>
+                    )}
                   </div>
                 </div>
-              )}
+
+                {/* Season selector + rating stats */}
+                <div className="shrink-0 flex flex-col items-end gap-2">
+                  {seasons.length > 0 && (
+                    <select
+                      value={season}
+                      onChange={(e) => setSeason(e.target.value)}
+                      className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    >
+                      {seasons.map((s) => (
+                        <option
+                          key={`${s.league_id}-${s.season}`}
+                          value={`${s.league_id}|${s.season}`}
+                        >
+                          {s.league_name} {s.season}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  {avgRating > 0 && (
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        {stats && (
+                          <div className="text-xs text-muted-foreground mb-1">
+                            {stats.matches} apps · {stats.minutes?.toLocaleString()}{" "}
+                            mins
+                          </div>
+                        )}
+                        {last5.length >= 3 && (
+                          <div
+                            className={`text-xs font-medium text-right ${
+                              formDelta > 0.2
+                                ? "text-emerald-400"
+                                : formDelta < -0.2
+                                  ? "text-red-400"
+                                  : "text-muted-foreground"
+                            }`}
+                          >
+                            {formDelta > 0.2
+                              ? "↑ In form"
+                              : formDelta < -0.2
+                                ? "↓ Out of form"
+                                : "→ Steady"}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-col items-center">
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                          Rating
+                        </div>
+                        <RatingBadge
+                          rating={Number(avgRating.toFixed(2))}
+                          size="lg"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </CardContent>
