@@ -1,0 +1,17 @@
+{
+  "buildCommand": "cd app && pnpm install && pnpm run build",
+  "outputDirectory": "app/dist/client",
+  "installCommand": "pnpm install",
+  "framework": null,
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api/index"
+    }
+  ],
+  "functions": {
+    "api/index.js": {
+      "includeFiles": "app/dist/server/**/*"
+    }
+  }
+}
