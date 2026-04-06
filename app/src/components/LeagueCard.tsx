@@ -1,4 +1,3 @@
-import { Link } from '@tanstack/react-router'
 import type { League } from '../lib/types'
 
 const COUNTRY_FLAGS: Record<string, string> = {
@@ -10,15 +9,15 @@ const COUNTRY_FLAGS: Record<string, string> = {
 }
 
 const LEAGUE_COLORS: Record<string, string> = {
-  'Premier League': 'bg-purple-500/15 border-purple-500/30 hover:border-purple-500/50',
-  'La Liga': 'bg-orange-500/15 border-orange-500/30 hover:border-orange-500/50',
-  'Serie A': 'bg-green-500/15 border-green-500/30 hover:border-green-500/50',
-  'Bundesliga': 'bg-red-500/15 border-red-500/30 hover:border-red-500/50',
-  'Ligue 1': 'bg-blue-500/15 border-blue-500/30 hover:border-blue-500/50',
-  'Championship': 'bg-cyan-500/15 border-cyan-500/30 hover:border-cyan-500/50',
+  'Premier League': 'bg-purple-500/15 border-purple-500/30',
+  'La Liga': 'bg-orange-500/15 border-orange-500/30',
+  'Serie A': 'bg-green-500/15 border-green-500/30',
+  'Bundesliga': 'bg-red-500/15 border-red-500/30',
+  'Ligue 1': 'bg-blue-500/15 border-blue-500/30',
+  'Championship': 'bg-cyan-500/15 border-cyan-500/30',
 }
 
-const DEFAULT_COLOR = 'bg-primary/15 border-primary/30 hover:border-primary/50'
+const DEFAULT_COLOR = 'bg-primary/15 border-primary/30'
 
 interface LeagueCardProps {
   league: League
@@ -30,11 +29,7 @@ export default function LeagueCard({ league, playerCount }: LeagueCardProps) {
   const colorClasses = LEAGUE_COLORS[league.name] || DEFAULT_COLOR
 
   return (
-    <Link
-      to="/league/$id"
-      params={{ id: String(league.id) }}
-      className={`block rounded-none border p-4 transition-all no-underline ${colorClasses}`}
-    >
+    <div className={`block rounded-none border p-4 ${colorClasses}`}>
       <div className="flex items-center gap-3 mb-2">
         <span className="text-2xl">{flag}</span>
         <div className="flex-1 min-w-0">
@@ -47,6 +42,6 @@ export default function LeagueCard({ league, playerCount }: LeagueCardProps) {
           {playerCount.toLocaleString()} players
         </div>
       )}
-    </Link>
+    </div>
   )
 }
