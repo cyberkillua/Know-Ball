@@ -1,0 +1,11 @@
+{
+  "name": "know-ball",
+  "private": true,
+  "workspaces": [
+    "app"
+  ],
+  "scripts": {
+    "build": "pnpm --filter app build",
+    "dev": "pnpm --filter app dev"
+  }
+}
