@@ -132,29 +132,21 @@ def rate_record(record: dict, configs: dict) -> tuple[bool, tuple | None]:
         player_id,
         position_key,
         scores.finishing_raw,
-        scores.creation_raw,
-        scores.involvement_raw,
-        scores.carrying_raw,
-        scores.physical_raw,
-        scores.pressing_raw,
         scores.finishing_norm,
-        scores.creation_norm,
-        scores.involvement_norm,
-        scores.carrying_norm,
-        scores.physical_norm,
-        scores.pressing_norm,
-        final_rating,
-        float(record.get("sofascore_rating") or 0),
         scores.shot_generation_raw,
         scores.shot_generation_norm,
         scores.chance_creation_raw,
         scores.chance_creation_norm,
         scores.team_function_raw,
         scores.team_function_norm,
+        scores.carrying_raw,
+        scores.carrying_norm,
         scores.duels_raw,
         scores.duels_norm,
         scores.defensive_raw,
         scores.defensive_norm,
+        final_rating,
+        float(record.get("sofascore_rating") or 0),
     )
 
 
@@ -193,14 +185,14 @@ def main():
         db.execute(
             """INSERT INTO match_ratings
                (match_id, player_id, position,
-                finishing_raw, creation_raw, involvement_raw, carrying_raw, physical_raw, pressing_raw,
-                finishing_norm, creation_norm, involvement_norm, carrying_norm, physical_norm, pressing_norm,
-                final_rating, sofascore_rating,
+                finishing_raw, finishing_norm,
                 shot_generation_raw, shot_generation_norm,
                 chance_creation_raw, chance_creation_norm,
                 team_function_raw, team_function_norm,
+                carrying_raw, carrying_norm,
                 duels_raw, duels_norm,
-                defensive_raw, defensive_norm)
+                defensive_raw, defensive_norm,
+                final_rating, sofascore_rating)
                VALUES %s
                ON CONFLICT (match_id, player_id) DO NOTHING""",
             (insert_batch,),

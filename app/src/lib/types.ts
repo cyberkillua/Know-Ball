@@ -115,15 +115,19 @@ export interface MatchRating {
   player_id: number
   position: string
   finishing_raw: number
-  involvement_raw: number
-  carrying_raw: number
-  physical_raw: number
-  pressing_raw: number
   finishing_norm: number
-  involvement_norm: number
+  shot_generation_raw: number
+  shot_generation_norm: number
+  chance_creation_raw: number
+  chance_creation_norm: number
+  team_function_raw: number
+  team_function_norm: number
+  carrying_raw: number
   carrying_norm: number
-  physical_norm: number
-  pressing_norm: number
+  duels_raw: number
+  duels_norm: number
+  defensive_raw: number
+  defensive_norm: number
   final_rating: number
   fotmob_rating: number | null
   player?: Player
@@ -233,6 +237,23 @@ export interface PeerRating {
   team_function_percentile: number | null
   duels_percentile: number | null
   defensive_percentile: number | null
+  // Consistency & peak (per-match stddev and 90th-percentile of raw scores)
+  finishing_stddev: number | null
+  finishing_p90: number | null
+  shot_generation_stddev: number | null
+  shot_generation_p90: number | null
+  chance_creation_stddev: number | null
+  chance_creation_p90: number | null
+  carrying_stddev: number | null
+  carrying_p90: number | null
+  duels_stddev: number | null
+  duels_p90: number | null
+  defensive_stddev: number | null
+  defensive_p90: number | null
+  model_score_stddev: number | null
+  model_score_p90: number | null
+  consistency_score: number | null
+  impact_rate: number | null
   // Metadata
   matches_played: number
   minutes_played: number
@@ -370,10 +391,6 @@ export type RatingCategory =
   | 'carrying'
   | 'duels'
   | 'defensive'
-  // v6 backward-compat (still present in DB)
-  | 'involvement'
-  | 'physical'
-  | 'pressing'
 
 export const RATING_CATEGORIES: RatingCategory[] = [
   'finishing',
@@ -393,10 +410,6 @@ export const CATEGORY_LABELS: Record<RatingCategory, string> = {
   carrying: 'Carrying',
   duels: 'Duels',
   defensive: 'Defensive',
-  // v6 backward-compat
-  involvement: 'Involvement',
-  physical: 'Physical',
-  pressing: 'Defensive Effort',
 }
 
 export interface MatchGKStats {

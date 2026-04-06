@@ -88,6 +88,27 @@ function pct(per90Pct: number | null | undefined, rawPct: number | null | undefi
 }
 
 
+// Interpolates between red→amber→green based on a 0–100 value and per-metric thresholds.
+// low: value below which it's fully red. high: value above which it's fully green.
+function rateColor(val: number, low: number, high: number): string {
+  const t = Math.max(0, Math.min(1, (val - low) / (high - low)));
+  if (t < 0.5) {
+    // red (#e24b4a) → amber (#ef9f27)
+    const s = t / 0.5;
+    const r = Math.round(226 + (239 - 226) * s);
+    const g = Math.round(75  + (159 - 75)  * s);
+    const b = Math.round(74  + (39  - 74)  * s);
+    return `rgb(${r},${g},${b})`;
+  } else {
+    // amber (#ef9f27) → green (#1d9e75)
+    const s = (t - 0.5) / 0.5;
+    const r = Math.round(239 + (29  - 239) * s);
+    const g = Math.round(159 + (158 - 159) * s);
+    const b = Math.round(39  + (117 - 39)  * s);
+    return `rgb(${r},${g},${b})`;
+  }
+}
+
 function PlayerProfilePage() {
   const { id } = Route.useParams()
   const [player, setPlayer] = useState<Player | null>(null)
@@ -243,23 +264,27 @@ function PlayerProfilePage() {
       {/* ── Layer 1: Hero Header ─────────────────────────────────────────── */}
       <Card>
         <CardContent className="p-6">
-          {/* Top row: avatar / name / season / rating */}
-          <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-secondary text-2xl font-bold text-primary">
+          <div className="flex items-start gap-4">
+            {/* Avatar */}
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-secondary text-xl font-bold text-primary">
               {player.name.charAt(0)}
             </div>
+
+            {/* Player identity */}
             <div className="flex-1 min-w-0">
-              <h1 className="text-2xl font-bold">{player.name}</h1>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                {player.position && <span>{player.position}</span>}
+              <h1 className="text-xl font-bold leading-tight">{player.name}</h1>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                {player.position && (
+                  <span className="text-xs font-semibold uppercase tracking-wide text-primary">{player.position}</span>
+                )}
                 {player.team && (
                   <>
-                    <span>·</span>
-                    <span>{(player.team as any).name}</span>
+                    <span className="text-muted-foreground text-xs">·</span>
+                    <span className="text-sm text-muted-foreground">{(player.team as any).name}</span>
                   </>
                 )}
               </div>
-              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+              <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
                 {calculateAge(player.date_of_birth) != null && (
                   <span>{calculateAge(player.date_of_birth)} yrs</span>
                 )}
@@ -278,54 +303,46 @@ function PlayerProfilePage() {
               </div>
             </div>
 
-{/* Season selector */}
-             {seasons.length > 0 && (
-               <div className="flex flex-col items-end gap-1 shrink-0">
-                 <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                   Season
-                 </label>
-                 <select
-                   value={season}
-                   onChange={(e) => setSeason(e.target.value)}
-                   className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                 >
-                   {seasons.map((s) => (
-                     <option key={`${s.league_id}-${s.season}`} value={`${s.league_id}|${s.season}`}>
-                       {s.league_name} {s.season}
-                     </option>
-                   ))}
-                 </select>
-               </div>
-             )}
+            {/* Season selector + rating stats */}
+            <div className="shrink-0 flex flex-col items-end gap-2">
+              {seasons.length > 0 && (
+                <select
+                  value={season}
+                  onChange={(e) => setSeason(e.target.value)}
+                  className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  {seasons.map((s) => (
+                    <option key={`${s.league_id}-${s.season}`} value={`${s.league_id}|${s.season}`}>
+                      {s.league_name} {s.season}
+                    </option>
+                  ))}
+                </select>
+              )}
 
-            <div className="text-center shrink-0">
               {avgRating > 0 && (
-                <>
-                  <div className="text-xs text-muted-foreground">Avg Rating</div>
-                  <RatingBadge rating={Number(avgRating.toFixed(2))} size="lg" />
-                  {last5.length >= 3 && (
-                    <div
-                      className={`mt-1 text-xs font-medium ${
-                        formDelta > 0.2
-                          ? 'text-emerald-400'
-                          : formDelta < -0.2
-                            ? 'text-red-400'
-                            : 'text-muted-foreground'
-                      }`}
-                    >
-                      {formDelta > 0.2
-                        ? 'Trending Up'
-                        : formDelta < -0.2
-                          ? 'Trending Down'
-                          : 'Steady'}
-                    </div>
-                  )}
-                </>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    {stats && (
+                      <div className="text-xs text-muted-foreground mb-1">
+                        {stats.matches} apps · {stats.minutes?.toLocaleString()} mins
+                      </div>
+                    )}
+                    {last5.length >= 3 && (
+                      <div className={`text-xs font-medium text-right ${
+                        formDelta > 0.2 ? 'text-emerald-400' : formDelta < -0.2 ? 'text-red-400' : 'text-muted-foreground'
+                      }`}>
+                        {formDelta > 0.2 ? '↑ In form' : formDelta < -0.2 ? '↓ Out of form' : '→ Steady'}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Rating</div>
+                    <RatingBadge rating={Number(avgRating.toFixed(2))} size="lg" />
+                  </div>
+                </div>
               )}
             </div>
           </div>
-
-          
         </CardContent>
       </Card>
 
@@ -1360,6 +1377,76 @@ function PlayerProfilePage() {
                       </span>
                     </div>
                   )}
+                  {/* Consistency & Impact Rate */}
+                  {(activePeerRating.consistency_score != null || activePeerRating.impact_rate != null) && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '14px 16px', background: 'var(--muted)', borderRadius: 8 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Finishing Profile</div>
+
+                      {/* Consistency row — low=20, high=70: below 20% is red, above 70% is green */}
+                      {activePeerRating.consistency_score != null && (() => {
+                        const val = Number(activePeerRating.consistency_score);
+                        const filled = val / 10; // continuous fill (0–10)
+                        const labelColor = rateColor(val, 20, 70);
+                        return (
+                          <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                              <span style={{ fontSize: 12, color: 'var(--foreground)', fontWeight: 500 }}>Consistency</span>
+                              <span style={{ fontSize: 16, fontWeight: 700, color: labelColor }}>{val.toFixed(0)}%</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: 2 }}>
+                              {Array.from({ length: 10 }, (_, i) => {
+                                const segMid = (i + 0.5) * 10; // midpoint % of this segment
+                                const opacity = filled >= i + 1 ? 1 : filled > i ? filled - i : 0;
+                                return (
+                                  <div key={i} style={{
+                                    flex: 1, height: 6, borderRadius: 2,
+                                    background: opacity > 0 ? rateColor(segMid, 20, 70) : 'var(--border)',
+                                    opacity: opacity > 0 && opacity < 1 ? 0.5 + opacity * 0.5 : 1,
+                                  }} />
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Impact Rate row — low=5, high=35: below 5% is red, above 35% is green */}
+                      {activePeerRating.impact_rate != null && (() => {
+                        const val = Number(activePeerRating.impact_rate);
+                        const filled = val / 10;
+                        const labelColor = rateColor(val, 5, 35);
+                        return (
+                          <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                              <span style={{ fontSize: 12, color: 'var(--foreground)', fontWeight: 500 }}>Impact Rate</span>
+                              <span style={{ fontSize: 16, fontWeight: 700, color: labelColor }}>{val.toFixed(0)}%</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: 2 }}>
+                              {Array.from({ length: 10 }, (_, i) => {
+                                const segMid = (i + 0.5) * 10;
+                                const opacity = filled >= i + 1 ? 1 : filled > i ? filled - i : 0;
+                                return (
+                                  <div key={i} style={{
+                                    flex: 1, height: 6, borderRadius: 2,
+                                    background: opacity > 0 ? rateColor(segMid, 5, 35) : 'var(--border)',
+                                    opacity: opacity > 0 && opacity < 1 ? 0.5 + opacity * 0.5 : 1,
+                                  }} />
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Explanation */}
+                      <div style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 4, lineHeight: 1.5 }}>
+                        <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>Consistency</span> = % of matches with a positive finishing contribution.{' '}
+                        <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>Impact Rate</span> = % of matches with an elite finishing performance.
+                        These are absolute rates, not peer rankings.
+                      </div>
+                    </div>
+                  )}
+
                   {/* Description */}
                   <p style={{ fontSize: 11, color: 'var(--muted-foreground)', margin: 0 }}>
                     Percentile ranks show how this player compares to {activePeerRating.position ?? 'ST'} peers in the same league and season with 300+ rated minutes. 99 = top 1%.

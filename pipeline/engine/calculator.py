@@ -71,15 +71,6 @@ class CategoryScores:
     carrying_norm: float = 0.0
     duels_norm: float = 0.0
     defensive_norm: float = 0.0
-    # v6 backward-compat aliases (kept so existing DB inserts don't break)
-    creation_raw: float = 0.0
-    involvement_raw: float = 0.0
-    physical_raw: float = 0.0
-    pressing_raw: float = 0.0
-    creation_norm: float = 0.0
-    involvement_norm: float = 0.0
-    physical_norm: float = 0.0
-    pressing_norm: float = 0.0
 
 
 def calc_finishing(stats: PlayerMatchStats, constants: dict) -> float:
@@ -286,12 +277,14 @@ def normalize_score(raw: float, midpoint: float, scale: float) -> float:
 
     Centers at midpoint, divides by scale to get a value roughly in [-3, +3].
     During calibration, midpoint = median raw score, scale = IQR.
-    Clamped to [-3, +3] so no single category can dominate.
+
+    Soft compression allows elite outliers to exceed ±3 with diminishing returns
+    (~4.5–5.0 for genuinely exceptional performances) rather than hard-capping them.
     """
     if scale == 0:
         return 0.0
     norm = (raw - midpoint) / scale
-    return max(-3.0, min(3.0, norm))
+    return norm / (1 + abs(norm) * 0.15)
 
 
 def calculate_match_rating(
@@ -320,12 +313,6 @@ def calculate_match_rating(
     scores.duels_raw           = calc_duels(stats, constants)
     scores.defensive_raw       = calc_defensive(stats, constants)
 
-    # Backward-compat aliases for v6 column names still in DB
-    scores.creation_raw    = scores.chance_creation_raw
-    scores.involvement_raw = scores.team_function_raw
-    scores.physical_raw    = scores.duels_raw
-    scores.pressing_raw    = scores.defensive_raw
-
     # Normalize all v7 dimensions
     v7_categories = [
         "finishing",
@@ -343,12 +330,6 @@ def calculate_match_rating(
         scale = mp.get("scale", 1.0)
         norm = normalize_score(raw, midpoint, scale)
         setattr(scores, f"{cat}_norm", round(norm, 2))
-
-    # Backward-compat aliases for v6 norm names
-    scores.creation_norm    = scores.chance_creation_norm
-    scores.involvement_norm = scores.team_function_norm
-    scores.physical_norm    = scores.duels_norm
-    scores.pressing_norm    = scores.defensive_norm
 
     # Weighted sum using v7 weights
     weighted_sum = sum(

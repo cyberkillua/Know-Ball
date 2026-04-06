@@ -11,18 +11,6 @@ from collections import defaultdict
 
 from pipeline.db import DB
 from pipeline.logger import get_logger
-from pipeline.engine.calculator import (
-    PlayerMatchStats,
-    calc_finishing,
-    calc_shot_generation,
-    calc_chance_creation,
-    calc_team_function,
-    calc_carrying,
-    calc_duels,
-    calc_defensive,
-)
-from pipeline.engine.config import load_position_config
-
 log = get_logger("compute")
 
 MIN_MINUTES = 300
@@ -126,6 +114,7 @@ NULL_PERCENTILE_COLS = (
     "duels_percentile",
     "defensive_percentile",
     "model_score",
+    "impact_rate",
 )
 
 
@@ -143,13 +132,6 @@ def compute_peer_ratings(
     """
     positions_tuple = tuple(profile_positions)
     log.info(f"[{position_label}] Fetching stats for {profile_positions}")
-
-    try:
-        pos_config = load_position_config(rating_position)
-        pos_constants = pos_config["constants"]
-    except Exception:
-        pos_config = None
-        pos_constants = {}
 
     stat_rows = db.query(
         """
@@ -227,7 +209,38 @@ def compute_peer_ratings(
             mat.league_id,
             mat.season,
             SUM(mps.minutes_played)::int                                                                              AS rated_minutes,
-            ROUND((SUM(mr.final_rating * mps.minutes_played) / NULLIF(SUM(mps.minutes_played), 0))::numeric, 2)      AS avg_match_rating
+            ROUND((SUM(mr.final_rating * mps.minutes_played) / NULLIF(SUM(mps.minutes_played), 0))::numeric, 2)      AS avg_match_rating,
+            ROUND(AVG(mr.finishing_raw)::numeric, 4)                                                                  AS avg_finishing_raw,
+            ROUND(AVG(mr.shot_generation_raw)::numeric, 4)                                                            AS avg_shot_generation_raw,
+            ROUND(AVG(mr.chance_creation_raw)::numeric, 4)                                                            AS avg_chance_creation_raw,
+            ROUND(AVG(mr.team_function_raw)::numeric, 4)                                                              AS avg_team_function_raw,
+            ROUND(AVG(mr.carrying_raw)::numeric, 4)                                                                   AS avg_carrying_raw,
+            ROUND(AVG(mr.duels_raw)::numeric, 4)                                                                      AS avg_duels_raw,
+            ROUND(AVG(mr.defensive_raw)::numeric, 4)                                                                  AS avg_defensive_raw,
+            ROUND(STDDEV(mr.finishing_raw)::numeric, 4)                                                               AS finishing_stddev,
+            ROUND((PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY mr.finishing_raw))::numeric, 4)                        AS finishing_p90,
+            ROUND(STDDEV(mr.shot_generation_raw)::numeric, 4)                                                         AS shot_generation_stddev,
+            ROUND((PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY mr.shot_generation_raw))::numeric, 4)                  AS shot_generation_p90,
+            ROUND(STDDEV(mr.chance_creation_raw)::numeric, 4)                                                         AS chance_creation_stddev,
+            ROUND((PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY mr.chance_creation_raw))::numeric, 4)                  AS chance_creation_p90,
+            ROUND(STDDEV(mr.carrying_raw)::numeric, 4)                                                                AS carrying_stddev,
+            ROUND((PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY mr.carrying_raw))::numeric, 4)                         AS carrying_p90,
+            ROUND(STDDEV(mr.duels_raw)::numeric, 4)                                                                   AS duels_stddev,
+            ROUND((PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY mr.duels_raw))::numeric, 4)                            AS duels_p90,
+            ROUND(STDDEV(mr.defensive_raw)::numeric, 4)                                                               AS defensive_stddev,
+            ROUND((PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY mr.defensive_raw))::numeric, 4)                        AS defensive_p90,
+            ROUND(STDDEV(mr.final_rating)::numeric, 4)                                                                AS model_score_stddev,
+            ROUND((PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY mr.final_rating))::numeric, 4)                         AS model_score_p90,
+            ROUND(
+                (COUNT(*) FILTER (WHERE mr.finishing_raw > 0))::numeric
+                / NULLIF(COUNT(*), 0) * 100,
+                1
+            ) AS consistency_score,
+            ROUND(
+                (COUNT(*) FILTER (WHERE mr.finishing_raw > 0.5))::numeric
+                / NULLIF(COUNT(*), 0) * 100,
+                1
+            ) AS impact_rate
         FROM match_ratings mr
         JOIN matches mat ON mat.id = mr.match_id
         JOIN match_player_stats mps ON mps.match_id = mr.match_id AND mps.player_id = mr.player_id
@@ -288,6 +301,10 @@ def compute_peer_ratings(
         norm = norm_lookup.get((r["player_id"], r["league_id"], r["season"]), {})
         rated_minutes = norm.get("rated_minutes") or 0
 
+        def _norm_float(key: str) -> float | None:
+            v = norm.get(key)
+            return float(v) if v is not None else None
+
         p = {
             "player_id": r["player_id"],
             "league_id": r["league_id"],
@@ -297,6 +314,22 @@ def compute_peer_ratings(
             "minutes_played": minutes,
             "rated_minutes": rated_minutes,
             "avg_match_rating": float(norm.get("avg_match_rating") or 0),
+            "finishing_stddev":       _norm_float("finishing_stddev"),
+            "finishing_p90":          _norm_float("finishing_p90"),
+            "shot_generation_stddev": _norm_float("shot_generation_stddev"),
+            "shot_generation_p90":    _norm_float("shot_generation_p90"),
+            "chance_creation_stddev": _norm_float("chance_creation_stddev"),
+            "chance_creation_p90":    _norm_float("chance_creation_p90"),
+            "carrying_stddev":        _norm_float("carrying_stddev"),
+            "carrying_p90":           _norm_float("carrying_p90"),
+            "duels_stddev":           _norm_float("duels_stddev"),
+            "duels_p90":              _norm_float("duels_p90"),
+            "defensive_stddev":       _norm_float("defensive_stddev"),
+            "defensive_p90":          _norm_float("defensive_p90"),
+            "model_score_stddev":     _norm_float("model_score_stddev"),
+            "model_score_p90":        _norm_float("model_score_p90"),
+            "consistency_score":      float(norm.get("consistency_score") or 0.0),
+            "impact_rate":            float(norm.get("impact_rate") or 0.0),
             # Per-90s
             "goals_per90": round(goals / per90, 2),
             "shots_per90": round(shots / per90, 2),
@@ -368,50 +401,18 @@ def compute_peer_ratings(
             "_fouls_committed_raw": fouls_committed,
         }
 
-        # Season-level dimension scores — apply calc functions to season totals
-        if pos_constants:
-            season_stats = PlayerMatchStats(
-                minutes_played=minutes,
-                goals=r["goals_total"] or 0,
-                penalty_goals=r["penalty_goals_total"] or 0,
-                shots_total=shots,
-                shots_on_target=shots_on,
-                xg=xg,
-                xgot=xgot,
-                assists=assists,
-                xa=xa,
-                key_passes=key_passes,
-                touches=touches,
-                passes_total=passes_total_val,
-                passes_completed=passes_completed,
-                successful_dribbles=dribbles_ok,
-                failed_dribbles=dribbles_fail,
-                fouls_won=fouls_won,
-                aerial_duels_won=aerial_won,
-                aerial_duels_lost=aerial_lost,
-                ground_duels_won=ground_won,
-                ground_duels_lost=ground_lost,
-                tackles_won=tackles,
-                interceptions=interceptions,
-                ball_recovery=recoveries,
-                big_chance_missed=bcm,
-                big_chance_created=bcc,
-                penalty_won=r["penalty_won_total"] or 0,
-                possession_lost_ctrl=r["possession_lost_ctrl_total"] or 0,
-                error_lead_to_goal=r["error_lead_to_goal_total"] or 0,
-                self_created_goals=r["self_created_goals_total"] or 0,
-                self_created_shots=r["self_created_shots_total"] or 0,
-            )
-            p["_dim_finishing"]       = calc_finishing(season_stats, pos_constants)
-            p["_dim_shot_generation"] = calc_shot_generation(season_stats, pos_constants)
-            p["_dim_chance_creation"] = calc_chance_creation(season_stats, pos_constants)
-            p["_dim_team_function"]   = calc_team_function(season_stats, pos_constants)
-            p["_dim_carrying"]        = calc_carrying(season_stats, pos_constants)
-            p["_dim_duels"]           = calc_duels(season_stats, pos_constants)
-            p["_dim_defensive"]       = calc_defensive(season_stats, pos_constants)
-        else:
-            for dim in ("finishing", "shot_generation", "chance_creation", "team_function", "carrying", "duels", "defensive"):
-                p[f"_dim_{dim}"] = 0.0
+        # Dimension scores — per-match averages from match_ratings (correct scale)
+        def _dim(key: str) -> float:
+            v = norm.get(key)
+            return float(v) if v is not None else 0.0
+
+        p["_dim_finishing"]       = _dim("avg_finishing_raw")
+        p["_dim_shot_generation"] = _dim("avg_shot_generation_raw")
+        p["_dim_chance_creation"] = _dim("avg_chance_creation_raw")
+        p["_dim_team_function"]   = _dim("avg_team_function_raw")
+        p["_dim_carrying"]        = _dim("avg_carrying_raw")
+        p["_dim_duels"]           = _dim("avg_duels_raw")
+        p["_dim_defensive"]       = _dim("avg_defensive_raw")
         players.append(p)
 
     # Group by (league_id, season) — rank within same league+season only
@@ -420,7 +421,12 @@ def compute_peer_ratings(
         groups[(p["league_id"], p["season"])].append(p)
 
     for (league_id, season), group in groups.items():
-        qualified = [p for p in group if p["minutes_played"] >= MIN_MINUTES]
+        qualified = [
+            p for p in group
+            if p["minutes_played"] >= MIN_MINUTES
+            and p["rated_minutes"] is not None
+            and p["rated_minutes"] > 0
+        ]
 
         if not qualified:
             for p in group:
@@ -607,7 +613,7 @@ def compute_peer_ratings(
                 p["xg_buildup_raw_percentile"]    = None
 
         for p in group:
-            if p["minutes_played"] < MIN_MINUTES:
+            if p["minutes_played"] < MIN_MINUTES or not p.get("rated_minutes"):
                 for col in NULL_PERCENTILE_COLS:
                     p[col] = None
 
@@ -661,7 +667,16 @@ def compute_peer_ratings(
                 xg_buildup_per90_percentile, xg_buildup_raw_percentile,
                 shot_generation_percentile, chance_creation_percentile,
                 team_function_percentile, duels_percentile, defensive_percentile,
-                model_score
+                model_score,
+                finishing_stddev, finishing_p90,
+                shot_generation_stddev, shot_generation_p90,
+                chance_creation_stddev, chance_creation_p90,
+                carrying_stddev, carrying_p90,
+                duels_stddev, duels_p90,
+                defensive_stddev, defensive_p90,
+                model_score_stddev, model_score_p90,
+                consistency_score,
+                impact_rate
             ) VALUES (
                 %(player_id)s, %(league_id)s, %(season)s, %(position)s,
                 %(matches_played)s, %(minutes_played)s, %(rated_minutes)s, %(avg_match_rating)s,
@@ -708,7 +723,16 @@ def compute_peer_ratings(
                 %(xg_buildup_per90_percentile)s, %(xg_buildup_raw_percentile)s,
                 %(shot_generation_percentile)s, %(chance_creation_percentile)s,
                 %(team_function_percentile)s, %(duels_percentile)s, %(defensive_percentile)s,
-                %(model_score)s
+                %(model_score)s,
+                %(finishing_stddev)s, %(finishing_p90)s,
+                %(shot_generation_stddev)s, %(shot_generation_p90)s,
+                %(chance_creation_stddev)s, %(chance_creation_p90)s,
+                %(carrying_stddev)s, %(carrying_p90)s,
+                %(duels_stddev)s, %(duels_p90)s,
+                %(defensive_stddev)s, %(defensive_p90)s,
+                %(model_score_stddev)s, %(model_score_p90)s,
+                %(consistency_score)s,
+                %(impact_rate)s
             )
             ON CONFLICT (player_id, league_id, season) DO UPDATE SET
                 position                          = EXCLUDED.position,
@@ -811,7 +835,23 @@ def compute_peer_ratings(
                 team_function_percentile           = EXCLUDED.team_function_percentile,
                 duels_percentile                   = EXCLUDED.duels_percentile,
                 defensive_percentile               = EXCLUDED.defensive_percentile,
-                model_score                        = EXCLUDED.model_score
+                model_score                        = EXCLUDED.model_score,
+                finishing_stddev                   = EXCLUDED.finishing_stddev,
+                finishing_p90                      = EXCLUDED.finishing_p90,
+                shot_generation_stddev             = EXCLUDED.shot_generation_stddev,
+                shot_generation_p90                = EXCLUDED.shot_generation_p90,
+                chance_creation_stddev             = EXCLUDED.chance_creation_stddev,
+                chance_creation_p90                = EXCLUDED.chance_creation_p90,
+                carrying_stddev                    = EXCLUDED.carrying_stddev,
+                carrying_p90                       = EXCLUDED.carrying_p90,
+                duels_stddev                       = EXCLUDED.duels_stddev,
+                duels_p90                          = EXCLUDED.duels_p90,
+                defensive_stddev                   = EXCLUDED.defensive_stddev,
+                defensive_p90                      = EXCLUDED.defensive_p90,
+                model_score_stddev                 = EXCLUDED.model_score_stddev,
+                model_score_p90                    = EXCLUDED.model_score_p90,
+                consistency_score                  = EXCLUDED.consistency_score,
+                impact_rate                        = EXCLUDED.impact_rate
             """,
             p,
         )
