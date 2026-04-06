@@ -481,7 +481,7 @@ export const searchPlayers = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     return query<Player>(
       `SELECT p.*,
-              json_build_object('id', t.id, 'name', t.name) as team
+              json_build_object('id', t.id, 'name', t.name, 'league_id', t.league_id) as team
        FROM players p
        LEFT JOIN teams t ON t.id = p.current_team_id
        WHERE p.name ILIKE $1

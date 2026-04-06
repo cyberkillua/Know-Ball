@@ -13,7 +13,7 @@ Optimizations:
 
 from pipeline.db import DB
 from pipeline.logger import get_logger
-from pipeline.scrapers.understat import fetch_league_player_stats
+from pipeline.scrapers.understat import fetch_league_player_stats, fetch_league_matches as fetch_understat_matches
 from pipeline.scrapers.sofascore import (
     fetch_league_matches,
     fetch_match_details,
@@ -218,9 +218,10 @@ def scrape_league(
         f"{stats_skipped} without ==="
     )
 
-    # Post-Sofascore: pull xGChain/xGBuildup from Understat for midfielders.
+    # Post-Sofascore: link understat match IDs and pull player stats from Understat.
     # Only fires when new match data was actually processed (avoids unnecessary requests).
     if understat_slug and stats_ok > 0:
+        _backfill_understat_match_ids(db, understat_slug, season, league_id)
         _update_understat_stats(db, understat_slug, season)
 
 
@@ -619,6 +620,31 @@ def _match_player_by_name(db: DB, name: str) -> int | None:
         (name,),
     )
     return row["id"] if row else None
+
+
+def _backfill_understat_match_ids(db: DB, understat_slug: str, season: str, league_id: int) -> None:
+    """
+    Fetch Understat match list and link each match to its understat_id
+    by matching on (league_id, date, home_score, away_score).
+    """
+    season_int = int(season.split("/")[0])
+    try:
+        u_matches = fetch_understat_matches(understat_slug, season_int)
+    except Exception as e:
+        log.warning(f"Understat match list fetch failed for {understat_slug} {season_int}: {e}")
+        return
+    for um in u_matches:
+        db.execute(
+            """UPDATE matches
+               SET understat_id = %s
+               WHERE league_id = %s
+                 AND date = %s
+                 AND home_score = %s
+                 AND away_score = %s
+                 AND understat_id IS NULL""",
+            (um["understat_id"], league_id, um["date"], um["home_score"], um["away_score"]),
+        )
+    log.info(f"Linked understat IDs for up to {len(u_matches)} matches in {understat_slug} {season}")
 
 
 def _update_understat_stats(db: DB, understat_slug: str, season: str) -> None:
