@@ -371,7 +371,7 @@ def _process_match(db: DB, match: dict, league_id: int, season: str) -> bool:
 
         db.execute(
             """INSERT INTO match_player_stats
-               (match_id, player_id, team_id, minutes_played, position_played,
+               (match_id, player_id, team_id, minutes_played,
                 goals, shots_total, shots_on_target, shots_off_target, xg, xgot,
                 assists, xa, key_passes, touches, passes_total, passes_completed,
                 successful_dribbles, failed_dribbles, fouls_won,
@@ -385,14 +385,13 @@ def _process_match(db: DB, match: dict, league_id: int, season: str) -> bool:
                 possession_lost_ctrl, total_contest,
                 penalty_won, penalty_conceded, own_goals,
                 penalty_goals, np_xg, np_shots)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                ON CONFLICT (match_id, player_id) DO NOTHING""",
             (
                 match_db_id,
                 player_id,
                 our_team_id,
                 ps["minutes_played"],
-                ps["position_played"],
                 ps["goals"],
                 ps["shots_total"],
                 ps["shots_on_target"],

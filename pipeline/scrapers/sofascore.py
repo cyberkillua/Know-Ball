@@ -616,7 +616,6 @@ def extract_player_stats(
                 "sofascore_player_id": pid,
                 "name": player_info.get("name", ""),
                 "team_id": player.get("teamId"),
-                "position_played": position,
                 "basic_position": player.get("position", "M"),
                 "minutes_played": mins,
                 "goals": stats.get("goals", 0) or 0,
@@ -631,8 +630,13 @@ def extract_player_stats(
                 "touches": stats.get("touches", 0) or 0,
                 "passes_total": stats.get("totalPass", 0) or 0,
                 "passes_completed": stats.get("accuratePass", 0) or 0,
+                # Sofascore exposes dribble attempts as totalContest/wonContest.
+                # dispossessed is a separate ball-loss stat, not failed dribbles.
                 "successful_dribbles": stats.get("wonContest", 0) or 0,
-                "failed_dribbles": stats.get("dispossessed", 0) or 0,
+                "failed_dribbles": max(
+                    (stats.get("totalContest", 0) or 0) - (stats.get("wonContest", 0) or 0),
+                    0,
+                ),
                 "fouls_won": stats.get("wasFouled", 0) or 0,
                 "aerial_duels_won": aerial_won,
                 "aerial_duels_lost": aerial_lost,

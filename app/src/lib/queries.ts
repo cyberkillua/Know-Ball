@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { query, queryOne } from './db.server'
-import type { League, Match, MatchRating, Player, PeerRating, PlayerUnderstat, Shot } from './types'
+import type { League, Match, MatchRating, Player, PeerRating, PlayerPeerRatingResponse, PlayerUnderstat, Shot } from './types'
 
 export const getLeagues = createServerFn({ method: 'GET' }).handler(async () => {
   return query<League>('SELECT * FROM leagues ORDER BY tier, name')
@@ -154,31 +154,25 @@ export const getPlayerRatings = createServerFn({ method: 'GET' })
   })
 
 export const getPlayerPeerRating = createServerFn({ method: 'GET' })
-  .inputValidator((d: { playerId: number; season: string; leagueId: number; scope?: 'league' | 'all' }) => d)
+  .inputValidator((d: { playerId: number; season: string; leagueId: number; scope?: 'league' | 'all'; mode?: 'dominant' | 'position'; positionScope?: string }) => d)
   .handler(async ({ data }) => {
     const scope = data.scope ?? 'league'
     const peerRating = scope === 'all'
       ? await queryOne<PeerRating>(
-          'SELECT * FROM peer_ratings WHERE player_id = $1 AND season = $2 AND league_id IS NULL',
+          `SELECT * FROM peer_ratings
+           WHERE player_id = $1 AND season = $2 AND league_id IS NULL
+             AND peer_mode = 'dominant' AND position_scope = ''`,
           [data.playerId, data.season],
         )
       : await queryOne<PeerRating>(
-          'SELECT * FROM peer_ratings WHERE player_id = $1 AND season = $2 AND league_id = $3',
+          `SELECT * FROM peer_ratings
+           WHERE player_id = $1 AND season = $2 AND league_id = $3
+             AND peer_mode = 'dominant'
+             AND position_scope = ''`,
           [data.playerId, data.season, data.leagueId],
         )
 
-    const positionBreakdown = await query<{ position_played: string; minutes: number }>(
-      `SELECT mps.position_played, SUM(mps.minutes_played)::int AS minutes
-       FROM match_player_stats mps
-       JOIN matches mat ON mat.id = mps.match_id
-       WHERE mps.player_id = $1 AND mat.season = $2 AND mat.league_id = $3
-         AND mps.position_played IS NOT NULL
-       GROUP BY mps.position_played
-       ORDER BY minutes DESC`,
-      [data.playerId, data.season, data.leagueId],
-    )
-
-    return { peerRating, positionBreakdown }
+    return { peerRating, positionBreakdown: [], availablePositionScopes: [] } satisfies PlayerPeerRatingResponse
   })
 
 export const getPlayerShots = createServerFn({ method: 'GET' })
@@ -204,6 +198,7 @@ export const getLeagueTopPlayers = createServerFn({ method: 'GET' })
        JOIN players p ON p.id = pr.player_id
        LEFT JOIN teams t ON t.id = p.current_team_id
        WHERE pr.league_id = $1 AND pr.season = $2
+         AND pr.peer_mode = 'dominant' AND pr.position_scope = ''
        ORDER BY pr.avg_match_rating DESC
        LIMIT 50`,
       [data.leagueId, data.season],
@@ -367,6 +362,7 @@ export const getPlayerStats = createServerFn({ method: 'GET' })
           -- Attacking
           SUM(mps.goals)::int as goals,
           ROUND(SUM(mps.xg)::numeric, 2) as xg,
+          ROUND(SUM(mps.xgot)::numeric, 2) as xgot,
           SUM(mps.shots_total)::int as shots,
           SUM(mps.shots_on_target)::int as shots_on_target,
           SUM(mps.shots_off_target)::int as shots_off_target,
@@ -438,6 +434,7 @@ export const getPlayerStats = createServerFn({ method: 'GET' })
           ROUND(SUM(mps.shots_on_target)::numeric / NULLIF(SUM(mps.shots_total), 0), 2)       AS shot_on_target_rate,
           ROUND((SUM(mps.goals) - SUM(mps.xg))::numeric, 2)                                  AS xg_overperformance,
           ROUND((SUM(mps.xg) + SUM(mps.xa))::numeric / NULLIF(SUM(mps.minutes_played) / 90.0, 0), 2) AS xg_plus_xa_per90,
+          ROUND((SUM(mps.xg) + SUM(mps.xa))::numeric, 2) AS xg_plus_xa,
           ROUND(SUM(mps.successful_dribbles)::numeric /
                 NULLIF(SUM(mps.successful_dribbles) + SUM(mps.failed_dribbles), 0), 2)        AS dribble_success_rate,
           ROUND(SUM(mps.goals)::numeric / NULLIF(SUM(mps.shots_total), 0), 2)                 AS shot_conversion_rate,
@@ -452,6 +449,7 @@ export const getPlayerStats = createServerFn({ method: 'GET' })
           ROUND(SUM(mps.accurate_cross)::numeric / NULLIF(SUM(mps.minutes_played) / 90.0, 0), 2) AS accurate_cross_per90,
           ROUND(SUM(mps.ground_duels_won)::numeric / NULLIF(SUM(mps.minutes_played) / 90.0, 0), 2) AS ground_duels_won_per90,
           ROUND(SUM(mps.total_contest)::numeric / NULLIF(SUM(mps.minutes_played) / 90.0, 0), 2) AS total_contest_per90,
+          SUM(mps.total_contest)::int AS total_contests,
           ROUND(SUM(mps.fouls_committed)::numeric / NULLIF(SUM(mps.minutes_played) / 90.0, 0), 2) AS fouls_committed_per90,
           (SUM(mps.goals) - SUM(mps.penalty_goals))::int AS np_goals,
           ROUND(SUM(mps.np_xg)::numeric, 2) AS np_xg_total,

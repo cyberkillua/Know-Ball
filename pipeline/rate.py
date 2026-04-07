@@ -13,22 +13,66 @@ from pipeline.engine.calculator import PlayerMatchStats, calculate_match_rating
 log = get_logger("rate")
 
 MIN_MINUTES = 10
+BATCH_SIZE = 1000
 
 
-def get_unrated_records(db: DB) -> list[dict]:
+def get_unrated_records_batch(db: DB, last_id: int, batch_size: int) -> list[dict]:
     return db.query(
         """
-        SELECT mps.*,
+        SELECT mps.id,
+               mps.match_id,
+               mps.player_id,
+               mps.minutes_played,
+               mps.goals,
+               mps.penalty_goals,
+               mps.shots_total,
+               mps.shots_on_target,
+               mps.shots_off_target,
+               mps.xg,
+               mps.xgot,
+               mps.assists,
+               mps.xa,
+               mps.key_passes,
+               mps.touches,
+               mps.passes_total,
+               mps.passes_completed,
+               mps.successful_dribbles,
+               mps.failed_dribbles,
+               mps.fouls_won,
+               mps.aerial_duels_won,
+               mps.aerial_duels_lost,
+               mps.ground_duels_won,
+               mps.ground_duels_lost,
+               mps.tackles_won,
+               mps.interceptions,
+               mps.ball_recovery,
+               mps.self_created_shots,
+               mps.big_chance_missed,
+               mps.big_chance_created,
+               mps.blocked_scoring_attempt,
+               mps.penalty_won,
+               mps.possession_lost_ctrl,
+               mps.error_lead_to_goal,
+               mps.sofascore_rating,
                mts.possession_pct  AS team_possession_pct,
                mts.total_shots     AS team_total_shots,
-               mps.position_played AS player_position
+               p.position AS player_position
         FROM match_player_stats mps
-        LEFT JOIN match_ratings mr  ON mr.match_id  = mps.match_id AND mr.player_id  = mps.player_id
+        JOIN players p ON p.id = mps.player_id
         LEFT JOIN match_team_stats mts ON mts.match_id = mps.match_id AND mts.team_id = mps.team_id
-        WHERE mr.id IS NULL
+        WHERE mps.id > %s
+          AND p.position IS NOT NULL
           AND mps.minutes_played >= %s
+          AND NOT EXISTS (
+              SELECT 1
+              FROM match_ratings mr
+              WHERE mr.match_id = mps.match_id
+                AND mr.player_id = mps.player_id
+          )
+        ORDER BY mps.id
+        LIMIT %s
     """,
-        (MIN_MINUTES,),
+        (last_id, MIN_MINUTES, batch_size),
     )
 
 
@@ -160,44 +204,52 @@ def main():
         configs[pos] = load_position_config(pos)
     log.info(f"Loaded configs for positions: {available}")
 
-    unrated = get_unrated_records(db)
-    log.info(f"Found {len(unrated)} unrated player-match records")
-
     rated_count = 0
     skipped_count = 0
-    insert_batch = []
+    last_id = 0
 
-    for record in unrated:
-        try:
-            success, rating_data = rate_record(record, configs)
-            if success:
-                rated_count += 1
-                insert_batch.append(rating_data)
-            else:
+    while True:
+        unrated = get_unrated_records_batch(db, last_id, BATCH_SIZE)
+        if not unrated:
+            break
+
+        insert_batch = []
+        for record in unrated:
+            try:
+                success, rating_data = rate_record(record, configs)
+                if success:
+                    rated_count += 1
+                    insert_batch.append(rating_data)
+                else:
+                    skipped_count += 1
+            except Exception as e:
+                log.error(
+                    f"Error rating player {record['player_id']} match {record['match_id']}: {e}"
+                )
                 skipped_count += 1
-        except Exception as e:
-            log.error(
-                f"Error rating player {record['player_id']} match {record['match_id']}: {e}"
-            )
-            skipped_count += 1
 
-    if insert_batch:
-        db.execute(
-            """INSERT INTO match_ratings
-               (match_id, player_id, position,
-                finishing_raw, finishing_norm,
-                shot_generation_raw, shot_generation_norm,
-                chance_creation_raw, chance_creation_norm,
-                team_function_raw, team_function_norm,
-                carrying_raw, carrying_norm,
-                duels_raw, duels_norm,
-                defensive_raw, defensive_norm,
-                final_rating, sofascore_rating)
-               VALUES %s
-               ON CONFLICT (match_id, player_id) DO NOTHING""",
-            (insert_batch,),
+        if insert_batch:
+            db.execute(
+                """INSERT INTO match_ratings
+                   (match_id, player_id, position,
+                    finishing_raw, finishing_norm,
+                    shot_generation_raw, shot_generation_norm,
+                    chance_creation_raw, chance_creation_norm,
+                    team_function_raw, team_function_norm,
+                    carrying_raw, carrying_norm,
+                    duels_raw, duels_norm,
+                    defensive_raw, defensive_norm,
+                    final_rating, sofascore_rating)
+                   VALUES %s
+                   ON CONFLICT (match_id, player_id) DO NOTHING""",
+                (insert_batch,),
+            )
+
+        last_id = unrated[-1]["id"]
+        log.info(
+            f"Processed batch ending at mps.id={last_id}: "
+            f"{len(insert_batch)} rated, {len(unrated) - len(insert_batch)} skipped"
         )
-        log.info(f"Inserted {len(insert_batch)} ratings in batch")
 
     db.close()
     log.info(f"Rating complete: {rated_count} rated, {skipped_count} skipped")

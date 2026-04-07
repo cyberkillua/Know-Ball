@@ -249,6 +249,8 @@ def search_players(
             LEFT JOIN peer_ratings pr ON pr.player_id = p.id 
                 AND pr.league_id = l.id
                 AND pr.season = %s
+                AND pr.peer_mode = 'dominant'
+                AND pr.position_scope = ''
             WHERE p.name ILIKE %s
             AND l.id = %s
             ORDER BY p.name

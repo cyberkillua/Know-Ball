@@ -26,6 +26,7 @@ import type {
   Player,
   MatchRating,
   PeerRating,
+  PlayerPeerRatingResponse,
   PlayerStats,
   PlayerUnderstat,
   Shot,
@@ -55,6 +56,8 @@ const POSITION_LABELS: Record<string, string> = {
   DEF: "Defenders",
   GK: "Goalkeepers",
 };
+
+const PERCENTILE_MIN_MINUTES = 300;
 
 // ── Stat helpers ──────────────────────────────────────────────────────────────
 const fmt = (v: any, decimals = 2) => {
@@ -104,10 +107,10 @@ function pct(
   rawPct: number | null | undefined,
   mode: "per90" | "raw",
   qualified: boolean,
-): number {
-  if (!qualified) return 0;
-  if (mode === "raw") return rawPct ?? 0;
-  return per90Pct ?? 0;
+): number | undefined {
+  if (!qualified) return undefined;
+  const value = mode === "raw" ? rawPct : per90Pct;
+  return value ?? undefined;
 }
 
 // Interpolates between red→amber→green based on a 0–100 value and per-metric thresholds.
@@ -146,7 +149,6 @@ function PlayerProfilePage() {
   const [ratings, setRatings] = useState<MatchRating[]>([]);
   const [peerRating, setPeerRating] = useState<PeerRating | null>(null);
   const [allPeerRating, setAllPeerRating] = useState<PeerRating | null>(null);
-  const [positionBreakdown, setPositionBreakdown] = useState<{ position_played: string; minutes: number }[]>([]);
   const [stats, setStats] = useState<PlayerStats | null>(null);
   const [shots, setShots] = useState<Shot[]>([]);
   const [xgotDelta, setXgotDelta] = useState<number | null>(null);
@@ -242,10 +244,11 @@ function PlayerProfilePage() {
       }),
       getPlayerUnderstat({ data: { playerId, season: seasonStr } }),
     ]).then(([r, pr, apr, st, sh, xgd, ustat]) => {
+      const leaguePeerResponse = pr as PlayerPeerRatingResponse;
+      const allPeerResponse = apr as PlayerPeerRatingResponse;
       setRatings(r);
-      setPeerRating((pr as any)?.peerRating as PeerRating | null);
-      setAllPeerRating((apr as any)?.peerRating as PeerRating | null);
-      setPositionBreakdown((pr as any)?.positionBreakdown ?? []);
+      setPeerRating(leaguePeerResponse.peerRating);
+      setAllPeerRating(allPeerResponse.peerRating);
       setStats(st as PlayerStats | null);
       setShots(sh as Shot[]);
       const rawDelta = (xgd as any)?.delta;
@@ -325,9 +328,13 @@ function PlayerProfilePage() {
       ? (stats?.accurate_long_balls ?? 0) / (stats?.total_long_balls ?? 1)
       : null;
 
-  // Active peer rating based on scope
   const activePeerRating = peerScope === "league" ? peerRating : allPeerRating;
-  const peerQualified = (stats?.minutes ?? 0) >= 300;
+  const activePeerMinMinutes = 300;
+  const percentileHasEnoughTotalMinutes = (stats?.minutes ?? 0) >= PERCENTILE_MIN_MINUTES;
+  const percentileHasData = percentileHasEnoughTotalMinutes && peerRating != null;
+  const peerHasData = percentileHasData;
+  const ratingPeerQualified = (activePeerRating?.rated_minutes ?? 0) >= activePeerMinMinutes;
+  const peerQualified = percentileHasData;
 
   return (
     <div className="space-y-6">
@@ -501,7 +508,8 @@ function PlayerProfilePage() {
                         }}
                       >
                         vs{" "}
-                        {POSITION_LABELS[player.position ?? "ST"] ??
+                        {POSITION_LABELS[peerRating?.position ?? player.position ?? "ST"] ??
+                          peerRating?.position ??
                           player.position ??
                           "Strikers"}{" "}
                         in{" "}
@@ -559,7 +567,7 @@ function PlayerProfilePage() {
                       {/* Download button */}
                       <button
                         onClick={handleDownloadPercentiles}
-                        disabled={downloading || !peerQualified}
+                        disabled={downloading || !peerHasData}
                         className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50"
                         title="Download as PNG"
                       >
@@ -588,7 +596,7 @@ function PlayerProfilePage() {
                       </button>
                     </div>
                   </div>
-                  {!peerQualified && (
+                  {!percentileHasEnoughTotalMinutes && (
                     <p
                       style={{
                         fontSize: 12,
@@ -596,13 +604,12 @@ function PlayerProfilePage() {
                         marginTop: 12,
                       }}
                     >
-                      Limited game time — percentile data requires 300+ minutes
-                      played ({stats?.minutes ?? 0} mins)
+                      Limited game time — percentile data requires {PERCENTILE_MIN_MINUTES}+ total minutes played ({stats.minutes ?? 0} mins)
                     </p>
                   )}
                 </div>
 
-                {!peerQualified && stats ? (
+                {!percentileHasEnoughTotalMinutes ? (
                   <div
                     style={{
                       padding: "2rem",
@@ -611,14 +618,9 @@ function PlayerProfilePage() {
                       textAlign: "center",
                     }}
                   >
-                    <p style={{ marginBottom: 8 }}>Limited game time</p>
-                    <p style={{ fontSize: 12 }}>
-                      Percentile rankings require 300+ minutes played.
-                      <br />
-                      Current: {stats.minutes ?? 0} minutes
-                    </p>
+                    <p>Percentile rankings require {PERCENTILE_MIN_MINUTES}+ total minutes played.</p>
                   </div>
-                ) : !peerQualified ? (
+                ) : !peerHasData ? (
                   <div
                     style={{
                       padding: "2rem",
@@ -627,7 +629,7 @@ function PlayerProfilePage() {
                       textAlign: "center",
                     }}
                   >
-                    <p>No percentile data available for this season.</p>
+                    <p>No percentile row available for this role yet.</p>
                   </div>
                 ) : viewMode === "pizza" ? (
                   <div style={{ marginBottom: 24 }}>
@@ -7657,19 +7659,21 @@ function PlayerProfilePage() {
                   >
                     Peer comparison
                   </span>
-                  <div className="flex rounded-lg border border-border bg-card p-0.5 text-xs font-medium">
-                    <button
-                      onClick={() => setPeerScope("league")}
-                      className={`rounded-md px-3 py-1 transition-colors ${peerScope === "league" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                    >
-                      This league
-                    </button>
-                    <button
-                      onClick={() => setPeerScope("all")}
-                      className={`rounded-md px-3 py-1 transition-colors ${peerScope === "all" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                    >
-                      All leagues
-                    </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex rounded-lg border border-border bg-card p-0.5 text-xs font-medium">
+                      <button
+                        onClick={() => setPeerScope("league")}
+                        className={`rounded-md px-3 py-1 transition-colors ${peerScope === "league" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      >
+                        This league
+                      </button>
+                      <button
+                        onClick={() => setPeerScope("all")}
+                        className={`rounded-md px-3 py-1 transition-colors ${peerScope === "all" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      >
+                        All leagues
+                      </button>
+                    </div>
                   </div>
                 </div>
                 {activePeerRating == null ? (
@@ -7682,7 +7686,7 @@ function PlayerProfilePage() {
                   >
                     No peer comparison data available.
                   </div>
-                ) : (activePeerRating.rated_minutes ?? 0) < 300 ? (
+                ) : (activePeerRating.rated_minutes ?? 0) < activePeerMinMinutes ? (
                   <div
                     style={{
                       fontSize: 13,
@@ -7690,25 +7694,11 @@ function PlayerProfilePage() {
                       padding: "1rem 0",
                     }}
                   >
-                    Peer comparison requires 300+ minutes rated as{" "}
+                    Peer comparison requires {activePeerMinMinutes}+ minutes rated as{" "}
                     {POSITION_LABELS[activePeerRating.position ?? player.position ?? "ST"] ??
                       activePeerRating.position ??
                       "Striker"}
                     . Currently {activePeerRating.rated_minutes ?? 0} mins.
-                    {activePeerRating.position && activePeerRating.position !== player.position && (
-                      <span>
-                        {" "}Rated as {POSITION_LABELS[activePeerRating.position] ?? activePeerRating.position} based on most minutes played this season.
-                      </span>
-                    )}
-                    {positionBreakdown.length > 0 && (
-                      <span>
-                        {" "}This season played:{" "}
-                        {positionBreakdown
-                          .map((p) => `${p.position_played} (${p.minutes}m)`)
-                          .join(", ")}
-                        .
-                      </span>
-                    )}
                   </div>
                 ) : (
                   <div
@@ -7755,9 +7745,8 @@ function PlayerProfilePage() {
                               maxWidth: 320,
                             }}
                           >
-                            Absolute score based on our model — not
-                            peer-relative. 50 = median performer, 100 =
-                            theoretical maximum.
+                            Overall season score for this role.
+                            Use percentile ranking for peer context.
                           </span>
                         </div>
                         <span
@@ -7778,7 +7767,7 @@ function PlayerProfilePage() {
                         </span>
                       </div>
                     )}
-                    {/* Consistency & Impact Rate */}
+                    {/* Good match rate & high impact rate */}
                     {(activePeerRating.consistency_score != null ||
                       activePeerRating.impact_rate != null) && (
                       <div
@@ -7800,10 +7789,10 @@ function PlayerProfilePage() {
                             letterSpacing: "0.08em",
                           }}
                         >
-                          Finishing Profile
+                          Match Profile
                         </div>
 
-                        {/* Consistency row — low=20, high=70: below 20% is red, above 70% is green */}
+                        {/* Good match rate row — low=20, high=70: below 20% is red, above 70% is green */}
                         {activePeerRating.consistency_score != null &&
                           (() => {
                             const val = Number(
@@ -7828,7 +7817,7 @@ function PlayerProfilePage() {
                                       fontWeight: 500,
                                     }}
                                   >
-                                    Consistency
+                                    Good Performance Rate
                                   </span>
                                   <span
                                     style={{
@@ -7873,7 +7862,7 @@ function PlayerProfilePage() {
                             );
                           })()}
 
-                        {/* Impact Rate row — low=5, high=35: below 5% is red, above 35% is green */}
+                        {/* High impact rate row — low=5, high=35: below 5% is red, above 35% is green */}
                         {activePeerRating.impact_rate != null &&
                           (() => {
                             const val = Number(activePeerRating.impact_rate);
@@ -7896,7 +7885,7 @@ function PlayerProfilePage() {
                                       fontWeight: 500,
                                     }}
                                   >
-                                    Impact Rate
+                                    Elite Performance Rate
                                   </span>
                                   <span
                                     style={{
@@ -7956,19 +7945,19 @@ function PlayerProfilePage() {
                               color: "var(--foreground)",
                             }}
                           >
-                            Consistency
+                            Good Performance Rate
                           </span>{" "}
-                          = % of matches with a positive finishing contribution.{" "}
+                          = share of rated matches with a good performance.{" "}
                           <span
                             style={{
                               fontWeight: 600,
                               color: "var(--foreground)",
                             }}
                           >
-                            Impact Rate
+                            Elite Performance Rate
                           </span>{" "}
-                          = % of matches with an elite finishing performance.
-                          These are absolute rates, not peer rankings.
+                          = share of rated matches with an elite performance.
+                          These are season rates, not peer rankings.
                         </div>
                       </div>
                     )}
@@ -7983,10 +7972,7 @@ function PlayerProfilePage() {
                     >
                       Percentile ranks show how this player compares to{" "}
                       {POSITION_LABELS[activePeerRating.position ?? "ST"] ?? activePeerRating.position ?? "Strikers"}{" "}
-                      in the same league and season with 300+ rated minutes.
-                      {activePeerRating.position && activePeerRating.position !== player.position && (
-                        <> Grouped as {POSITION_LABELS[activePeerRating.position] ?? activePeerRating.position} based on most minutes played this season.</>
-                      )}{" "}
+                      in the same league and season with {activePeerMinMinutes}+ rated minutes.{" "}
                       99 = top 1%.
                     </p>
                     <div

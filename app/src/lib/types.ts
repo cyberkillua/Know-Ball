@@ -54,7 +54,6 @@ export interface MatchPlayerStats {
   player_id: number
   team_id: number
   minutes_played: number
-  position_played: string | null
   goals: number
   shots_total: number
   shots_on_target: number
@@ -140,6 +139,8 @@ export interface PeerRating {
   league_id: number
   season: string
   position: string
+  peer_mode: 'dominant' | 'position'
+  position_scope: string
   // Per-90 base metrics
   goals_per90: number
   xa_per90: number
@@ -231,8 +232,13 @@ export interface PeerRating {
   xg_chain_raw_percentile: number | null
   xg_buildup_per90_percentile: number | null
   xg_buildup_raw_percentile: number | null
-  // Know Ball model score (0–100, absolute)
+  // Know Ball season score (0–100, in-role season performance index)
   model_score: number | null
+  model_score_quality: number | null
+  model_score_peak: number | null
+  model_score_availability: number | null
+  model_score_confidence: number | null
+  model_score_version: number | null
   // v7 dimension percentiles
   shot_generation_percentile: number | null
   chance_creation_percentile: number | null
@@ -256,11 +262,28 @@ export interface PeerRating {
   model_score_p90: number | null
   consistency_score: number | null
   impact_rate: number | null
+  xgot_raw_percentile: number | null
+  xg_plus_xa_raw_percentile: number | null
+  possession_loss_rate_percentile: number | null
+  fouls_committed_per90_percentile: number | null
   // Metadata
   matches_played: number
   minutes_played: number
   rated_minutes: number | null
   avg_match_rating: number
+}
+
+export interface PeerRatingOption {
+  position: string
+  position_scope: string
+  minutes_played: number
+  rated_minutes: number | null
+}
+
+export interface PlayerPeerRatingResponse {
+  peerRating: PeerRating | null
+  positionBreakdown: never[]
+  availablePositionScopes: PeerRatingOption[]
 }
 
 export interface PlayerUnderstat {
@@ -281,6 +304,7 @@ export interface PlayerStats {
   // Goalscoring
   goals: number
   xg: number
+  xgot: number | null
   shots: number
   shots_on_target: number
   shots_off_target: number
@@ -347,6 +371,7 @@ export interface PlayerStats {
   shot_on_target_rate: number | null
   xg_overperformance: number | null
   xg_plus_xa_per90: number | null
+  xg_plus_xa: number | null
   dribble_success_rate: number | null
   shot_conversion_rate: number | null
   aerial_win_rate: number | null
@@ -358,6 +383,7 @@ export interface PlayerStats {
   accurate_cross_per90: number | null
   ground_duels_won_per90: number | null
   total_contest_per90: number | null
+  total_contests: number | null
   fouls_committed_per90: number | null
   // Non-penalty stats
   np_goals: number | null

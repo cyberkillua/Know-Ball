@@ -79,14 +79,13 @@ def calc_finishing(stats: PlayerMatchStats, constants: dict) -> float:
 
     Uses np_goals (goals - penalty_goals) as primary signal to strip
     set-piece inflation. xGOT quality delta is the most honest finishing stat.
+    This dimension should reflect shot execution, not self-created threat.
 
     When shots_total == 0: contextual no-shot penalty based on team context.
 
     When shots_total > 0:
     Raw = (np_goals * goal_bonus)
         + (xgot - xg)                              # shot quality delta
-        - (wastage_factor * max(0, xg - goals))    # wastage penalty
-        + (self_created_goals * self_created_bonus)
         - (big_chance_missed * big_chance_missed_penalty)
     """
     c = constants
@@ -101,25 +100,24 @@ def calc_finishing(stats: PlayerMatchStats, constants: dict) -> float:
     np_goals = stats.goals - stats.penalty_goals
     goal_value = np_goals * c["goal_bonus"]
     shot_quality = (stats.xgot - stats.xg) * c.get("xgot_delta_weight", 1.2)
-    self_created = stats.self_created_goals * c["self_created_bonus"]
     big_chance_penalty = stats.big_chance_missed * c.get(
         "big_chance_missed_penalty", 0.0
     )
 
-    return goal_value + shot_quality + self_created - big_chance_penalty
+    return goal_value + shot_quality - big_chance_penalty
 
 
 def calc_shot_generation(stats: PlayerMatchStats, constants: dict) -> float:
     """
     Shot Generation — manufacturing shooting threat.
 
-    Rewards shot volume, on-target rate, shot position quality, and
-    blocked attempts (proxy for shooting intent in crowded boxes).
+    Rewards self-manufactured shooting threat.
 
     Raw = (shots_total * shot_volume_reward)
+        + (xg * xg_volume_weight)
         + max(0, shot_on_target_rate - threshold) * shot_on_target_weight
         + (xg_per_shot - league_avg_xg_per_shot) * position_quality_weight
-        + (blocked_scoring_attempt * blocked_attempt_reward)
+        + (self_created_shots * self_created_shot_reward)
     """
     c = constants
 
@@ -127,6 +125,7 @@ def calc_shot_generation(stats: PlayerMatchStats, constants: dict) -> float:
         return 0.0
 
     volume_bonus = stats.shots_total * c.get("shot_volume_reward", 0.07)
+    xg_volume = stats.xg * c.get("xg_volume_weight", 0.35)
 
     shot_on_target_rate = stats.shots_on_target / stats.shots_total
     threshold = c.get("shot_on_target_threshold", 0.40)
@@ -145,7 +144,7 @@ def calc_shot_generation(stats: PlayerMatchStats, constants: dict) -> float:
     non_goal_self_created = max(0, stats.self_created_shots - stats.self_created_goals)
     self_created = non_goal_self_created * c.get("self_created_shot_reward", 0.15)
 
-    return volume_bonus + shot_acc_bonus + position_quality + self_created
+    return volume_bonus + xg_volume + shot_acc_bonus + position_quality + self_created
 
 
 def calc_chance_creation(stats: PlayerMatchStats, constants: dict) -> float:
@@ -170,8 +169,10 @@ def calc_chance_creation(stats: PlayerMatchStats, constants: dict) -> float:
     # Only reward xA meaningfully above the noise floor (0.1 threshold)
     xa_threshold = c.get("xa_threshold", 0.1)
     xa_value = max(0.0, unconverted_xa - xa_threshold)
+    big_chance_value = stats.big_chance_created * c.get("big_chance_created_reward", 0.12)
+    key_pass_value = stats.key_passes * c.get("key_pass_reward", 0.04)
 
-    return assist_value + xa_value
+    return assist_value + xa_value + big_chance_value + key_pass_value
 
 
 def calc_team_function(stats: PlayerMatchStats, constants: dict) -> float:
@@ -182,6 +183,7 @@ def calc_team_function(stats: PlayerMatchStats, constants: dict) -> float:
 
     Raw = (passes_completed / max(passes_total, 1) - 0.7) * pass_accuracy_weight
         + (touches * presence_factor)
+        + (passes_completed * passes_completed_reward)
     """
     c = constants
     pass_acc = stats.passes_completed / max(stats.passes_total, 1)
@@ -189,7 +191,8 @@ def calc_team_function(stats: PlayerMatchStats, constants: dict) -> float:
         "pass_accuracy_weight", 0.5
     )
     presence = stats.touches * c["presence_factor"]
-    return pass_delta + presence
+    pass_volume = stats.passes_completed * c.get("passes_completed_reward", 0.01)
+    return pass_delta + presence + pass_volume
 
 
 def calc_carrying(stats: PlayerMatchStats, constants: dict) -> float:
