@@ -20,15 +20,14 @@ MIN_MINUTES = 300
 POSITION_GROUPS: list[tuple[list[str], str, str]] = [
     (["ST", "CF"],              "ST",     "ST"),
     (["CAM"],                   "MID",    "CAM"),
-    (["LW", "RW"],              "WINGER", "WINGER"),
-    (["LM", "RM"],              "WINGER", "WINGER"),
+    (["LW", "RW", "LM", "RM"], "WINGER", "WINGER"),
     (["CM"],                    "MID",    "CM"),
     (["CDM"],                   "MID",    "CDM"),
     (["CB", "LB", "RB", "LWB", "RWB"], "DEF", "DEF"),
 ]
 # Each tuple: (profile_positions, rating_position, label)
-# profile_positions — used to filter players.position
-# rating_position   — used to filter match_ratings.position for category norms
+# profile_positions — kept for reference / legacy; peer grouping now uses dominant match position
+# rating_position   — the match_ratings.position value used to identify this group
 # label             — stored in peer_ratings.position
 
 
@@ -115,6 +114,8 @@ NULL_PERCENTILE_COLS = (
     "defensive_percentile",
     "model_score",
     "impact_rate",
+    "aerial_win_rate_percentile",
+    "ground_duel_win_rate_percentile",
 )
 
 # Columns that require match_ratings data (peer comparison / model score).
@@ -148,11 +149,51 @@ def compute_peer_ratings(
     Players are ranked only against others in the same profile_positions group,
     within the same league and season.
     """
-    positions_tuple = tuple(profile_positions)
-    log.info(f"[{position_label}] Fetching stats for {profile_positions}")
+    log.info(f"[{position_label}] Fetching stats (dominant position = {rating_position})")
 
     stat_rows = db.query(
         """
+        WITH pos_minutes AS (
+            -- Minutes per player per peer group (using position_played, not model key)
+            -- This preserves CAM vs CM vs CDM which all share the same 'MID' model
+            SELECT
+                mps.player_id,
+                mat.league_id,
+                mat.season,
+                CASE
+                    WHEN mps.position_played IN ('ST', 'CF', 'SS')           THEN 'ST'
+                    WHEN mps.position_played IN ('LW', 'RW', 'LM', 'RM')    THEN 'WINGER'
+                    WHEN mps.position_played IN ('CAM', 'AM')                THEN 'CAM'
+                    WHEN mps.position_played IN ('CM', 'DM')                 THEN 'CM'
+                    WHEN mps.position_played IN ('CDM')                      THEN 'CDM'
+                    WHEN mps.position_played IN ('CB', 'LB', 'RB', 'LWB', 'RWB') THEN 'DEF'
+                    ELSE NULL
+                END                                                         AS position_group,
+                SUM(mps.minutes_played)                                     AS mins
+            FROM match_player_stats mps
+            JOIN matches mat ON mat.id = mps.match_id
+            WHERE mps.position_played IS NOT NULL
+            GROUP BY mps.player_id, mat.league_id, mat.season,
+                CASE
+                    WHEN mps.position_played IN ('ST', 'CF', 'SS')           THEN 'ST'
+                    WHEN mps.position_played IN ('LW', 'RW', 'LM', 'RM')    THEN 'WINGER'
+                    WHEN mps.position_played IN ('CAM', 'AM')                THEN 'CAM'
+                    WHEN mps.position_played IN ('CM', 'DM')                 THEN 'CM'
+                    WHEN mps.position_played IN ('CDM')                      THEN 'CDM'
+                    WHEN mps.position_played IN ('CB', 'LB', 'RB', 'LWB', 'RWB') THEN 'DEF'
+                    ELSE NULL
+                END
+        ),
+        dominant_pos AS (
+            -- Keep only the group each player spent the most minutes in
+            SELECT player_id, league_id, season, position_group AS dominant_group,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY player_id, league_id, season
+                       ORDER BY mins DESC
+                   ) AS rn
+            FROM pos_minutes
+            WHERE position_group IS NOT NULL
+        )
         SELECT
             mps.player_id,
             p.position                                               AS player_position,
@@ -206,12 +247,17 @@ def compute_peer_ratings(
         FROM match_player_stats mps
         JOIN matches mat ON mat.id = mps.match_id
         JOIN players p ON p.id = mps.player_id
+        JOIN dominant_pos dp
+            ON dp.player_id = mps.player_id
+            AND dp.league_id = mat.league_id
+            AND dp.season = mat.season
+            AND dp.rn = 1
         LEFT JOIN player_season_understat psu
             ON psu.player_id = mps.player_id AND psu.season = mat.season
-        WHERE p.position IN %(positions)s
+        WHERE dp.dominant_group = %(position_label)s
         GROUP BY mps.player_id, p.position, mat.league_id, mat.season
         """,
-        {"positions": positions_tuple},
+        {"position_label": position_label},
     )
 
     if not stat_rows:
@@ -262,12 +308,10 @@ def compute_peer_ratings(
         FROM match_ratings mr
         JOIN matches mat ON mat.id = mr.match_id
         JOIN match_player_stats mps ON mps.match_id = mr.match_id AND mps.player_id = mr.player_id
-        JOIN players p ON p.id = mr.player_id
         WHERE mr.position = %(rating_position)s
-          AND p.position IN %(positions)s
         GROUP BY mr.player_id, mat.league_id, mat.season
         """,
-        {"rating_position": rating_position, "positions": positions_tuple},
+        {"rating_position": rating_position},
     )
 
     norm_lookup: dict[tuple, dict] = {
@@ -412,6 +456,8 @@ def compute_peer_ratings(
             "_touches_raw": touches,
             "_aerials_won_raw": aerial_won,
             "_ground_duels_won_raw": ground_won,
+            "aerial_win_rate": round(aerial_won / max(aerial_won + aerial_lost, 1), 3),
+            "ground_duel_win_rate": round(ground_won / max(ground_won + ground_lost, 1), 3),
             "_total_contests_raw": aerial_won + aerial_lost + ground_won + ground_lost,
             "_tackles_raw": tackles,
             "_interceptions_raw": interceptions,
@@ -483,6 +529,8 @@ def compute_peer_ratings(
         fouls_won_per90_vals         = vals("fouls_won_per90")
         aerials_per90_vals           = vals("aerial_wins_per90")
         ground_duels_won_per90_vals  = vals("ground_duels_won_per90")
+        aerial_win_rate_vals         = vals("aerial_win_rate")
+        ground_duel_win_rate_vals    = vals("ground_duel_win_rate")
         total_contest_per90_vals     = vals("total_contest_per90")
         tackles_per90_vals           = vals("tackles_per90")
         interceptions_per90_vals     = vals("interceptions_per90")
@@ -575,6 +623,8 @@ def compute_peer_ratings(
             p["fouls_won_per90_percentile"]       = percentile_of(p["fouls_won_per90"],        fouls_won_per90_vals)
             p["aerials_per90_percentile"]         = percentile_of(p["aerial_wins_per90"],      aerials_per90_vals)
             p["ground_duels_won_per90_percentile"]= percentile_of(p["ground_duels_won_per90"], ground_duels_won_per90_vals)
+            p["aerial_win_rate_percentile"]       = percentile_of(p["aerial_win_rate"],        aerial_win_rate_vals)
+            p["ground_duel_win_rate_percentile"]  = percentile_of(p["ground_duel_win_rate"],   ground_duel_win_rate_vals)
             p["total_contest_per90_percentile"]   = percentile_of(p["total_contest_per90"],    total_contest_per90_vals)
             p["tackles_per90_percentile"]         = percentile_of(p["tackles_per90"],          tackles_per90_vals)
             p["interceptions_per90_percentile"]   = percentile_of(p["interceptions_per90"],    interceptions_per90_vals)
@@ -711,7 +761,9 @@ def compute_peer_ratings(
                 defensive_stddev, defensive_p90,
                 model_score_stddev, model_score_p90,
                 consistency_score,
-                impact_rate
+                impact_rate,
+                aerial_win_rate_percentile,
+                ground_duel_win_rate_percentile
             ) VALUES (
                 %(player_id)s, %(league_id)s, %(season)s, %(position)s,
                 %(matches_played)s, %(minutes_played)s, %(rated_minutes)s, %(avg_match_rating)s,
@@ -767,7 +819,9 @@ def compute_peer_ratings(
                 %(defensive_stddev)s, %(defensive_p90)s,
                 %(model_score_stddev)s, %(model_score_p90)s,
                 %(consistency_score)s,
-                %(impact_rate)s
+                %(impact_rate)s,
+                %(aerial_win_rate_percentile)s,
+                %(ground_duel_win_rate_percentile)s
             )
             ON CONFLICT (player_id, league_id, season) DO UPDATE SET
                 position                          = EXCLUDED.position,
@@ -886,7 +940,9 @@ def compute_peer_ratings(
                 model_score_stddev                 = EXCLUDED.model_score_stddev,
                 model_score_p90                    = EXCLUDED.model_score_p90,
                 consistency_score                  = EXCLUDED.consistency_score,
-                impact_rate                        = EXCLUDED.impact_rate
+                impact_rate                        = EXCLUDED.impact_rate,
+                aerial_win_rate_percentile         = EXCLUDED.aerial_win_rate_percentile,
+                ground_duel_win_rate_percentile    = EXCLUDED.ground_duel_win_rate_percentile
             """,
             p,
         )

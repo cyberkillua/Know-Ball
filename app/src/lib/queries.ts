@@ -157,16 +157,28 @@ export const getPlayerPeerRating = createServerFn({ method: 'GET' })
   .inputValidator((d: { playerId: number; season: string; leagueId: number; scope?: 'league' | 'all' }) => d)
   .handler(async ({ data }) => {
     const scope = data.scope ?? 'league'
-    if (scope === 'all') {
-      return queryOne<PeerRating>(
-        'SELECT * FROM peer_ratings WHERE player_id = $1 AND season = $2 AND league_id IS NULL',
-        [data.playerId, data.season],
-      )
-    }
-    return queryOne<PeerRating>(
-      'SELECT * FROM peer_ratings WHERE player_id = $1 AND season = $2 AND league_id = $3',
+    const peerRating = scope === 'all'
+      ? await queryOne<PeerRating>(
+          'SELECT * FROM peer_ratings WHERE player_id = $1 AND season = $2 AND league_id IS NULL',
+          [data.playerId, data.season],
+        )
+      : await queryOne<PeerRating>(
+          'SELECT * FROM peer_ratings WHERE player_id = $1 AND season = $2 AND league_id = $3',
+          [data.playerId, data.season, data.leagueId],
+        )
+
+    const positionBreakdown = await query<{ position_played: string; minutes: number }>(
+      `SELECT mps.position_played, SUM(mps.minutes_played)::int AS minutes
+       FROM match_player_stats mps
+       JOIN matches mat ON mat.id = mps.match_id
+       WHERE mps.player_id = $1 AND mat.season = $2 AND mat.league_id = $3
+         AND mps.position_played IS NOT NULL
+       GROUP BY mps.position_played
+       ORDER BY minutes DESC`,
       [data.playerId, data.season, data.leagueId],
     )
+
+    return { peerRating, positionBreakdown }
   })
 
 export const getPlayerShots = createServerFn({ method: 'GET' })

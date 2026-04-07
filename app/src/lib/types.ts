@@ -188,6 +188,8 @@ export interface PeerRating {
   aerials_per90_percentile: number | null
   ground_duels_won_per90_percentile: number | null
   total_contest_per90_percentile: number | null
+  aerial_win_rate_percentile: number | null
+  ground_duel_win_rate_percentile: number | null
   // Pressing & recovery percentiles
   ball_recoveries_per90_percentile: number | null
   tackles_per90_percentile: number | null

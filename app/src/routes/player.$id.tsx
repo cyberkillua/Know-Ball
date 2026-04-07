@@ -41,6 +41,7 @@ const POSITION_LABELS: Record<string, string> = {
   CF: "Centre-Forwards",
   LW: "Wingers",
   RW: "Wingers",
+  WINGER: "Wingers",
   CAM: "Attacking Midfielders",
   CM: "Central Midfielders",
   CDM: "Defensive Midfielders",
@@ -51,6 +52,7 @@ const POSITION_LABELS: Record<string, string> = {
   LWB: "Left Wing-Backs",
   RWB: "Right Wing-Backs",
   CB: "Centre-Backs",
+  DEF: "Defenders",
   GK: "Goalkeepers",
 };
 
@@ -144,6 +146,7 @@ function PlayerProfilePage() {
   const [ratings, setRatings] = useState<MatchRating[]>([]);
   const [peerRating, setPeerRating] = useState<PeerRating | null>(null);
   const [allPeerRating, setAllPeerRating] = useState<PeerRating | null>(null);
+  const [positionBreakdown, setPositionBreakdown] = useState<{ position_played: string; minutes: number }[]>([]);
   const [stats, setStats] = useState<PlayerStats | null>(null);
   const [shots, setShots] = useState<Shot[]>([]);
   const [xgotDelta, setXgotDelta] = useState<number | null>(null);
@@ -240,8 +243,9 @@ function PlayerProfilePage() {
       getPlayerUnderstat({ data: { playerId, season: seasonStr } }),
     ]).then(([r, pr, apr, st, sh, xgd, ustat]) => {
       setRatings(r);
-      setPeerRating(pr as PeerRating | null);
-      setAllPeerRating(apr as PeerRating | null);
+      setPeerRating((pr as any)?.peerRating as PeerRating | null);
+      setAllPeerRating((apr as any)?.peerRating as PeerRating | null);
+      setPositionBreakdown((pr as any)?.positionBreakdown ?? []);
       setStats(st as PlayerStats | null);
       setShots(sh as Shot[]);
       const rawDelta = (xgd as any)?.delta;
@@ -783,7 +787,7 @@ function PlayerProfilePage() {
                                 {
                                   label: "Air%",
                                   percentile:
-                                    peerRating?.physical_percentile ?? 0,
+                                    peerRating?.aerial_win_rate_percentile ?? 0,
                                 },
                                 {
                                   label:
@@ -1005,7 +1009,7 @@ function PlayerProfilePage() {
                                   {
                                     label: "Air%",
                                     percentile:
-                                      peerRating?.physical_percentile ?? 0,
+                                      peerRating?.aerial_win_rate_percentile ?? 0,
                                   },
                                   {
                                     label:
@@ -1480,7 +1484,7 @@ function PlayerProfilePage() {
                                       {
                                         label: "Air%",
                                         percentile:
-                                          peerRating?.physical_percentile ?? 0,
+                                          peerRating?.aerial_win_rate_percentile ?? 0,
                                       },
                                       {
                                         label:
@@ -1781,7 +1785,7 @@ function PlayerProfilePage() {
                                         {
                                           label: "Air%",
                                           percentile:
-                                            peerRating?.physical_percentile ??
+                                            peerRating?.aerial_win_rate_percentile ??
                                             0,
                                         },
                                         {
@@ -1980,7 +1984,7 @@ function PlayerProfilePage() {
                                           {
                                             label: "Air%",
                                             percentile:
-                                              peerRating?.physical_percentile ??
+                                              peerRating?.aerial_win_rate_percentile ??
                                               0,
                                           },
                                           {
@@ -1998,7 +2002,7 @@ function PlayerProfilePage() {
                                           {
                                             label: "Grd%",
                                             percentile:
-                                              peerRating?.physical_percentile ??
+                                              peerRating?.ground_duel_win_rate_percentile ??
                                               0,
                                           },
                                           {
@@ -2163,7 +2167,7 @@ function PlayerProfilePage() {
                                             {
                                               label: "Air%",
                                               percentile:
-                                                peerRating?.physical_percentile ??
+                                                peerRating?.aerial_win_rate_percentile ??
                                                 0,
                                             },
                                             {
@@ -2181,7 +2185,7 @@ function PlayerProfilePage() {
                                             {
                                               label: "Grd%",
                                               percentile:
-                                                peerRating?.physical_percentile ??
+                                                peerRating?.ground_duel_win_rate_percentile ??
                                                 0,
                                             },
                                             {
@@ -2985,7 +2989,7 @@ function PlayerProfilePage() {
                           value={fmtPct(stats.aerial_win_rate)}
                           percentile={
                             peerQualified
-                              ? (peerRating?.physical_percentile ?? 0)
+                              ? (peerRating?.aerial_win_rate_percentile ?? 0)
                               : 0
                           }
                         />
@@ -3012,7 +3016,7 @@ function PlayerProfilePage() {
                           value={fmtPct(stats.ground_duel_win_rate)}
                           percentile={
                             peerQualified
-                              ? (peerRating?.physical_percentile ?? 0)
+                              ? (peerRating?.ground_duel_win_rate_percentile ?? 0)
                               : 0
                           }
                         />
@@ -3761,7 +3765,7 @@ function PlayerProfilePage() {
                           value={fmtPct(stats.aerial_win_rate)}
                           percentile={
                             peerQualified
-                              ? (peerRating?.physical_percentile ?? 0)
+                              ? (peerRating?.aerial_win_rate_percentile ?? 0)
                               : 0
                           }
                         />
@@ -3788,7 +3792,7 @@ function PlayerProfilePage() {
                           value={fmtPct(stats.ground_duel_win_rate)}
                           percentile={
                             peerQualified
-                              ? (peerRating?.physical_percentile ?? 0)
+                              ? (peerRating?.ground_duel_win_rate_percentile ?? 0)
                               : 0
                           }
                         />
@@ -4515,7 +4519,7 @@ function PlayerProfilePage() {
                           value={fmtPct(stats.aerial_win_rate)}
                           percentile={
                             peerQualified
-                              ? (peerRating?.physical_percentile ?? 0)
+                              ? (peerRating?.aerial_win_rate_percentile ?? 0)
                               : 0
                           }
                         />
@@ -4542,7 +4546,7 @@ function PlayerProfilePage() {
                           value={fmtPct(stats.ground_duel_win_rate)}
                           percentile={
                             peerQualified
-                              ? (peerRating?.physical_percentile ?? 0)
+                              ? (peerRating?.ground_duel_win_rate_percentile ?? 0)
                               : 0
                           }
                         />
@@ -5161,16 +5165,34 @@ function PlayerProfilePage() {
                           value={fmtPct(stats.aerial_win_rate)}
                           percentile={
                             peerQualified
-                              ? (peerRating?.physical_percentile ?? 0)
+                              ? (peerRating?.aerial_win_rate_percentile ?? 0)
                               : 0
                           }
+                        />
+                        <StatRow
+                          label={
+                            statMode === "per90"
+                              ? "Aerial wins / 90"
+                              : "Aerial wins"
+                          }
+                          value={
+                            statMode === "per90"
+                              ? fmt(stats.aerials_per90)
+                              : String(stats.aerials_won ?? 0)
+                          }
+                          percentile={pct(
+                            peerRating?.aerials_per90_percentile,
+                            peerRating?.aerials_won_raw_percentile,
+                            statMode,
+                            peerQualified,
+                          )}
                         />
                         <StatRow
                           label="Ground duel win %"
                           value={fmtPct(stats.ground_duel_win_rate)}
                           percentile={
                             peerQualified
-                              ? (peerRating?.physical_percentile ?? 0)
+                              ? (peerRating?.ground_duel_win_rate_percentile ?? 0)
                               : 0
                           }
                         />
@@ -5984,16 +6006,34 @@ function PlayerProfilePage() {
                           value={fmtPct(stats.aerial_win_rate)}
                           percentile={
                             peerQualified
-                              ? (peerRating?.physical_percentile ?? 0)
+                              ? (peerRating?.aerial_win_rate_percentile ?? 0)
                               : 0
                           }
+                        />
+                        <StatRow
+                          label={
+                            statMode === "per90"
+                              ? "Aerial wins / 90"
+                              : "Aerial wins"
+                          }
+                          value={
+                            statMode === "per90"
+                              ? fmt(stats.aerials_per90)
+                              : String(stats.aerials_won ?? 0)
+                          }
+                          percentile={pct(
+                            peerRating?.aerials_per90_percentile,
+                            peerRating?.aerials_won_raw_percentile,
+                            statMode,
+                            peerQualified,
+                          )}
                         />
                         <StatRow
                           label="Ground duel win %"
                           value={fmtPct(stats.ground_duel_win_rate)}
                           percentile={
                             peerQualified
-                              ? (peerRating?.physical_percentile ?? 0)
+                              ? (peerRating?.ground_duel_win_rate_percentile ?? 0)
                               : 0
                           }
                         />
@@ -6291,7 +6331,7 @@ function PlayerProfilePage() {
                           value={fmtPct(stats.aerial_win_rate)}
                           percentile={
                             peerQualified
-                              ? (peerRating?.physical_percentile ?? 0)
+                              ? (peerRating?.aerial_win_rate_percentile ?? 0)
                               : 0
                           }
                         />
@@ -6318,7 +6358,7 @@ function PlayerProfilePage() {
                           value={fmtPct(stats.ground_duel_win_rate)}
                           percentile={
                             peerQualified
-                              ? (peerRating?.physical_percentile ?? 0)
+                              ? (peerRating?.ground_duel_win_rate_percentile ?? 0)
                               : 0
                           }
                         />
@@ -6901,7 +6941,7 @@ function PlayerProfilePage() {
                           value={fmtPct(stats.aerial_win_rate)}
                           percentile={
                             peerQualified
-                              ? (peerRating?.physical_percentile ?? 0)
+                              ? (peerRating?.aerial_win_rate_percentile ?? 0)
                               : 0
                           }
                         />
@@ -6928,7 +6968,7 @@ function PlayerProfilePage() {
                           value={fmtPct(stats.ground_duel_win_rate)}
                           percentile={
                             peerQualified
-                              ? (peerRating?.physical_percentile ?? 0)
+                              ? (peerRating?.ground_duel_win_rate_percentile ?? 0)
                               : 0
                           }
                         />
@@ -7651,10 +7691,24 @@ function PlayerProfilePage() {
                     }}
                   >
                     Peer comparison requires 300+ minutes rated as{" "}
-                    {POSITION_LABELS[player.position ?? "ST"] ??
-                      player.position ??
+                    {POSITION_LABELS[activePeerRating.position ?? player.position ?? "ST"] ??
+                      activePeerRating.position ??
                       "Striker"}
                     . Currently {activePeerRating.rated_minutes ?? 0} mins.
+                    {activePeerRating.position && activePeerRating.position !== player.position && (
+                      <span>
+                        {" "}Rated as {POSITION_LABELS[activePeerRating.position] ?? activePeerRating.position} based on most minutes played this season.
+                      </span>
+                    )}
+                    {positionBreakdown.length > 0 && (
+                      <span>
+                        {" "}This season played:{" "}
+                        {positionBreakdown
+                          .map((p) => `${p.position_played} (${p.minutes}m)`)
+                          .join(", ")}
+                        .
+                      </span>
+                    )}
                   </div>
                 ) : (
                   <div
@@ -7928,8 +7982,12 @@ function PlayerProfilePage() {
                       }}
                     >
                       Percentile ranks show how this player compares to{" "}
-                      {activePeerRating.position ?? "ST"} peers in the same
-                      league and season with 300+ rated minutes. 99 = top 1%.
+                      {POSITION_LABELS[activePeerRating.position ?? "ST"] ?? activePeerRating.position ?? "Strikers"}{" "}
+                      in the same league and season with 300+ rated minutes.
+                      {activePeerRating.position && activePeerRating.position !== player.position && (
+                        <> Grouped as {POSITION_LABELS[activePeerRating.position] ?? activePeerRating.position} based on most minutes played this season.</>
+                      )}{" "}
+                      99 = top 1%.
                     </p>
                     <div
                       style={{
