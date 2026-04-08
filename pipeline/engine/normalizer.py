@@ -26,11 +26,13 @@ def compute_category_stats(raw_scores: list[float]) -> CategoryStats:
     arr = np.array(raw_scores)
     q25, median, q75 = np.percentile(arr, [25, 50, 75])
     iqr = q75 - q25
-    # Prevent zero scale — fallback to std dev or 1.0
+    # Prevent zero/tiny scale — floor prevents zero-inflated dimensions
+    # (e.g. chance_creation, finishing) from producing extreme normalized values.
+    MIN_SCALE = 0.10
     if iqr < 0.001:
-        scale = float(np.std(arr)) if np.std(arr) > 0.001 else 1.0
+        scale = max(MIN_SCALE, float(np.std(arr)) if np.std(arr) > 0.001 else MIN_SCALE)
     else:
-        scale = float(iqr)
+        scale = max(MIN_SCALE, float(iqr))
 
     return CategoryStats(
         median=float(median),

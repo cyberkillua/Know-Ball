@@ -3,19 +3,18 @@
   "version": 7,
   "baseline": 6.5,
   "weights": {
-    "finishing": 0.35,
-    "shot_generation": 0.2,
-    "chance_creation": 0.15,
-    "team_function": 0.05,
-    "carrying": 0.1,
-    "duels": 0.1,
-    "defensive": 0.05
+    "finishing": 0.26,
+    "shot_generation": 0.24,
+    "chance_creation": 0.22,
+    "team_function": 0.02,
+    "carrying": 0.11,
+    "duels": 0.13,
+    "defensive": 0.02
   },
   "constants": {
-    "goal_bonus": 0.4,
-    "xgot_delta_weight": 1.2,
-    "assist_bonus": 0.38,
-    "big_chance_missed_penalty": 0.15,
+    "goal_bonus": 0.6,
+    "penalty_goal_bonus": 0.4,
+    "assist_bonus": 0.4,
     "big_chance_created_reward": 0.12,
     "key_pass_reward": 0.04,
     "xa_threshold": 0.1,
@@ -27,7 +26,7 @@
     "pass_accuracy_weight": 0.5,
     "foul_won_reward": 0.1,
     "penalty_won_reward": 0.35,
-    "possession_loss_rate_penalty": 0.8,
+    "possession_loss_rate_penalty": 0.1,
     "error_lead_to_goal_penalty": 0.3,
     "duel_volume_reward": 0.01,
     "aerial_win_reward": 0.12,
@@ -37,15 +36,16 @@
     "tackle_reward": 0.1,
     "interception_reward": 0.1,
     "recovery_reward": 0.08,
-    "shot_on_target_weight": 0.15,
+    "shot_on_target_weight": 0.1,
     "shot_on_target_threshold": 0.4,
     "position_quality_weight": 0.1,
     "league_avg_xg_per_shot": 0.12,
     "avg_xa_per_assist": 0.35,
     "dribble_rate_weight": 0.3,
     "dribble_volume_reward": 0.05,
-    "no_shot_penalty": -0.15,
-    "self_created_shot_reward": 0.15
+    "no_shot_penalty": -0.45,
+    "self_created_shot_reward": 0.2,
+    "assisted_shot_reward": 0.05
   },
   "season_score": {
     "version": 2,
@@ -65,28 +65,28 @@
   ],
   "normalization": {
     "method": "median_iqr",
-    "calibrated_at": "2026-04-07",
-    "sample_size": 17251,
+    "calibrated_at": "2026-04-08",
+    "sample_size": 17256,
     "midpoints": {
       "finishing": {
-        "median": -0.15,
-        "scale": 0.1826
+        "median": -0.0232,
+        "scale": 0.151
       },
       "shot_generation": {
-        "median": 0.1237,
-        "scale": 0.3149
+        "median": 0.05,
+        "scale": 0.6
       },
       "chance_creation": {
         "median": 0.0,
-        "scale": 0.04
+        "scale": 0.1
       },
       "team_function": {
         "median": 0.1578,
         "scale": 0.1835
       },
       "carrying": {
-        "median": -0.2652,
-        "scale": 0.3297
+        "median": -0.0759,
+        "scale": 0.3143
       },
       "duels": {
         "median": 0.12,

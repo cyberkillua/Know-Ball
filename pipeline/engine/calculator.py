@@ -39,7 +39,9 @@ class PlayerMatchStats:
     ball_recovery: int = 0
     # Shot-level data (from Understat, optional)
     self_created_goals: int = 0  # goals where last_action was Dribble or IndividualPlay
-    self_created_shots: int = 0  # all shots where last_action was Dribble or IndividualPlay
+    self_created_shots: int = (
+        0  # all shots where last_action was Dribble or IndividualPlay
+    )
     # Expanded stats (from Sofascore)
     big_chance_missed: int = 0
     big_chance_created: int = 0
@@ -47,6 +49,8 @@ class PlayerMatchStats:
     penalty_won: int = 0
     possession_lost_ctrl: int = 0
     error_lead_to_goal: int = 0
+    # Per-shot finishing signal: sum(goal - xG) from shots table
+    finishing_score: float = 0.0
     # Team context (from match_team_stats, for contextual no-shot penalty)
     team_possession_pct: float = 0.0
     team_total_shots: int = 0
@@ -75,104 +79,88 @@ class CategoryScores:
 
 def calc_finishing(stats: PlayerMatchStats, constants: dict) -> float:
     """
-    Finishing & Shot Quality.
+    Finishing — pure shot execution quality.
 
-    Uses np_goals (goals - penalty_goals) as primary signal to strip
-    set-piece inflation. xGOT quality delta is the most honest finishing stat.
-    This dimension should reflect shot execution, not self-created threat.
+    Per-shot sum of (goal - xG) from the shots table, excluding penalties.
+    Rewards difficulty-adjusted conversion: a 0.02 xG goal scores higher
+    than a 0.79 xG goal.
 
-    When shots_total == 0: contextual no-shot penalty based on team context.
-
-    When shots_total > 0:
-    Raw = (np_goals * goal_bonus)
-        + (xgot - xg)                              # shot quality delta
-        - (big_chance_missed * big_chance_missed_penalty)
+    When shots_total == 0: returns 0.0 (neutral — nothing to judge).
     """
-    c = constants
-
-    # Contextual no-shot penalty for strikers who never attempted a shot
     if stats.shots_total == 0:
-        if stats.assists + stats.big_chance_created < 2:
-            return c.get("no_shot_penalty", -0.15)
-        else:
-            return 0.0  # waived if you created
+        return 0.0
 
-    np_goals = stats.goals - stats.penalty_goals
-    goal_value = np_goals * c["goal_bonus"]
-    shot_quality = (stats.xgot - stats.xg) * c.get("xgot_delta_weight", 1.2)
-    big_chance_penalty = stats.big_chance_missed * c.get(
-        "big_chance_missed_penalty", 0.0
-    )
-
-    return goal_value + shot_quality - big_chance_penalty
+    return stats.finishing_score
 
 
 def calc_shot_generation(stats: PlayerMatchStats, constants: dict) -> float:
     """
-    Shot Generation — manufacturing shooting threat.
+    Shot Generation — manufacturing shooting threat for yourself.
 
-    Rewards self-manufactured shooting threat.
+    Rewards self-created shots heavily, assisted shots lightly.
+    A striker with 0 shots failed at threat creation and is penalized here
+    (unless they contributed via assists/big chances created).
 
-    Raw = (shots_total * shot_volume_reward)
-        + (xg * xg_volume_weight)
-        + max(0, shot_on_target_rate - threshold) * shot_on_target_weight
-        + (xg_per_shot - league_avg_xg_per_shot) * position_quality_weight
-        + (self_created_shots * self_created_shot_reward)
+    When shots_total == 0:
+        Raw = no_shot_penalty (waived if assists + big_chance_created >= 2)
+
+    When shots_total > 0:
+        Raw = (self_created_shots * self_created_shot_reward)
+            + (assisted_shots * assisted_shot_reward)
+            + (self_created_xg * self_created_xg_weight)
+            + max(0, shot_on_target_rate - threshold) * shot_on_target_weight
     """
     c = constants
 
     if stats.shots_total == 0:
+        if stats.assists + stats.big_chance_created < 2:
+            return c.get("no_shot_penalty", -0.45)
         return 0.0
 
-    volume_bonus = stats.shots_total * c.get("shot_volume_reward", 0.07)
-    xg_volume = stats.xg * c.get("xg_volume_weight", 0.35)
+    assisted_shots = stats.shots_total - stats.self_created_shots
+
+    self_created_score = stats.self_created_shots * c.get(
+        "self_created_shot_reward", 0.20
+    )
+    assisted_score = assisted_shots * c.get("assisted_shot_reward", 0.05)
 
     shot_on_target_rate = stats.shots_on_target / stats.shots_total
     threshold = c.get("shot_on_target_threshold", 0.40)
     shot_acc_bonus = 0.0
-    if stats.shots_total >= 2:
+    if stats.shots_on_target >= 2:
         shot_acc_bonus = max(0.0, shot_on_target_rate - threshold) * c.get(
-            "shot_on_target_weight", 0.15
+            "shot_on_target_weight", 0.10
         )
 
-    xg_per_shot = stats.xg / stats.shots_total
-    league_avg = c.get("league_avg_xg_per_shot", 0.12)
-    position_quality = (xg_per_shot - league_avg) * c.get(
-        "position_quality_weight", 0.10
-    )
-
-    non_goal_self_created = max(0, stats.self_created_shots - stats.self_created_goals)
-    self_created = non_goal_self_created * c.get("self_created_shot_reward", 0.15)
-
-    return volume_bonus + xg_volume + shot_acc_bonus + position_quality + self_created
+    return self_created_score + assisted_score + shot_acc_bonus
 
 
 def calc_chance_creation(stats: PlayerMatchStats, constants: dict) -> float:
     """
-    Chance Creation for Teammates.
+    Chance Creation for Teammates — quality of chances created.
 
-    xa double-count fix: split xa into converted (already counted via assists)
-    and unconverted (the xA on chances that didn't become assists).
+    Assists are rewarded separately via a direct bonus in calculate_match_rating.
+    This dimension measures creation quality: xA, key passes, big chances created.
 
-    Raw = (assists * assist_bonus)
-        + max(0, xa - (assists * avg_xa_per_assist))   # unconverted xA only
+    Raw = unconverted_xa (above noise floor)
         + (big_chance_created * big_chance_created_reward)
         + (key_passes * key_pass_reward)
     """
     c = constants
-    assist_value = stats.assists * c["assist_bonus"]
 
-    # Only deduct actual xA attributed to assists, capped at stats.xa.
+    # Strip converted xA (already rewarded via assist bonus), keep unconverted.
     converted_xa = min(stats.xa, stats.assists * c.get("avg_xa_per_assist", 0.35))
     unconverted_xa = max(0.0, stats.xa - converted_xa)
 
     # Only reward xA meaningfully above the noise floor (0.1 threshold)
     xa_threshold = c.get("xa_threshold", 0.1)
     xa_value = max(0.0, unconverted_xa - xa_threshold)
-    big_chance_value = stats.big_chance_created * c.get("big_chance_created_reward", 0.12)
+    big_chance_value = stats.big_chance_created * c.get(
+        "big_chance_created_reward", 0.12
+    )
     key_pass_value = stats.key_passes * c.get("key_pass_reward", 0.04)
 
-    return assist_value + xa_value + big_chance_value + key_pass_value
+    return xa_value + big_chance_value + key_pass_value
 
 
 def calc_team_function(stats: PlayerMatchStats, constants: dict) -> float:
@@ -220,7 +208,7 @@ def calc_carrying(stats: PlayerMatchStats, constants: dict) -> float:
     penalty_pos = stats.penalty_won * c.get("penalty_won_reward", 0.35)
 
     possession_loss_rate = stats.possession_lost_ctrl / max(stats.touches, 1)
-    poss_loss = possession_loss_rate * c.get("possession_loss_rate_penalty", 0.8)
+    poss_loss = possession_loss_rate * c.get("possession_loss_rate_penalty", 0.1)
 
     error_pen = stats.error_lead_to_goal * c.get("error_lead_to_goal_penalty", 0.3)
     return dribble_score + fouls + penalty_pos - poss_loss - error_pen
@@ -248,8 +236,10 @@ def calc_duels(stats: PlayerMatchStats, constants: dict) -> float:
         - stats.ground_duels_lost * c["ground_duel_loss_penalty"]
     )
     total_contests = (
-        stats.aerial_duels_won + stats.aerial_duels_lost
-        + stats.ground_duels_won + stats.ground_duels_lost
+        stats.aerial_duels_won
+        + stats.aerial_duels_lost
+        + stats.ground_duels_won
+        + stats.ground_duels_lost
     )
     volume = total_contests * c.get("duel_volume_reward", 0.02)
     return aerial + ground + volume
@@ -308,13 +298,13 @@ def calculate_match_rating(
     scores = CategoryScores()
 
     # v7 dimension scores
-    scores.finishing_raw      = calc_finishing(stats, constants)
+    scores.finishing_raw = calc_finishing(stats, constants)
     scores.shot_generation_raw = calc_shot_generation(stats, constants)
     scores.chance_creation_raw = calc_chance_creation(stats, constants)
-    scores.team_function_raw   = calc_team_function(stats, constants)
-    scores.carrying_raw        = calc_carrying(stats, constants)
-    scores.duels_raw           = calc_duels(stats, constants)
-    scores.defensive_raw       = calc_defensive(stats, constants)
+    scores.team_function_raw = calc_team_function(stats, constants)
+    scores.carrying_raw = calc_carrying(stats, constants)
+    scores.duels_raw = calc_duels(stats, constants)
+    scores.defensive_raw = calc_defensive(stats, constants)
 
     # Normalize all v7 dimensions
     v7_categories = [
@@ -334,12 +324,20 @@ def calculate_match_rating(
         norm = normalize_score(raw, midpoint, scale)
         setattr(scores, f"{cat}_norm", round(norm, 2))
 
-    # Weighted sum using v7 weights
+    # Weighted sum using v7 dimensions
     weighted_sum = sum(
         weights[cat] * getattr(scores, f"{cat}_norm") for cat in v7_categories
     )
 
-    final = baseline + weighted_sum
+    # Direct goal & assist bonuses — applied outside the dimension system
+    # so match-defining events can never be normalized or compressed away.
+    np_goals = stats.goals - stats.penalty_goals
+    goal_lift = np_goals * constants.get(
+        "goal_bonus", 0.6
+    ) + stats.penalty_goals * constants.get("penalty_goal_bonus", 0.4)
+    assist_lift = stats.assists * constants.get("assist_bonus", 0.4)
+
+    final = baseline + weighted_sum + goal_lift + assist_lift
     final = max(3.0, min(10.0, final))
     final = round(final, 1)
 

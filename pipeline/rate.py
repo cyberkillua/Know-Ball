@@ -119,7 +119,41 @@ def _normalize_position(position: str) -> str:
     return pos
 
 
-def rate_record(record: dict, configs: dict) -> tuple[bool, tuple | None]:
+def get_finishing_scores_batch(
+    db: DB, records: list[dict]
+) -> dict[tuple[int, int], float]:
+    """Query shots table to compute per-shot finishing_score for a batch."""
+    match_ids = list({r["match_id"] for r in records})
+    if not match_ids:
+        return {}
+
+    rows = db.query(
+        """
+        WITH ranked AS (
+            SELECT match_id, player_id, xg, result, situation, source,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY match_id, player_id, minute
+                       ORDER BY CASE WHEN source = 'sofascore' THEN 0 ELSE 1 END
+                   ) AS rn
+            FROM shots
+            WHERE match_id = ANY(%s)
+              AND situation IS DISTINCT FROM 'penalty'
+        )
+        SELECT match_id, player_id,
+               SUM(CASE WHEN result = 'Goal' THEN 1 ELSE 0 END - COALESCE(xg, 0)) AS finishing_score
+        FROM ranked
+        WHERE rn = 1
+        GROUP BY match_id, player_id
+    """,
+        (match_ids,),
+    )
+
+    return {(r["match_id"], r["player_id"]): float(r["finishing_score"]) for r in rows}
+
+
+def rate_record(
+    record: dict, configs: dict, finishing_scores: dict[tuple[int, int], float]
+) -> tuple[bool, tuple | None]:
     player_id = record["player_id"]
     match_id = record["match_id"]
 
@@ -167,6 +201,7 @@ def rate_record(record: dict, configs: dict) -> tuple[bool, tuple | None]:
         error_lead_to_goal=record.get("error_lead_to_goal") or 0,
         team_possession_pct=float(record.get("team_possession_pct") or 0),
         team_total_shots=record.get("team_total_shots") or 0,
+        finishing_score=finishing_scores.get((match_id, player_id), 0.0),
     )
 
     final_rating, scores = calculate_match_rating(stats, config)
@@ -213,10 +248,12 @@ def main():
         if not unrated:
             break
 
+        finishing_scores = get_finishing_scores_batch(db, unrated)
+
         insert_batch = []
         for record in unrated:
             try:
-                success, rating_data = rate_record(record, configs)
+                success, rating_data = rate_record(record, configs, finishing_scores)
                 if success:
                     rated_count += 1
                     insert_batch.append(rating_data)
