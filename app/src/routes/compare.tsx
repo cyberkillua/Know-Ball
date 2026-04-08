@@ -116,7 +116,7 @@ const catsA = playerA ? getAvgCategories(playerA.ratings) : null
       </div>
 
       {/* Search selectors */}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         <PlayerSelector
           label="Player 1"
           search={searchA}
@@ -145,9 +145,9 @@ const catsA = playerA ? getAvgCategories(playerA.ratings) : null
           {catsA && catsB && (
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center justify-between">
+                <CardTitle className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <span>Skill Comparison</span>
-                  <div className="flex items-center gap-4 text-xs">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
                     <span className="flex items-center gap-1.5">
                       <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: 'var(--cat-finishing)' }} />
                       {playerA.player.name}
@@ -388,10 +388,10 @@ function PercentileComparison({
 
   return (
     <Card>
-      <CardContent className="p-6">
-        <div className="mb-6 flex items-center justify-between flex-wrap gap-3">
+      <CardContent className="p-4 sm:p-6">
+        <div className="mb-4 sm:mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="text-lg font-semibold">Percentile Rankings</h3>
+            <h3 className="text-base sm:text-lg font-semibold">Percentile Rankings</h3>
             <p className="text-xs text-muted-foreground">
               {playerA.seasons.find(s => `${s.league_id}|${s.season}` === playerA.season)?.league_name ?? ''} {playerA.season.split('|')[1]} vs {playerB.seasons.find(s => `${s.league_id}|${s.season}` === playerB.season)?.league_name ?? ''} {playerB.season.split('|')[1]}
             </p>
@@ -412,14 +412,14 @@ function PercentileComparison({
           </div>
         </div>
 
-        <div className="mb-4 grid grid-cols-3 gap-4">
+        <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-4">
           <div className="text-center">
-            <div className="font-semibold">{playerA.player.name}</div>
+            <div className="font-semibold text-sm sm:text-base">{playerA.player.name}</div>
             <div className="text-xs text-muted-foreground">{statsA?.matches ?? 0} apps · {statsA?.minutes?.toLocaleString() ?? 0} mins</div>
           </div>
-          <div></div>
+          <div className="hidden sm:block"></div>
           <div className="text-center">
-            <div className="font-semibold">{playerB.player.name}</div>
+            <div className="font-semibold text-sm sm:text-base">{playerB.player.name}</div>
             <div className="text-xs text-muted-foreground">{statsB?.matches ?? 0} apps · {statsB?.minutes?.toLocaleString() ?? 0} mins</div>
           </div>
         </div>
@@ -441,10 +441,33 @@ function PercentileComparison({
               const pctB = getPct(stat, prB, qualifiedB)
               const label = getLabel(stat)
               return (
-                <div key={label} className="grid grid-cols-3 gap-4 mb-2">
-                  <StatRow label="" value={valA} percentile={pctA} />
-                  <div className="text-center text-xs text-muted-foreground self-center">{label}</div>
-                  <StatRow label="" value={valB} percentile={pctB} />
+                <div key={label} className="mb-3 sm:mb-2">
+                  <div className="text-center text-xs text-muted-foreground mb-1 sm:hidden">{label}</div>
+                  <div className="hidden sm:grid sm:grid-cols-3 sm:gap-4">
+                    <StatRow label="" value={valA} percentile={pctA} />
+                    <div className="text-center text-xs text-muted-foreground self-center">{label}</div>
+                    <StatRow label="" value={valB} percentile={pctB} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:hidden">
+                    <div className="flex flex-col items-center">
+                      <div className="text-xs text-muted-foreground mb-1" style={{ color: 'var(--cat-finishing)' }}>P1</div>
+                      <div className="relative w-full h-4 rounded overflow-hidden" style={{ background: 'var(--muted)' }}>
+                        <div className="h-full flex items-center" style={{ width: `${Math.max(pctA, 8)}%`, background: pctA >= 70 ? '#1d9e75' : pctA >= 40 ? '#ef9f27' : '#e24b4a' }}>
+                          <span className="pl-2 text-xs font-semibold text-white">{valA}</span>
+                        </div>
+                      </div>
+                      <div className="text-xs font-medium mt-0.5" style={{ color: pctA >= 70 ? '#1d9e75' : pctA >= 40 ? '#ef9f27' : '#e24b4a' }}>{Math.round(pctA)}</div>
+                    </div>
+                    <div className="flex flex-col items-center">
+                      <div className="text-xs text-muted-foreground mb-1" style={{ color: 'var(--cat-involvement)' }}>P2</div>
+                      <div className="relative w-full h-4 rounded overflow-hidden" style={{ background: 'var(--muted)' }}>
+                        <div className="h-full flex items-center" style={{ width: `${Math.max(pctB, 8)}%`, background: pctB >= 70 ? '#1d9e75' : pctB >= 40 ? '#ef9f27' : '#e24b4a' }}>
+                          <span className="pl-2 text-xs font-semibold text-white">{valB}</span>
+                        </div>
+                      </div>
+                      <div className="text-xs font-medium mt-0.5" style={{ color: pctB >= 70 ? '#1d9e75' : pctB >= 40 ? '#ef9f27' : '#e24b4a' }}>{Math.round(pctB)}</div>
+                    </div>
+                  </div>
                 </div>
               )
             })}
@@ -551,13 +574,13 @@ function PeerComparisonSideBySide({ playerA, playerB }: { playerA: PlayerData; p
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid gap-4 sm:grid-cols-2 sm:gap-6">
           <div>
-            <div className="mb-3 text-sm font-semibold">{playerA.player.name}</div>
+            <div className="mb-2 text-sm font-semibold sm:mb-3">{playerA.player.name}</div>
             <PeerCard data={playerA} />
           </div>
           <div>
-            <div className="mb-3 text-sm font-semibold">{playerB.player.name}</div>
+            <div className="mb-2 text-sm font-semibold sm:mb-3">{playerB.player.name}</div>
             <PeerCard data={playerB} />
           </div>
         </div>
@@ -575,9 +598,9 @@ function PlayerSelector({ label, search, results, selected, onSearch, onSelect, 
       <label className="mb-2 block text-sm font-semibold" style={{ color }}>{label}</label>
       <Input placeholder="Search player name..." value={search} onChange={(e) => onSearch(e.target.value)} className="bg-secondary" />
       {results.length > 0 && (
-        <div className="absolute top-full z-50 mt-1 w-full rounded-md border border-border bg-card shadow-lg">
+        <div className="absolute top-full z-50 mt-1 w-full rounded-md border border-border bg-card shadow-lg max-h-60 overflow-y-auto">
           {results.map((p) => (
-            <button key={p.id} onClick={() => onSelect(p)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent">
+            <button key={p.id} onClick={() => onSelect(p)} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-accent">
               <span className="font-medium">{p.name}</span>
               <span className="text-xs text-muted-foreground">{p.position} · {(p.team as any)?.name}</span>
             </button>
@@ -586,7 +609,7 @@ function PlayerSelector({ label, search, results, selected, onSearch, onSelect, 
       )}
       {selected && (
         <div className="mt-2 rounded-lg border border-border bg-card/50 p-3">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="font-semibold">{selected.player.name}</div>
               <div className="text-xs text-muted-foreground">{selected.player.position} · {(selected.player.team as any)?.name}</div>
@@ -595,7 +618,7 @@ function PlayerSelector({ label, search, results, selected, onSearch, onSelect, 
               <select
                 value={selected.season}
                 onChange={(e) => onSeasonChange(e.target.value)}
-                className="rounded-lg border border-border bg-card px-2 py-1 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                className="rounded-lg border border-border bg-card px-2 py-1.5 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
               >
                 {selected.seasons.map((s) => (
                   <option key={`${s.league_id}-${s.season}`} value={`${s.league_id}|${s.season}`}>
