@@ -48,7 +48,7 @@ function normalizeX(rawX: number): number {
 function transformShot(rawX: number, rawY: number) {
   const px = normalizeX(rawX)
   if (px < 0.5) {
-    return { px: 1 - px, py: 1 - rawY }
+    return { px: 1 - px, py: rawY }
   }
   return { px, py: rawY }
 }
