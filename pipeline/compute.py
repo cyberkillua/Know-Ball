@@ -7,7 +7,10 @@ in the same group. Runs after rate.py.
 """
 
 import statistics
+from bisect import bisect_left, bisect_right
 from collections import defaultdict
+
+import psycopg2.extras
 
 from pipeline.db import DB
 from pipeline.engine.config import load_position_config
@@ -52,13 +55,23 @@ def position_group_case(alias: str) -> str:
     return POSITION_GROUP_CASE.format(alias=alias)
 
 
-def percentile_of(value: float, all_values: list[float]) -> int:
-    """Return the 0-100 percentile rank of value within all_values (higher = better)."""
-    if not all_values:
+def sorted_vals(values: list[float]) -> list[float]:
+    """Return a sorted copy for use with percentile_of."""
+    return sorted(values)
+
+
+def percentile_of(value: float, sorted_values: list[float]) -> int:
+    """Return the 0-100 percentile rank of value within sorted_values (higher = better).
+
+    sorted_values MUST be pre-sorted in ascending order (use sorted_vals()).
+    Uses bisect for O(log n) instead of O(n).
+    """
+    n = len(sorted_values)
+    if not n:
         return 0
-    below = sum(1 for v in all_values if v < value)
-    equal = sum(1 for v in all_values if v == value)
-    pct = (below + 0.5 * equal) / len(all_values) * 100
+    below = bisect_left(sorted_values, value)
+    equal = bisect_right(sorted_values, value) - below
+    pct = (below + 0.5 * equal) / n * 100
     return round(pct)
 
 
@@ -548,7 +561,7 @@ def compute_peer_ratings(
 
         def vals(key: str, source: list | None = None) -> list[float]:
             src = source if source is not None else stat_qualified
-            return [float(p[key]) for p in src]
+            return sorted(float(p[key]) for p in src)
 
         # Stat distribution vals — ranked among all players with sufficient minutes
         goals_per90_vals             = vals("goals_per90")
@@ -615,10 +628,10 @@ def compute_peer_ratings(
         # xGChain/xGBuildup — only rank players who have Understat data
         xg_chain_stat_q = [p for p in stat_qualified if p["xg_chain_per90"] is not None]
         xg_buildup_stat_q = [p for p in stat_qualified if p["xg_buildup_per90"] is not None]
-        xg_chain_per90_vals  = [float(p["xg_chain_per90"]) for p in xg_chain_stat_q]
-        xg_chain_raw_vals    = [float(p["xg_chain_raw"]) for p in xg_chain_stat_q]
-        xg_buildup_per90_vals = [float(p["xg_buildup_per90"]) for p in xg_buildup_stat_q]
-        xg_buildup_raw_vals  = [float(p["xg_buildup_raw"]) for p in xg_buildup_stat_q]
+        xg_chain_per90_vals  = sorted(float(p["xg_chain_per90"]) for p in xg_chain_stat_q)
+        xg_chain_raw_vals    = sorted(float(p["xg_chain_raw"]) for p in xg_chain_stat_q)
+        xg_buildup_per90_vals = sorted(float(p["xg_buildup_per90"]) for p in xg_buildup_stat_q)
+        xg_buildup_raw_vals  = sorted(float(p["xg_buildup_raw"]) for p in xg_buildup_stat_q)
 
         # Dimension distribution vals — ranked only among players with match ratings
         if qualified:
@@ -672,7 +685,7 @@ def compute_peer_ratings(
                     team_function_blended_scores[pid] = base * 0.8 + support * 0.2
                 else:
                     team_function_blended_scores[pid] = base
-            team_function_vals = list(team_function_blended_scores.values())
+            team_function_vals = sorted(team_function_blended_scores.values())
 
         # Stat percentiles — all players with sufficient minutes
         for p in stat_qualified:
@@ -757,7 +770,6 @@ def compute_peer_ratings(
 
         # Model/dimension percentiles — only players with match ratings
         if qualified:
-            overall_vals: list[float] = []
             for p in qualified:
                 season_breakdown = calculate_season_score(
                     avg_match_rating=p.get("avg_match_rating"),
@@ -773,7 +785,7 @@ def compute_peer_ratings(
                 p["model_score_availability"] = season_breakdown.availability
                 p["model_score_confidence"] = season_breakdown.confidence
                 p["model_score_version"] = season_breakdown.version
-                overall_vals.append(season_breakdown.final_score)
+            overall_vals = sorted(p["model_score"] for p in qualified)
 
             for p in qualified:
                 p["finishing_percentile"]       = percentile_of(p["_dim_finishing"],         finishing_vals)
@@ -796,10 +808,7 @@ def compute_peer_ratings(
                 for col in NULL_PERCENTILE_COLS:
                     p[col] = None
 
-    upserted = 0
-    for p in players:
-        db.execute(
-            """
+    upsert_sql = """
             INSERT INTO peer_ratings (
                 player_id, league_id, season, position, peer_mode, position_scope,
                 matches_played, minutes_played, rated_minutes, avg_match_rating,
@@ -1058,10 +1067,11 @@ def compute_peer_ratings(
                 model_score_version                = EXCLUDED.model_score_version,
                 aerial_win_rate_percentile         = EXCLUDED.aerial_win_rate_percentile,
                 ground_duel_win_rate_percentile    = EXCLUDED.ground_duel_win_rate_percentile
-            """,
-            p,
-        )
-        upserted += 1
+            """
+
+    with db.conn.cursor() as cur:
+        psycopg2.extras.execute_batch(cur, upsert_sql, players, page_size=500)
+    upserted = len(players)
 
     log.info(f"[{position_label}][{peer_mode}] Upserted {upserted} peer_rating records")
 
@@ -1175,9 +1185,7 @@ def compute_cross_league_ratings(db: DB) -> None:
         for rank, p in enumerate(ranked, start=1):
             p["cross_league_rank"] = rank
 
-        for p in group:
-            db.execute(
-                """
+        cross_league_sql = """
                 INSERT INTO cross_league_ratings (
                     player_id, season, position, league_id,
                     finishing_z, shot_generation_z, chance_creation_z,
@@ -1201,10 +1209,10 @@ def compute_cross_league_ratings(db: DB) -> None:
                     composite_score     = EXCLUDED.composite_score,
                     cross_league_rank   = EXCLUDED.cross_league_rank,
                     computed_at         = EXCLUDED.computed_at
-                """,
-                p,
-            )
-            upserted += 1
+                """
+        with db.conn.cursor() as cur:
+            psycopg2.extras.execute_batch(cur, cross_league_sql, group, page_size=500)
+        upserted += len(group)
 
     log.info(f"[cross-league] Upserted {upserted} cross_league_ratings records")
 

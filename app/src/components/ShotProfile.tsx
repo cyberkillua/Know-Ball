@@ -605,7 +605,7 @@ export default function ShotProfile({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {/* Pitch shot map */}
-      <SubSection title="Shot map">
+      <SubSection title="Shot zones">
         <PitchShotMap shots={shots} />
       </SubSection>
 
