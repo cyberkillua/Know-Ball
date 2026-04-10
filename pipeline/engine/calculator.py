@@ -54,6 +54,8 @@ class PlayerMatchStats:
     # Team context (from match_team_stats, for contextual no-shot penalty)
     team_possession_pct: float = 0.0
     team_total_shots: int = 0
+    red_cards: int = 0
+    yellow_cards: int = 0
 
 
 @dataclass
@@ -319,6 +321,8 @@ def calculate_match_rating(
         "goal_bonus", 0.6
     ) + stats.penalty_goals * constants.get("penalty_goal_bonus", 0.4)
     assist_lift = stats.assists * constants.get("assist_bonus", 0.4)
+    redcard_penalty = stats.red_cards * constants.get("red_card_penalty", -1.0)
+    yellowcard_penalty = constants.get("yellow_card_penalty", -0.05)
     no_shot_penalty = 0
 
     if (
@@ -328,7 +332,15 @@ def calculate_match_rating(
     ):
         no_shot_penalty = constants.get("no_shot_penalty", -0.6)
 
-    final = baseline + weighted_sum + goal_lift + assist_lift + no_shot_penalty
+    final = (
+        baseline
+        + weighted_sum
+        + goal_lift
+        + assist_lift
+        + no_shot_penalty
+        + redcard_penalty
+        + yellowcard_penalty
+    )
     final = max(3.0, min(10.0, final))
     final = round(final, 1)
 
