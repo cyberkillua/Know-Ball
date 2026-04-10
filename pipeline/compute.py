@@ -20,16 +20,17 @@ from pipeline.engine.season_score import (
     calculate_season_score,
 )
 from pipeline.logger import get_logger
+
 log = get_logger("compute")
 
 MIN_MINUTES = 300
 
 POSITION_GROUPS: list[tuple[list[str], str, str]] = [
-    (["ST", "CF"],              "ST",     "ST"),
-    (["CAM"],                   "MID",    "CAM"),
+    (["ST", "CF"], "ST", "ST"),
+    (["CAM"], "MID", "CAM"),
     (["LW", "RW", "LM", "RM"], "WINGER", "WINGER"),
-    (["CM"],                    "MID",    "CM"),
-    (["CDM"],                   "MID",    "CDM"),
+    (["CM"], "MID", "CM"),
+    (["CDM"], "MID", "CDM"),
     (["CB", "LB", "RB", "LWB", "RWB"], "DEF", "DEF"),
 ]
 # Each tuple: (profile_positions, rating_position, label)
@@ -398,10 +399,18 @@ def compute_peer_ratings(
         passes_total_val = r["passes_total_total"] or 0
         accurate_long_balls = r["accurate_long_balls_total"] or 0
         total_long_balls = r["total_long_balls_total"] or 0
-        xg_chain_per90_val = float(r["xg_chain_per90"]) if r["xg_chain_per90"] is not None else None
-        xg_chain_raw_val = float(r["xg_chain_raw"]) if r["xg_chain_raw"] is not None else None
-        xg_buildup_per90_val = float(r["xg_buildup_per90"]) if r["xg_buildup_per90"] is not None else None
-        xg_buildup_raw_val = float(r["xg_buildup_raw"]) if r["xg_buildup_raw"] is not None else None
+        xg_chain_per90_val = (
+            float(r["xg_chain_per90"]) if r["xg_chain_per90"] is not None else None
+        )
+        xg_chain_raw_val = (
+            float(r["xg_chain_raw"]) if r["xg_chain_raw"] is not None else None
+        )
+        xg_buildup_per90_val = (
+            float(r["xg_buildup_per90"]) if r["xg_buildup_per90"] is not None else None
+        )
+        xg_buildup_raw_val = (
+            float(r["xg_buildup_raw"]) if r["xg_buildup_raw"] is not None else None
+        )
 
         norm = norm_lookup.get((r["player_id"], r["league_id"], r["season"]), {})
         rated_minutes = norm.get("rated_minutes") or 0
@@ -421,27 +430,27 @@ def compute_peer_ratings(
             "minutes_played": minutes,
             "rated_minutes": rated_minutes,
             "avg_match_rating": float(norm.get("avg_match_rating") or 0),
-            "finishing_stddev":       _norm_float("finishing_stddev"),
-            "finishing_p90":          _norm_float("finishing_p90"),
+            "finishing_stddev": _norm_float("finishing_stddev"),
+            "finishing_p90": _norm_float("finishing_p90"),
             "shot_generation_stddev": _norm_float("shot_generation_stddev"),
-            "shot_generation_p90":    _norm_float("shot_generation_p90"),
+            "shot_generation_p90": _norm_float("shot_generation_p90"),
             "chance_creation_stddev": _norm_float("chance_creation_stddev"),
-            "chance_creation_p90":    _norm_float("chance_creation_p90"),
-            "carrying_stddev":        _norm_float("carrying_stddev"),
-            "carrying_p90":           _norm_float("carrying_p90"),
-            "duels_stddev":           _norm_float("duels_stddev"),
-            "duels_p90":              _norm_float("duels_p90"),
-            "defensive_stddev":       _norm_float("defensive_stddev"),
-            "defensive_p90":          _norm_float("defensive_p90"),
-            "model_score_stddev":     _norm_float("model_score_stddev"),
-            "model_score_p90":        _norm_float("model_score_p90"),
-            "consistency_score":      float(norm.get("consistency_score") or 0.0),
-            "impact_rate":            float(norm.get("impact_rate") or 0.0),
-            "model_score_quality":    None,
-            "model_score_peak":       None,
+            "chance_creation_p90": _norm_float("chance_creation_p90"),
+            "carrying_stddev": _norm_float("carrying_stddev"),
+            "carrying_p90": _norm_float("carrying_p90"),
+            "duels_stddev": _norm_float("duels_stddev"),
+            "duels_p90": _norm_float("duels_p90"),
+            "defensive_stddev": _norm_float("defensive_stddev"),
+            "defensive_p90": _norm_float("defensive_p90"),
+            "model_score_stddev": _norm_float("model_score_stddev"),
+            "model_score_p90": _norm_float("model_score_p90"),
+            "consistency_score": float(norm.get("consistency_score") or 0.0),
+            "impact_rate": float(norm.get("impact_rate") or 0.0),
+            "model_score_quality": None,
+            "model_score_peak": None,
             "model_score_availability": None,
             "model_score_confidence": None,
-            "model_score_version":    int(season_score_config.get("version", 2)),
+            "model_score_version": int(season_score_config.get("version", 2)),
             # Per-90s
             "goals_per90": round(goals / per90, 2),
             "shots_per90": round(shots / per90, 2),
@@ -473,7 +482,9 @@ def compute_peer_ratings(
             "shot_conversion_rate": round(goals / max(shots, 1), 2),
             "shot_on_target_rate": round(shots_on / max(shots, 1), 3),
             "ball_recovery_per90": round(recoveries / per90, 2),
-            "possession_loss_rate": round(possession_lost_ctrl_total / max(touches, 1), 3),
+            "possession_loss_rate": round(
+                possession_lost_ctrl_total / max(touches, 1), 3
+            ),
             "xg_per_shot": round(xg / max(shots, 1), 3),
             "np_goals_per90": round(np_goals / per90, 2),
             "np_xg_per90": round(np_xg / per90, 2),
@@ -487,7 +498,9 @@ def compute_peer_ratings(
             "passes_completed_per90": round(passes_completed / per90, 2),
             "passing_accuracy": round(passes_completed / max(passes_total_val, 1), 3),
             "accurate_long_balls_per90": round(accurate_long_balls / per90, 2),
-            "long_ball_accuracy": round(accurate_long_balls / max(total_long_balls, 1), 3),
+            "long_ball_accuracy": round(
+                accurate_long_balls / max(total_long_balls, 1), 3
+            ),
             "_passes_completed_raw": passes_completed,
             "_accurate_long_balls_raw": accurate_long_balls,
             # xGChain / xGBuildup from Understat (None if not available)
@@ -512,7 +525,9 @@ def compute_peer_ratings(
             "_aerials_won_raw": aerial_won,
             "_ground_duels_won_raw": ground_won,
             "aerial_win_rate": round(aerial_won / max(aerial_won + aerial_lost, 1), 3),
-            "ground_duel_win_rate": round(ground_won / max(ground_won + ground_lost, 1), 3),
+            "ground_duel_win_rate": round(
+                ground_won / max(ground_won + ground_lost, 1), 3
+            ),
             "_total_contests_raw": r["total_contests_total"] or 0,
             "_tackles_raw": tackles,
             "_interceptions_raw": interceptions,
@@ -526,13 +541,13 @@ def compute_peer_ratings(
             v = norm.get(key)
             return float(v) if v is not None else 0.0
 
-        p["_dim_finishing"]       = _dim("avg_finishing_raw")
+        p["_dim_finishing"] = _dim("avg_finishing_raw")
         p["_dim_shot_generation"] = _dim("avg_shot_generation_raw")
         p["_dim_chance_creation"] = _dim("avg_chance_creation_raw")
-        p["_dim_team_function"]   = _dim("avg_team_function_raw")
-        p["_dim_carrying"]        = _dim("avg_carrying_raw")
-        p["_dim_duels"]           = _dim("avg_duels_raw")
-        p["_dim_defensive"]       = _dim("avg_defensive_raw")
+        p["_dim_team_function"] = _dim("avg_team_function_raw")
+        p["_dim_carrying"] = _dim("avg_carrying_raw")
+        p["_dim_duels"] = _dim("avg_duels_raw")
+        p["_dim_defensive"] = _dim("avg_defensive_raw")
         players.append(p)
 
     # Group by (league_id, season) — rank within same league+season only
@@ -542,15 +557,12 @@ def compute_peer_ratings(
 
     for (league_id, season), group in groups.items():
         # stat_qualified: enough minutes for stat percentiles (no match ratings needed)
-        stat_qualified = [
-            p for p in group
-            if p["minutes_played"] >= min_minutes
-        ]
+        stat_qualified = [p for p in group if p["minutes_played"] >= min_minutes]
         # qualified: also has match ratings — needed for model/dimension percentiles
         qualified = [
-            p for p in stat_qualified
-            if p["rated_minutes"] is not None
-            and p["rated_minutes"] > 0
+            p
+            for p in stat_qualified
+            if p["rated_minutes"] is not None and p["rated_minutes"] > 0
         ]
 
         if not stat_qualified:
@@ -564,83 +576,91 @@ def compute_peer_ratings(
             return sorted(float(p[key]) for p in src)
 
         # Stat distribution vals — ranked among all players with sufficient minutes
-        goals_per90_vals             = vals("goals_per90")
-        shots_per90_vals             = vals("shots_per90")
-        xg_per90_vals                = vals("xg_per90")
-        xgot_per90_vals              = vals("xgot_per90")
-        xgot_raw_vals                = vals("_xgot_raw")
-        xg_per_shot_vals             = vals("xg_per_shot")
-        sot_rate_vals                = vals("shot_on_target_rate")
-        xg_xa_vals                   = vals("xg_plus_xa_per90")
-        xg_xa_raw_vals               = vals("_xg_plus_xa_raw")
-        overperf_vals                = vals("xg_overperformance")
-        drib_rate_vals               = vals("dribble_success_rate")
-        possession_loss_rate_vals    = vals("possession_loss_rate")
-        conversion_vals              = vals("shot_conversion_rate")
-        bcc_vals                     = vals("big_chances_created_per90")
-        bcm_vals                     = vals("big_chances_missed_per90")
-        xa_vals                      = vals("xa_per90")
-        assists_vals                 = vals("assists_per90")
-        key_passes_vals              = vals("key_passes_per90")
-        accurate_cross_vals          = vals("accurate_cross_per90")
-        dribbles_per90_vals          = vals("dribbles_per90")
-        touches_per90_vals           = vals("touches_per90")
-        fouls_won_per90_vals         = vals("fouls_won_per90")
-        aerials_per90_vals           = vals("aerial_wins_per90")
-        ground_duels_won_per90_vals  = vals("ground_duels_won_per90")
-        aerial_win_rate_vals         = vals("aerial_win_rate")
-        ground_duel_win_rate_vals    = vals("ground_duel_win_rate")
-        total_contest_per90_vals     = vals("total_contest_per90")
-        tackles_per90_vals           = vals("tackles_per90")
-        interceptions_per90_vals     = vals("interceptions_per90")
-        ball_recoveries_per90_vals   = vals("ball_recovery_per90")
-        goals_raw_vals               = vals("_goals_raw")
-        assists_raw_vals             = vals("_assists_raw")
-        shots_raw_vals               = vals("_shots_raw")
-        xg_raw_vals                  = vals("_xg_raw")
-        xa_raw_vals                  = vals("_xa_raw")
-        key_passes_raw_vals          = vals("_key_passes_raw")
-        bcc_raw_vals                 = vals("_big_chances_created_raw")
-        bcm_raw_vals                 = vals("_big_chances_missed_raw")
-        accurate_cross_raw_vals      = vals("_accurate_cross_raw")
-        dribbles_raw_vals            = vals("_dribbles_raw")
-        fouls_won_raw_vals           = vals("_fouls_won_raw")
-        touches_raw_vals             = vals("_touches_raw")
-        aerials_won_raw_vals         = vals("_aerials_won_raw")
-        ground_duels_won_raw_vals    = vals("_ground_duels_won_raw")
-        total_contests_raw_vals      = vals("_total_contests_raw")
-        tackles_raw_vals             = vals("_tackles_raw")
-        interceptions_raw_vals       = vals("_interceptions_raw")
-        ball_recoveries_raw_vals     = vals("_ball_recoveries_raw")
-        fouls_committed_raw_vals     = vals("_fouls_committed_raw")
-        fouls_committed_per90_vals   = vals("fouls_committed_per90")
-        np_goals_per90_vals          = vals("np_goals_per90")
-        np_xg_per90_vals             = vals("np_xg_per90")
-        np_xg_per_shot_vals          = vals("np_xg_per_shot")
-        np_goals_raw_vals            = vals("_np_goals_raw")
-        np_xg_raw_vals               = vals("_np_xg_raw")
-        passes_completed_per90_vals  = vals("passes_completed_per90")
-        passing_accuracy_vals        = vals("passing_accuracy")
-        accurate_lb_per90_vals       = vals("accurate_long_balls_per90")
-        long_ball_accuracy_vals      = vals("long_ball_accuracy")
-        passes_completed_raw_vals    = vals("_passes_completed_raw")
-        accurate_lb_raw_vals         = vals("_accurate_long_balls_raw")
+        goals_per90_vals = vals("goals_per90")
+        shots_per90_vals = vals("shots_per90")
+        xg_per90_vals = vals("xg_per90")
+        xgot_per90_vals = vals("xgot_per90")
+        xgot_raw_vals = vals("_xgot_raw")
+        xg_per_shot_vals = vals("xg_per_shot")
+        sot_rate_vals = vals("shot_on_target_rate")
+        xg_xa_vals = vals("xg_plus_xa_per90")
+        xg_xa_raw_vals = vals("_xg_plus_xa_raw")
+        overperf_vals = vals("xg_overperformance")
+        drib_rate_vals = vals("dribble_success_rate")
+        possession_loss_rate_vals = vals("possession_loss_rate")
+        conversion_vals = vals("shot_conversion_rate")
+        bcc_vals = vals("big_chances_created_per90")
+        bcm_vals = vals("big_chances_missed_per90")
+        xa_vals = vals("xa_per90")
+        assists_vals = vals("assists_per90")
+        key_passes_vals = vals("key_passes_per90")
+        accurate_cross_vals = vals("accurate_cross_per90")
+        dribbles_per90_vals = vals("dribbles_per90")
+        touches_per90_vals = vals("touches_per90")
+        fouls_won_per90_vals = vals("fouls_won_per90")
+        aerials_per90_vals = vals("aerial_wins_per90")
+        ground_duels_won_per90_vals = vals("ground_duels_won_per90")
+        aerial_win_rate_vals = vals("aerial_win_rate")
+        ground_duel_win_rate_vals = vals("ground_duel_win_rate")
+        total_contest_per90_vals = vals("total_contest_per90")
+        tackles_per90_vals = vals("tackles_per90")
+        interceptions_per90_vals = vals("interceptions_per90")
+        ball_recoveries_per90_vals = vals("ball_recovery_per90")
+        goals_raw_vals = vals("_goals_raw")
+        assists_raw_vals = vals("_assists_raw")
+        shots_raw_vals = vals("_shots_raw")
+        xg_raw_vals = vals("_xg_raw")
+        xa_raw_vals = vals("_xa_raw")
+        key_passes_raw_vals = vals("_key_passes_raw")
+        bcc_raw_vals = vals("_big_chances_created_raw")
+        bcm_raw_vals = vals("_big_chances_missed_raw")
+        accurate_cross_raw_vals = vals("_accurate_cross_raw")
+        dribbles_raw_vals = vals("_dribbles_raw")
+        fouls_won_raw_vals = vals("_fouls_won_raw")
+        touches_raw_vals = vals("_touches_raw")
+        aerials_won_raw_vals = vals("_aerials_won_raw")
+        ground_duels_won_raw_vals = vals("_ground_duels_won_raw")
+        total_contests_raw_vals = vals("_total_contests_raw")
+        tackles_raw_vals = vals("_tackles_raw")
+        interceptions_raw_vals = vals("_interceptions_raw")
+        ball_recoveries_raw_vals = vals("_ball_recoveries_raw")
+        fouls_committed_raw_vals = vals("_fouls_committed_raw")
+        fouls_committed_per90_vals = vals("fouls_committed_per90")
+        np_goals_per90_vals = vals("np_goals_per90")
+        np_xg_per90_vals = vals("np_xg_per90")
+        np_xg_per_shot_vals = vals("np_xg_per_shot")
+        np_goals_raw_vals = vals("_np_goals_raw")
+        np_xg_raw_vals = vals("_np_xg_raw")
+        passes_completed_per90_vals = vals("passes_completed_per90")
+        passing_accuracy_vals = vals("passing_accuracy")
+        accurate_lb_per90_vals = vals("accurate_long_balls_per90")
+        long_ball_accuracy_vals = vals("long_ball_accuracy")
+        passes_completed_raw_vals = vals("_passes_completed_raw")
+        accurate_lb_raw_vals = vals("_accurate_long_balls_raw")
         # xGChain/xGBuildup — only rank players who have Understat data
         xg_chain_stat_q = [p for p in stat_qualified if p["xg_chain_per90"] is not None]
-        xg_buildup_stat_q = [p for p in stat_qualified if p["xg_buildup_per90"] is not None]
-        xg_chain_per90_vals  = sorted(float(p["xg_chain_per90"]) for p in xg_chain_stat_q)
-        xg_chain_raw_vals    = sorted(float(p["xg_chain_raw"]) for p in xg_chain_stat_q)
-        xg_buildup_per90_vals = sorted(float(p["xg_buildup_per90"]) for p in xg_buildup_stat_q)
-        xg_buildup_raw_vals  = sorted(float(p["xg_buildup_raw"]) for p in xg_buildup_stat_q)
+        xg_buildup_stat_q = [
+            p for p in stat_qualified if p["xg_buildup_per90"] is not None
+        ]
+        xg_chain_per90_vals = sorted(
+            float(p["xg_chain_per90"]) for p in xg_chain_stat_q
+        )
+        xg_chain_raw_vals = sorted(float(p["xg_chain_raw"]) for p in xg_chain_stat_q)
+        xg_buildup_per90_vals = sorted(
+            float(p["xg_buildup_per90"]) for p in xg_buildup_stat_q
+        )
+        xg_buildup_raw_vals = sorted(
+            float(p["xg_buildup_raw"]) for p in xg_buildup_stat_q
+        )
 
         # Dimension distribution vals — ranked only among players with match ratings
         if qualified:
-            carrying_vals         = vals("_dim_carrying",        qualified)
-            finishing_vals        = vals("_dim_finishing",       qualified)
-            shot_generation_vals  = vals("_dim_shot_generation", qualified)
-            chance_creation_vals  = vals("_dim_chance_creation", qualified)
-            duels_vals            = vals("_dim_duels",           qualified)
-            defensive_vals        = vals("_dim_defensive",       qualified)
+            carrying_vals = vals("_dim_carrying", qualified)
+            finishing_vals = vals("_dim_finishing", qualified)
+            shot_generation_vals = vals("_dim_shot_generation", qualified)
+            chance_creation_vals = vals("_dim_chance_creation", qualified)
+            duels_vals = vals("_dim_duels", qualified)
+            defensive_vals = vals("_dim_defensive", qualified)
 
             def zscore_lookup(
                 key: str,
@@ -648,19 +668,20 @@ def compute_peer_ratings(
                 *,
                 allow_none: bool = False,
             ) -> dict[int, float]:
-                eligible = [
-                    p for p in source
-                    if allow_none or p.get(key) is not None
-                ]
+                eligible = [p for p in source if allow_none or p.get(key) is not None]
                 if not eligible:
                     return {}
                 values = [float(p[key]) for p in eligible if p.get(key) is not None]
                 if len(values) < 2:
-                    return {p["player_id"]: 0.0 for p in eligible if p.get(key) is not None}
+                    return {
+                        p["player_id"]: 0.0 for p in eligible if p.get(key) is not None
+                    }
                 mean = statistics.mean(values)
                 stdev = statistics.stdev(values)
                 if not stdev:
-                    return {p["player_id"]: 0.0 for p in eligible if p.get(key) is not None}
+                    return {
+                        p["player_id"]: 0.0 for p in eligible if p.get(key) is not None
+                    }
                 return {
                     p["player_id"]: (float(p[key]) - mean) / stdev
                     for p in eligible
@@ -689,80 +710,192 @@ def compute_peer_ratings(
 
         # Stat percentiles — all players with sufficient minutes
         for p in stat_qualified:
-            p["goals_per90_percentile"]           = percentile_of(p["goals_per90"],            goals_per90_vals)
-            p["shots_per90_percentile"]           = percentile_of(p["shots_per90"],            shots_per90_vals)
-            p["xg_per90_percentile"]              = percentile_of(p["xg_per90"],               xg_per90_vals)
-            p["xgot_per90_percentile"]            = percentile_of(p["xgot_per90"],             xgot_per90_vals)
-            p["xgot_raw_percentile"]              = percentile_of(p["_xgot_raw"],              xgot_raw_vals)
-            p["xg_per_shot_percentile"]           = percentile_of(p["xg_per_shot"],            xg_per_shot_vals)
-            p["shot_on_target_percentile"]        = percentile_of(p["shot_on_target_rate"],    sot_rate_vals)
-            p["xg_plus_xa_percentile"]            = percentile_of(p["xg_plus_xa_per90"],       xg_xa_vals)
-            p["xg_plus_xa_raw_percentile"]        = percentile_of(p["_xg_plus_xa_raw"],        xg_xa_raw_vals)
-            p["xg_overperformance_percentile"]    = percentile_of(p["xg_overperformance"],     overperf_vals)
-            p["dribble_success_percentile"]       = percentile_of(p["dribble_success_rate"],   drib_rate_vals)
-            p["possession_loss_rate_percentile"]  = 100 - percentile_of(p["possession_loss_rate"], possession_loss_rate_vals)
-            p["shot_conversion_percentile"]       = percentile_of(p["shot_conversion_rate"],   conversion_vals)
-            p["big_chances_created_percentile"]   = percentile_of(p["big_chances_created_per90"], bcc_vals)
-            p["big_chances_missed_percentile"]    = 100 - percentile_of(p["big_chances_missed_per90"], bcm_vals)
-            p["xa_per90_percentile"]              = percentile_of(p["xa_per90"],               xa_vals)
-            p["assists_per90_percentile"]         = percentile_of(p["assists_per90"],          assists_vals)
-            p["key_passes_per90_percentile"]      = percentile_of(p["key_passes_per90"],       key_passes_vals)
-            p["accurate_cross_per90_percentile"]  = percentile_of(p["accurate_cross_per90"],   accurate_cross_vals)
-            p["dribbles_per90_percentile"]        = percentile_of(p["dribbles_per90"],         dribbles_per90_vals)
-            p["touches_per90_percentile"]         = percentile_of(p["touches_per90"],          touches_per90_vals)
-            p["fouls_won_per90_percentile"]       = percentile_of(p["fouls_won_per90"],        fouls_won_per90_vals)
-            p["aerials_per90_percentile"]         = percentile_of(p["aerial_wins_per90"],      aerials_per90_vals)
-            p["ground_duels_won_per90_percentile"]= percentile_of(p["ground_duels_won_per90"], ground_duels_won_per90_vals)
-            p["aerial_win_rate_percentile"]       = percentile_of(p["aerial_win_rate"],        aerial_win_rate_vals)
-            p["ground_duel_win_rate_percentile"]  = percentile_of(p["ground_duel_win_rate"],   ground_duel_win_rate_vals)
-            p["total_contest_per90_percentile"]   = percentile_of(p["total_contest_per90"],    total_contest_per90_vals)
-            p["tackles_per90_percentile"]         = percentile_of(p["tackles_per90"],          tackles_per90_vals)
-            p["interceptions_per90_percentile"]   = percentile_of(p["interceptions_per90"],    interceptions_per90_vals)
-            p["ball_recoveries_per90_percentile"] = percentile_of(p["ball_recovery_per90"],    ball_recoveries_per90_vals)
-            p["goals_raw_percentile"]             = percentile_of(p["_goals_raw"],             goals_raw_vals)
-            p["assists_raw_percentile"]           = percentile_of(p["_assists_raw"],           assists_raw_vals)
-            p["shots_raw_percentile"]             = percentile_of(p["_shots_raw"],             shots_raw_vals)
-            p["xg_raw_percentile"]                = percentile_of(p["_xg_raw"],                xg_raw_vals)
-            p["xa_raw_percentile"]                = percentile_of(p["_xa_raw"],                xa_raw_vals)
-            p["key_passes_raw_percentile"]        = percentile_of(p["_key_passes_raw"],        key_passes_raw_vals)
-            p["big_chances_created_raw_percentile"] = percentile_of(p["_big_chances_created_raw"], bcc_raw_vals)
-            p["big_chances_missed_raw_percentile"]= 100 - percentile_of(p["_big_chances_missed_raw"], bcm_raw_vals)
-            p["accurate_cross_raw_percentile"]    = percentile_of(p["_accurate_cross_raw"],    accurate_cross_raw_vals)
-            p["dribbles_raw_percentile"]          = percentile_of(p["_dribbles_raw"],          dribbles_raw_vals)
-            p["fouls_won_raw_percentile"]         = percentile_of(p["_fouls_won_raw"],         fouls_won_raw_vals)
-            p["touches_raw_percentile"]           = percentile_of(p["_touches_raw"],           touches_raw_vals)
-            p["aerials_won_raw_percentile"]       = percentile_of(p["_aerials_won_raw"],       aerials_won_raw_vals)
-            p["ground_duels_won_raw_percentile"]  = percentile_of(p["_ground_duels_won_raw"],  ground_duels_won_raw_vals)
-            p["total_contests_raw_percentile"]    = percentile_of(p["_total_contests_raw"],    total_contests_raw_vals)
-            p["tackles_raw_percentile"]           = percentile_of(p["_tackles_raw"],           tackles_raw_vals)
-            p["interceptions_raw_percentile"]     = percentile_of(p["_interceptions_raw"],     interceptions_raw_vals)
-            p["ball_recoveries_raw_percentile"]   = percentile_of(p["_ball_recoveries_raw"],   ball_recoveries_raw_vals)
-            p["fouls_committed_raw_percentile"]   = 100 - percentile_of(p["_fouls_committed_raw"], fouls_committed_raw_vals)
-            p["fouls_committed_per90_percentile"] = 100 - percentile_of(p["fouls_committed_per90"], fouls_committed_per90_vals)
-            p["np_goals_per90_percentile"]        = percentile_of(p["np_goals_per90"],         np_goals_per90_vals)
-            p["np_xg_per90_percentile"]           = percentile_of(p["np_xg_per90"],            np_xg_per90_vals)
-            p["np_xg_per_shot_percentile"]        = percentile_of(p["np_xg_per_shot"],         np_xg_per_shot_vals)
-            p["np_goals_raw_percentile"]          = percentile_of(p["_np_goals_raw"],          np_goals_raw_vals)
-            p["np_xg_raw_percentile"]             = percentile_of(p["_np_xg_raw"],             np_xg_raw_vals)
-            p["passes_completed_per90_percentile"] = percentile_of(p["passes_completed_per90"], passes_completed_per90_vals)
-            p["passes_completed_raw_percentile"]  = percentile_of(p["_passes_completed_raw"],  passes_completed_raw_vals)
-            p["passing_accuracy_percentile"]      = percentile_of(p["passing_accuracy"],       passing_accuracy_vals)
-            p["accurate_long_balls_per90_percentile"] = percentile_of(p["accurate_long_balls_per90"], accurate_lb_per90_vals)
-            p["accurate_long_balls_raw_percentile"] = percentile_of(p["_accurate_long_balls_raw"], accurate_lb_raw_vals)
-            p["long_ball_accuracy_percentile"]    = percentile_of(p["long_ball_accuracy"],     long_ball_accuracy_vals)
+            p["goals_per90_percentile"] = percentile_of(
+                p["goals_per90"], goals_per90_vals
+            )
+            p["shots_per90_percentile"] = percentile_of(
+                p["shots_per90"], shots_per90_vals
+            )
+            p["xg_per90_percentile"] = percentile_of(p["xg_per90"], xg_per90_vals)
+            p["xgot_per90_percentile"] = percentile_of(p["xgot_per90"], xgot_per90_vals)
+            p["xgot_raw_percentile"] = percentile_of(p["_xgot_raw"], xgot_raw_vals)
+            p["xg_per_shot_percentile"] = percentile_of(
+                p["xg_per_shot"], xg_per_shot_vals
+            )
+            p["shot_on_target_percentile"] = percentile_of(
+                p["shot_on_target_rate"], sot_rate_vals
+            )
+            p["xg_plus_xa_percentile"] = percentile_of(
+                p["xg_plus_xa_per90"], xg_xa_vals
+            )
+            p["xg_plus_xa_raw_percentile"] = percentile_of(
+                p["_xg_plus_xa_raw"], xg_xa_raw_vals
+            )
+            p["xg_overperformance_percentile"] = percentile_of(
+                p["xg_overperformance"], overperf_vals
+            )
+            p["dribble_success_percentile"] = percentile_of(
+                p["dribble_success_rate"], drib_rate_vals
+            )
+            p["possession_loss_rate_percentile"] = 100 - percentile_of(
+                p["possession_loss_rate"], possession_loss_rate_vals
+            )
+            p["shot_conversion_percentile"] = percentile_of(
+                p["shot_conversion_rate"], conversion_vals
+            )
+            p["big_chances_created_percentile"] = percentile_of(
+                p["big_chances_created_per90"], bcc_vals
+            )
+            p["big_chances_missed_percentile"] = 100 - percentile_of(
+                p["big_chances_missed_per90"], bcm_vals
+            )
+            p["xa_per90_percentile"] = percentile_of(p["xa_per90"], xa_vals)
+            p["assists_per90_percentile"] = percentile_of(
+                p["assists_per90"], assists_vals
+            )
+            p["key_passes_per90_percentile"] = percentile_of(
+                p["key_passes_per90"], key_passes_vals
+            )
+            p["accurate_cross_per90_percentile"] = percentile_of(
+                p["accurate_cross_per90"], accurate_cross_vals
+            )
+            p["dribbles_per90_percentile"] = percentile_of(
+                p["dribbles_per90"], dribbles_per90_vals
+            )
+            p["touches_per90_percentile"] = percentile_of(
+                p["touches_per90"], touches_per90_vals
+            )
+            p["fouls_won_per90_percentile"] = percentile_of(
+                p["fouls_won_per90"], fouls_won_per90_vals
+            )
+            p["aerials_per90_percentile"] = percentile_of(
+                p["aerial_wins_per90"], aerials_per90_vals
+            )
+            p["ground_duels_won_per90_percentile"] = percentile_of(
+                p["ground_duels_won_per90"], ground_duels_won_per90_vals
+            )
+            p["aerial_win_rate_percentile"] = percentile_of(
+                p["aerial_win_rate"], aerial_win_rate_vals
+            )
+            p["ground_duel_win_rate_percentile"] = percentile_of(
+                p["ground_duel_win_rate"], ground_duel_win_rate_vals
+            )
+            p["total_contest_per90_percentile"] = percentile_of(
+                p["total_contest_per90"], total_contest_per90_vals
+            )
+            p["tackles_per90_percentile"] = percentile_of(
+                p["tackles_per90"], tackles_per90_vals
+            )
+            p["interceptions_per90_percentile"] = percentile_of(
+                p["interceptions_per90"], interceptions_per90_vals
+            )
+            p["ball_recoveries_per90_percentile"] = percentile_of(
+                p["ball_recovery_per90"], ball_recoveries_per90_vals
+            )
+            p["goals_raw_percentile"] = percentile_of(p["_goals_raw"], goals_raw_vals)
+            p["assists_raw_percentile"] = percentile_of(
+                p["_assists_raw"], assists_raw_vals
+            )
+            p["shots_raw_percentile"] = percentile_of(p["_shots_raw"], shots_raw_vals)
+            p["xg_raw_percentile"] = percentile_of(p["_xg_raw"], xg_raw_vals)
+            p["xa_raw_percentile"] = percentile_of(p["_xa_raw"], xa_raw_vals)
+            p["key_passes_raw_percentile"] = percentile_of(
+                p["_key_passes_raw"], key_passes_raw_vals
+            )
+            p["big_chances_created_raw_percentile"] = percentile_of(
+                p["_big_chances_created_raw"], bcc_raw_vals
+            )
+            p["big_chances_missed_raw_percentile"] = 100 - percentile_of(
+                p["_big_chances_missed_raw"], bcm_raw_vals
+            )
+            p["accurate_cross_raw_percentile"] = percentile_of(
+                p["_accurate_cross_raw"], accurate_cross_raw_vals
+            )
+            p["dribbles_raw_percentile"] = percentile_of(
+                p["_dribbles_raw"], dribbles_raw_vals
+            )
+            p["fouls_won_raw_percentile"] = percentile_of(
+                p["_fouls_won_raw"], fouls_won_raw_vals
+            )
+            p["touches_raw_percentile"] = percentile_of(
+                p["_touches_raw"], touches_raw_vals
+            )
+            p["aerials_won_raw_percentile"] = percentile_of(
+                p["_aerials_won_raw"], aerials_won_raw_vals
+            )
+            p["ground_duels_won_raw_percentile"] = percentile_of(
+                p["_ground_duels_won_raw"], ground_duels_won_raw_vals
+            )
+            p["total_contests_raw_percentile"] = percentile_of(
+                p["_total_contests_raw"], total_contests_raw_vals
+            )
+            p["tackles_raw_percentile"] = percentile_of(
+                p["_tackles_raw"], tackles_raw_vals
+            )
+            p["interceptions_raw_percentile"] = percentile_of(
+                p["_interceptions_raw"], interceptions_raw_vals
+            )
+            p["ball_recoveries_raw_percentile"] = percentile_of(
+                p["_ball_recoveries_raw"], ball_recoveries_raw_vals
+            )
+            p["fouls_committed_raw_percentile"] = 100 - percentile_of(
+                p["_fouls_committed_raw"], fouls_committed_raw_vals
+            )
+            p["fouls_committed_per90_percentile"] = 100 - percentile_of(
+                p["fouls_committed_per90"], fouls_committed_per90_vals
+            )
+            p["np_goals_per90_percentile"] = percentile_of(
+                p["np_goals_per90"], np_goals_per90_vals
+            )
+            p["np_xg_per90_percentile"] = percentile_of(
+                p["np_xg_per90"], np_xg_per90_vals
+            )
+            p["np_xg_per_shot_percentile"] = percentile_of(
+                p["np_xg_per_shot"], np_xg_per_shot_vals
+            )
+            p["np_goals_raw_percentile"] = percentile_of(
+                p["_np_goals_raw"], np_goals_raw_vals
+            )
+            p["np_xg_raw_percentile"] = percentile_of(p["_np_xg_raw"], np_xg_raw_vals)
+            p["passes_completed_per90_percentile"] = percentile_of(
+                p["passes_completed_per90"], passes_completed_per90_vals
+            )
+            p["passes_completed_raw_percentile"] = percentile_of(
+                p["_passes_completed_raw"], passes_completed_raw_vals
+            )
+            p["passing_accuracy_percentile"] = percentile_of(
+                p["passing_accuracy"], passing_accuracy_vals
+            )
+            p["accurate_long_balls_per90_percentile"] = percentile_of(
+                p["accurate_long_balls_per90"], accurate_lb_per90_vals
+            )
+            p["accurate_long_balls_raw_percentile"] = percentile_of(
+                p["_accurate_long_balls_raw"], accurate_lb_raw_vals
+            )
+            p["long_ball_accuracy_percentile"] = percentile_of(
+                p["long_ball_accuracy"], long_ball_accuracy_vals
+            )
             # xGChain/xGBuildup — None if player has no Understat data
             if p["xg_chain_per90"] is not None and xg_chain_per90_vals:
-                p["xg_chain_per90_percentile"]    = percentile_of(p["xg_chain_per90"],        xg_chain_per90_vals)
-                p["xg_chain_raw_percentile"]      = percentile_of(p["xg_chain_raw"],          xg_chain_raw_vals)
+                p["xg_chain_per90_percentile"] = percentile_of(
+                    p["xg_chain_per90"], xg_chain_per90_vals
+                )
+                p["xg_chain_raw_percentile"] = percentile_of(
+                    p["xg_chain_raw"], xg_chain_raw_vals
+                )
             else:
-                p["xg_chain_per90_percentile"]    = None
-                p["xg_chain_raw_percentile"]      = None
+                p["xg_chain_per90_percentile"] = None
+                p["xg_chain_raw_percentile"] = None
             if p["xg_buildup_per90"] is not None and xg_buildup_per90_vals:
-                p["xg_buildup_per90_percentile"]  = percentile_of(p["xg_buildup_per90"],      xg_buildup_per90_vals)
-                p["xg_buildup_raw_percentile"]    = percentile_of(p["xg_buildup_raw"],        xg_buildup_raw_vals)
+                p["xg_buildup_per90_percentile"] = percentile_of(
+                    p["xg_buildup_per90"], xg_buildup_per90_vals
+                )
+                p["xg_buildup_raw_percentile"] = percentile_of(
+                    p["xg_buildup_raw"], xg_buildup_raw_vals
+                )
             else:
-                p["xg_buildup_per90_percentile"]  = None
-                p["xg_buildup_raw_percentile"]    = None
+                p["xg_buildup_per90_percentile"] = None
+                p["xg_buildup_raw_percentile"] = None
             # Null model/dimension percentiles for players without match ratings
             if not p.get("rated_minutes"):
                 for col in NULL_RATING_COLS:
@@ -788,20 +921,34 @@ def compute_peer_ratings(
             overall_vals = sorted(p["model_score"] for p in qualified)
 
             for p in qualified:
-                p["finishing_percentile"]       = percentile_of(p["_dim_finishing"],         finishing_vals)
-                p["involvement_percentile"]     = percentile_of(p["_dim_chance_creation"],   chance_creation_vals)
-                p["carrying_percentile"]        = percentile_of(p["_dim_carrying"],          carrying_vals)
-                p["physical_percentile"]        = percentile_of(p["_dim_duels"],             duels_vals)
-                p["pressing_percentile"]        = percentile_of(p["_dim_defensive"],         defensive_vals)
-                p["overall_percentile"]         = percentile_of(p["model_score"],            overall_vals)
-                p["shot_generation_percentile"] = percentile_of(p["_dim_shot_generation"],   shot_generation_vals)
-                p["chance_creation_percentile"] = percentile_of(p["_dim_chance_creation"],   chance_creation_vals)
-                p["team_function_percentile"]   = percentile_of(
+                p["finishing_percentile"] = percentile_of(
+                    p["_dim_finishing"], finishing_vals
+                )
+                p["involvement_percentile"] = percentile_of(
+                    p["_dim_chance_creation"], chance_creation_vals
+                )
+                p["carrying_percentile"] = percentile_of(
+                    p["_dim_carrying"], carrying_vals
+                )
+                p["physical_percentile"] = percentile_of(p["_dim_duels"], duels_vals)
+                p["pressing_percentile"] = percentile_of(
+                    p["_dim_defensive"], defensive_vals
+                )
+                p["overall_percentile"] = percentile_of(p["model_score"], overall_vals)
+                p["shot_generation_percentile"] = percentile_of(
+                    p["_dim_shot_generation"], shot_generation_vals
+                )
+                p["chance_creation_percentile"] = percentile_of(
+                    p["_dim_chance_creation"], chance_creation_vals
+                )
+                p["team_function_percentile"] = percentile_of(
                     team_function_blended_scores.get(p["player_id"], 0.0),
                     team_function_vals,
                 )
-                p["duels_percentile"]           = percentile_of(p["_dim_duels"],             duels_vals)
-                p["defensive_percentile"]       = percentile_of(p["_dim_defensive"],         defensive_vals)
+                p["duels_percentile"] = percentile_of(p["_dim_duels"], duels_vals)
+                p["defensive_percentile"] = percentile_of(
+                    p["_dim_defensive"], defensive_vals
+                )
 
         for p in group:
             if p["minutes_played"] < min_minutes:
@@ -1165,12 +1312,13 @@ def compute_cross_league_ratings(db: DB) -> None:
             mean = statistics.mean(vals_list)
             stdev = statistics.stdev(vals_list)
             for p in group:
-                p[z_key] = round((float(p[dim] or 0) - mean) / stdev, 3) if stdev else 0.0
+                p[z_key] = (
+                    round((float(p[dim] or 0) - mean) / stdev, 3) if stdev else 0.0
+                )
 
         # Composite score: weighted z-score, scaled to 0-100
         composite_vals = [
-            sum(w * p[z] for w, z in zip(weights, dim_z_keys))
-            for p in group
+            sum(w * p[z] for w, z in zip(weights, dim_z_keys)) for p in group
         ]
         # Scale: min possible z-score combo → 0, max → 100
         c_min = min(composite_vals)
@@ -1223,7 +1371,14 @@ def main():
     db.execute("SET statement_timeout TO 0")
     db.execute("DELETE FROM peer_ratings WHERE peer_mode = 'position'")
     for profile_positions, rating_position, label in POSITION_GROUPS:
-        compute_peer_ratings(db, profile_positions, rating_position, label, peer_mode="dominant", min_minutes=MIN_MINUTES)
+        compute_peer_ratings(
+            db,
+            profile_positions,
+            rating_position,
+            label,
+            peer_mode="dominant",
+            min_minutes=MIN_MINUTES,
+        )
     compute_cross_league_ratings(db)
     db.close()
     log.info("Compute complete")

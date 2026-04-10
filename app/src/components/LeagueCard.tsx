@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import type { League } from '../lib/types'
 
 const COUNTRY_FLAGS: Record<string, string> = {
@@ -29,7 +30,7 @@ export default function LeagueCard({ league, playerCount }: LeagueCardProps) {
   const colorClasses = LEAGUE_COLORS[league.name] || DEFAULT_COLOR
 
   return (
-    <div className={`block rounded-none border p-4 ${colorClasses}`}>
+    <Link to="/league/$id" params={{ id: String(league.id) }} className={`block rounded-none border p-4 ${colorClasses}`}>
       <div className="flex items-center gap-3 mb-2">
         <span className="text-2xl">{flag}</span>
         <div className="flex-1 min-w-0">
@@ -42,6 +43,6 @@ export default function LeagueCard({ league, playerCount }: LeagueCardProps) {
           {playerCount.toLocaleString()} players
         </div>
       )}
-    </div>
+    </Link>
   )
 }

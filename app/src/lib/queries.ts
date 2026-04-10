@@ -510,3 +510,103 @@ export const getPlayerUnderstat = createServerFn({ method: 'GET' })
       [data.playerId, data.season],
     )
   })
+
+export interface LeaguePlayer {
+  id: number
+  name: string
+  position: string | null
+  nationality: string | null
+  date_of_birth: string | null
+  age: number | null
+  club: string | null
+  club_id: number | null
+  photo_url: string | null
+  model_score: number | null
+}
+
+export const getLeaguePlayers = createServerFn({ method: 'GET' })
+  .inputValidator((d: { leagueId: number; season: string; search?: string; position?: string; clubId?: number }) => d)
+  .handler(async ({ data }) => {
+    const params: any[] = [data.leagueId, data.season]
+    let posFilter = ''
+    let clubFilter = ''
+    let searchFilter = ''
+
+    if (data.position && data.position !== 'All') {
+      posFilter = ` AND p.position = $${params.length + 1}`
+      params.push(data.position)
+    }
+    if (data.clubId) {
+      clubFilter = ` AND season_team.team_id = $${params.length + 1}`
+      params.push(data.clubId)
+    }
+    if (data.search) {
+      searchFilter = ` AND p.name ILIKE $${params.length + 1}`
+      params.push(`%${data.search}%`)
+    }
+
+    return query<LeaguePlayer>(
+      `SELECT p.id, p.name, p.position, p.nationality, p.date_of_birth,
+              EXTRACT(YEAR FROM AGE(p.date_of_birth))::int as age,
+              st.name as club, season_team.team_id as club_id, p.photo_url,
+              pr.model_score
+       FROM players p
+       JOIN LATERAL (
+         SELECT mps.team_id, COUNT(*) as cnt
+         FROM match_player_stats mps
+         JOIN matches m ON m.id = mps.match_id
+         WHERE mps.player_id = p.id AND m.league_id = $1 AND m.season = $2
+         GROUP BY mps.team_id
+         ORDER BY cnt DESC LIMIT 1
+       ) season_team ON true
+       LEFT JOIN teams st ON st.id = season_team.team_id
+       LEFT JOIN peer_ratings pr ON pr.player_id = p.id AND pr.league_id = $1 AND pr.season = $2
+         AND pr.peer_mode = 'dominant' AND pr.position_scope = ''
+       WHERE EXISTS (
+         SELECT 1 FROM match_player_stats mps
+         JOIN matches m ON m.id = mps.match_id
+         WHERE mps.player_id = p.id AND m.league_id = $1 AND m.season = $2
+       )
+         ${posFilter}${clubFilter}${searchFilter}
+       ORDER BY pr.model_score DESC NULLS LAST, p.name ASC`,
+      params,
+    )
+  })
+
+export const getLeagueSeasons = createServerFn({ method: 'GET' })
+  .inputValidator((d: { leagueId: number }) => d)
+  .handler(async ({ data }) => {
+    return query<{ season: string }>(
+      `SELECT DISTINCT season FROM matches
+       WHERE league_id = $1 AND home_score IS NOT NULL
+       ORDER BY season DESC`,
+      [data.leagueId],
+    )
+  })
+
+export const getLeagueTeams = createServerFn({ method: 'GET' })
+  .inputValidator((d: { leagueId: number }) => d)
+  .handler(async ({ data }) => {
+    return query<{ id: number; name: string }>(
+      `SELECT id, name FROM teams
+       WHERE league_id = $1
+       ORDER BY name`,
+      [data.leagueId],
+    )
+  })
+
+export const getLeaguePositions = createServerFn({ method: 'GET' })
+  .inputValidator((d: { leagueId: number; season: string }) => d)
+  .handler(async ({ data }) => {
+    const rows = await query<{ position: string }>(
+      `SELECT DISTINCT p.position
+       FROM players p
+       JOIN teams t ON t.id = p.current_team_id
+       JOIN match_player_stats mps ON mps.player_id = p.id
+       JOIN matches m ON m.id = mps.match_id
+       WHERE t.league_id = $1 AND m.season = $2 AND p.position IS NOT NULL
+       ORDER BY p.position`,
+      [data.leagueId, data.season],
+    )
+    return rows.map((r) => r.position)
+  })

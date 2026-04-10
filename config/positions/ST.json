@@ -21,14 +21,14 @@
     "shot_volume_reward": 0.07,
     "xg_volume_weight": 0.35,
     "presence_factor": 0.002,
-    "passes_completed_reward": 0.01,
-    "pass_accuracy_threshold": 0.7,
-    "pass_accuracy_weight": 0.5,
+    "passes_completed_reward": 0.05,
+    "pass_accuracy_threshold": 0.6,
+    "pass_accuracy_weight": 0.1,
     "foul_won_reward": 0.1,
     "penalty_won_reward": 0.35,
     "possession_loss_rate_penalty": 0.1,
     "error_lead_to_goal_penalty": 0.3,
-    "duel_volume_reward": 0.01,
+    "duel_volume_reward": 0.002,
     "aerial_win_reward": 0.12,
     "aerial_loss_penalty": 0.06,
     "ground_duel_win_reward": 0.1,
@@ -36,14 +36,14 @@
     "tackle_reward": 0.1,
     "interception_reward": 0.1,
     "recovery_reward": 0.08,
-    "shot_on_target_weight": 0.1,
+    "shot_on_target_weight": 0.15,
     "shot_on_target_threshold": 0.4,
     "position_quality_weight": 0.1,
     "league_avg_xg_per_shot": 0.12,
     "avg_xa_per_assist": 0.35,
-    "dribble_rate_weight": 0.3,
-    "dribble_volume_reward": 0.05,
-    "no_shot_penalty": -0.45,
+    "dribble_rate_weight": 0.2,
+    "dribble_volume_reward": 0.1,
+    "no_shot_penalty": -0.6,
     "self_created_shot_reward": 0.2,
     "assisted_shot_reward": 0.05
   },
@@ -65,32 +65,32 @@
   ],
   "normalization": {
     "method": "median_iqr",
-    "calibrated_at": "2026-04-08",
-    "sample_size": 17256,
+    "calibrated_at": "2026-04-10",
+    "sample_size": 18673,
     "midpoints": {
       "finishing": {
-        "median": -0.0232,
-        "scale": 0.151
+        "median": -0.0231,
+        "scale": 0.1515
       },
       "shot_generation": {
         "median": 0.05,
-        "scale": 0.6
+        "scale": 0.15
       },
       "chance_creation": {
-        "median": 0.0,
+        "median": 0.012,
         "scale": 0.1
       },
       "team_function": {
-        "median": 0.1578,
-        "scale": 0.1835
+        "median": 0.438,
+        "scale": 0.4904
       },
       "carrying": {
-        "median": -0.0759,
-        "scale": 0.3143
+        "median": -0.001,
+        "scale": 0.3006
       },
       "duels": {
-        "median": 0.12,
-        "scale": 0.33
+        "median": 0.074,
+        "scale": 0.292
       },
       "defensive": {
         "median": 0.16,

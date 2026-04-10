@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, useRef } from "react";
 import { domToPng } from "modern-screenshot";
+import { ArrowLeft } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -339,6 +340,9 @@ function PlayerProfilePage() {
   return (
     <div className="space-y-6">
       {/* ── Layer 1: Hero Header ─────────────────────────────────────────── */}
+      <button onClick={() => window.history.back()} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-1">
+        <ArrowLeft size={14} /> Back
+      </button>
       <Card>
         <CardContent className="p-6">
           <div className="flex items-start gap-4">

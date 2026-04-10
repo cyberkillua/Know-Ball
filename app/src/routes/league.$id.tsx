@@ -1,32 +1,37 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Skeleton } from '../components/ui/skeleton'
-import RatingBadge from '../components/RatingBadge'
-import MiniCategoryBars from '../components/MiniCategoryBars'
-import CategoryKingCard from '../components/CategoryKingCard'
-import StatCard from '../components/StatCard'
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/table'
+import { Input } from '../components/ui/input'
 import LeagueTabs from '../components/LeagueTabs'
 import {
   getLeagues,
-  getLeagueTopPlayers,
-  getLeagueStats,
-  getLeagueCategoryLeaders,
+  getLeaguePlayers,
+  getLeagueSeasons,
+  getLeagueTeams,
+  getLeaguePositions,
+  type LeaguePlayer,
 } from '../lib/queries'
-import type { League, PeerRating } from '../lib/types'
-import { Trophy, Users, TrendingUp, Zap, Target } from 'lucide-react'
+import type { League } from '../lib/types'
+import { Search, ArrowLeft } from 'lucide-react'
 
 export const Route = createFileRoute('/league/$id')({ component: LeagueOverviewPage })
-
-const CURRENT_SEASON = '2025/2026'
 
 function LeagueOverviewPage() {
   const { id } = Route.useParams()
   const [leagues, setLeagues] = useState<League[]>([])
   const [activeLeague, setActiveLeague] = useState(Number(id))
-  const [players, setPlayers] = useState<(PeerRating & { player?: any })[]>([])
-  const [leagueStats, setLeagueStats] = useState<any>(null)
-  const [categoryLeaders, setCategoryLeaders] = useState<any[]>([])
+
+  const [seasons, setSeasons] = useState<string[]>([])
+  const [activeSeason, setActiveSeason] = useState('2025/2026')
+  const [teams, setTeams] = useState<{ id: number; name: string }[]>([])
+  const [positions, setPositions] = useState<string[]>([])
+
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedPosition, setSelectedPosition] = useState('All')
+  const [selectedClub, setSelectedClub] = useState<number | null>(null)
+
+  const [players, setPlayers] = useState<LeaguePlayer[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -41,148 +46,169 @@ function LeagueOverviewPage() {
     if (!activeLeague) return
     setLoading(true)
     Promise.all([
-      getLeagueTopPlayers({ data: { leagueId: activeLeague, season: CURRENT_SEASON } }),
-      getLeagueStats({ data: { leagueId: activeLeague, season: CURRENT_SEASON } }),
-      getLeagueCategoryLeaders({ data: { leagueId: activeLeague, season: CURRENT_SEASON } }),
-    ]).then(([p, s, cl]) => {
-      setPlayers(p as any)
-      setLeagueStats(s)
-      setCategoryLeaders(cl as any)
-      setLoading(false)
+      getLeagueSeasons({ data: { leagueId: activeLeague } }),
+      getLeagueTeams({ data: { leagueId: activeLeague } }),
+      getLeaguePositions({ data: { leagueId: activeLeague, season: activeSeason } }),
+    ]).then(([s, t, p]) => {
+      setSeasons(s.map((r) => r.season))
+      setTeams(t)
+      setPositions(p)
     })
   }, [activeLeague])
+
+  useEffect(() => {
+    if (!activeLeague) return
+    setLoading(true)
+    getLeaguePlayers({
+      data: {
+        leagueId: activeLeague,
+        season: activeSeason,
+        search: searchQuery || undefined,
+        position: selectedPosition !== 'All' ? selectedPosition : undefined,
+        clubId: selectedClub ?? undefined,
+      },
+    }).then((p) => {
+      setPlayers(p)
+      setLoading(false)
+    })
+  }, [activeLeague, activeSeason, searchQuery, selectedPosition, selectedClub])
+
+  useEffect(() => {
+    if (!activeLeague) return
+    getLeaguePositions({ data: { leagueId: activeLeague, season: activeSeason } }).then(setPositions)
+  }, [activeLeague, activeSeason])
 
   const currentLeague = leagues.find((l) => l.id === activeLeague)
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">{currentLeague?.name ?? 'League'} Overview</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{CURRENT_SEASON} · Striker Ratings</p>
+        <button onClick={() => window.history.back()} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-2">
+          <ArrowLeft size={14} /> Back
+        </button>
+        <h1 className="text-2xl font-bold tracking-tight">{currentLeague?.name ?? 'League'}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">{players.length} players tracked</p>
       </div>
 
       {leagues.length > 0 && (
         <LeagueTabs leagues={leagues} activeId={activeLeague} onChange={setActiveLeague} />
       )}
 
-      {loading ? (
-        <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
+      {/* Filters */}
+      <div className="space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search players..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
           </div>
-          <Skeleton className="h-64 rounded-xl" />
+
+          <div className="flex flex-wrap gap-2">
+            <select
+              value={activeSeason}
+              onChange={(e) => setActiveSeason(e.target.value)}
+              className="h-8 rounded-none border border-input bg-background px-2 text-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
+            >
+              {seasons.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+
+            <select
+              value={selectedPosition}
+              onChange={(e) => setSelectedPosition(e.target.value)}
+              className="h-8 rounded-none border border-input bg-background px-2 text-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
+            >
+              <option value="All">All Positions</option>
+              {positions.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+
+            <select
+              value={selectedClub ?? ''}
+              onChange={(e) => setSelectedClub(e.target.value ? Number(e.target.value) : null)}
+              className="h-8 rounded-none border border-input bg-background px-2 text-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
+            >
+              <option value="">All Clubs</option>
+              {teams.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Players Table */}
+      {loading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <Skeleton key={i} className="h-10 rounded" />
+          ))}
         </div>
       ) : (
-        <>
-          {/* Stats Dashboard */}
-          {leagueStats && (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <StatCard
-                label="Matches Played"
-                value={leagueStats.matches_played ?? 0}
-                icon={<Trophy size={16} />}
-              />
-              <StatCard
-                label="Total Goals"
-                value={leagueStats.total_goals ?? 0}
-                icon={<Target size={16} />}
-                color="var(--cat-finishing)"
-              />
-              <StatCard
-                label="Avg ST Rating"
-                value={Number(leagueStats.avg_rating ?? 0).toFixed(2)}
-                icon={<TrendingUp size={16} />}
-                color="var(--cat-involvement)"
-              />
-              <StatCard
-                label="Highest Rating"
-                value={Number(leagueStats.highest_rating ?? 0).toFixed(2)}
-                icon={<Zap size={16} />}
-                color="var(--cat-carrying)"
-              />
-            </div>
-          )}
-
-          {/* Category Leaders */}
-          {categoryLeaders.length > 0 && (
-            <div>
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Season Category Leaders
-              </h2>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                {categoryLeaders.map((leader: any) => (
-                  <CategoryKingCard
-                    key={leader.category}
-                    category={leader.category}
-                    playerName={leader.player_name}
-                    playerId={leader.player_id}
-                    score={Number(leader.score)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Top Rated Strikers */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users size={18} /> Top Rated Strikers
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {players.length > 0 ? (
-                <div className="space-y-2">
-                  {players.map((p, i) => (
-                    <div
-                      key={p.id}
-                      className="card-glow flex items-center gap-3 rounded-lg border border-border bg-card/50 p-3"
-                    >
-                      <span
-                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                          i === 0
-                            ? 'bg-amber-500/20 text-amber-400'
-                            : i === 1
-                              ? 'bg-gray-400/20 text-gray-300'
-                              : i === 2
-                                ? 'bg-orange-500/20 text-orange-400'
-                                : 'bg-secondary text-muted-foreground'
-                        }`}
-                      >
-                        {i + 1}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <Link
-                          to="/player/$id"
-                          params={{ id: String(p.player_id) }}
-                          className="text-sm font-semibold text-foreground no-underline hover:text-primary"
-                        >
-                          {p.player?.name ?? `Player ${p.player_id}`}
-                        </Link>
-                        <div className="text-xs text-muted-foreground">
-                          {p.player?.team?.name ?? ''} · {p.matches_played} matches
-                        </div>
-                      </div>
-                      <div className="hidden sm:block">
-                        <MiniCategoryBars
-                          finishing={Number(p.finishing_percentile ?? 0) / 10}
-                          involvement={Number(p.involvement_percentile ?? 0) / 10}
-                          carrying={Number(p.carrying_percentile ?? 0) / 10}
-                          physical={Number(p.physical_percentile ?? 0) / 10}
-                          pressing={Number(p.pressing_percentile ?? 0) / 10}
-                          mode="pct"
-                        />
-                      </div>
-                      <RatingBadge rating={Number(p.avg_match_rating)} />
-                    </div>
-                  ))}
-                </div>
+        <div className="rounded-lg border border-border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Position</TableHead>
+                <TableHead>Nationality</TableHead>
+                <TableHead>Age</TableHead>
+                <TableHead>Club</TableHead>
+                <TableHead className="text-right">KnowBall Score</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {players.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    No players found
+                  </TableCell>
+                </TableRow>
               ) : (
-                <p className="text-sm text-muted-foreground">No data available yet.</p>
+                players.map((player) => (
+                  <TableRow key={player.id}>
+                    <TableCell>
+                      <Link
+                        to="/player/$id"
+                        params={{ id: String(player.id) }}
+                        className="text-sm font-medium text-foreground no-underline hover:text-primary"
+                      >
+                        {player.name}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {player.position ?? '—'}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {player.nationality ?? '—'}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {player.age ?? '—'}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {player.club ?? '—'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {player.model_score !== null ? (
+                        <span className="inline-flex items-center justify-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
+                          {Number(player.model_score).toFixed(1)}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))
               )}
-            </CardContent>
-          </Card>
-        </>
+            </TableBody>
+          </Table>
+        </div>
       )}
     </div>
   )
