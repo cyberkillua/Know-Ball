@@ -47,7 +47,20 @@ MIDFIELDER_POSITIONS = {"CAM", "CM", "CDM", "LM", "RM", "AM"}
 
 
 def get_existing_match_ids(db: DB) -> set[int]:
-    rows = db.query("SELECT sofascore_id FROM matches WHERE sofascore_id IS NOT NULL")
+    """Return sofascore IDs of matches that have player stats.
+
+    Matches where fetch_match_details failed (no player stats) are
+    excluded so they get retried on the next run.
+    """
+    rows = db.query(
+        """SELECT m.sofascore_id
+           FROM matches m
+           WHERE m.sofascore_id IS NOT NULL
+             AND EXISTS (
+                 SELECT 1 FROM match_player_stats mps
+                 WHERE mps.match_id = m.id
+             )"""
+    )
     return {r["sofascore_id"] for r in rows}
 
 
@@ -322,7 +335,9 @@ def _process_match(db: DB, match: dict, league_id: int, season: str) -> bool:
 
     match_row = db.insert_returning(
         """INSERT INTO matches (league_id, season, matchday, date, home_team_id, away_team_id, home_score, away_score, sofascore_id)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+           ON CONFLICT (sofascore_id) DO UPDATE SET home_score = EXCLUDED.home_score, away_score = EXCLUDED.away_score
+           RETURNING id""",
         (
             league_id,
             season,

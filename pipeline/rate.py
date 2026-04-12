@@ -107,6 +107,15 @@ def _normalize_position(position: str) -> str:
         return "DEF"
     if pos == "2":
         return "MID"
+    # Broad Sofascore profile categories (single-letter)
+    if pos == "F":
+        return "ST"
+    if pos == "M":
+        return "MID"
+    if pos == "D":
+        return "DEF"
+    if pos == "G":
+        return "GK"
     # Generic fallbacks
     if pos in {"FW", "FORWARD", "STRIKER"}:
         return "ST"
@@ -159,10 +168,17 @@ def rate_record(
 
     position = record.get("player_position")
     if not position:
+        log.debug(
+            f"Skipped player {player_id} match {match_id}: no position"
+        )
         return False, None
 
     position_key = _normalize_position(position)
     if position_key not in configs:
+        log.warning(
+            f"Skipped player {player_id} match {match_id}: "
+            f"position '{position}' -> '{position_key}' has no config"
+        )
         return False, None
 
     config = configs[position_key]
@@ -266,21 +282,26 @@ def main():
                 skipped_count += 1
 
         if insert_batch:
-            db.execute(
-                """INSERT INTO match_ratings
-                   (match_id, player_id, position,
-                    finishing_raw, finishing_norm,
-                    shot_generation_raw, shot_generation_norm,
-                    chance_creation_raw, chance_creation_norm,
-                    team_function_raw, team_function_norm,
-                    carrying_raw, carrying_norm,
-                    duels_raw, duels_norm,
-                    defensive_raw, defensive_norm,
-                    final_rating, sofascore_rating)
-                   VALUES %s
-                   ON CONFLICT (match_id, player_id) DO NOTHING""",
-                (insert_batch,),
-            )
+            try:
+                db.execute(
+                    """INSERT INTO match_ratings
+                       (match_id, player_id, position,
+                        finishing_raw, finishing_norm,
+                        shot_generation_raw, shot_generation_norm,
+                        chance_creation_raw, chance_creation_norm,
+                        team_function_raw, team_function_norm,
+                        carrying_raw, carrying_norm,
+                        duels_raw, duels_norm,
+                        defensive_raw, defensive_norm,
+                        final_rating, sofascore_rating)
+                       VALUES %s
+                       ON CONFLICT (match_id, player_id) DO NOTHING""",
+                    (insert_batch,),
+                )
+            except Exception as e:
+                log.error(f"Batch insert failed ({len(insert_batch)} records): {e}")
+                rated_count -= len(insert_batch)
+                skipped_count += len(insert_batch)
 
         last_id = unrated[-1]["id"]
         log.info(
