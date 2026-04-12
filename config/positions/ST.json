@@ -67,12 +67,12 @@
   ],
   "normalization": {
     "method": "median_iqr",
-    "calibrated_at": "2026-04-10",
-    "sample_size": 18673,
+    "calibrated_at": "2026-04-12",
+    "sample_size": 18839,
     "midpoints": {
       "finishing": {
-        "median": -0.0231,
-        "scale": 0.1515
+        "median": -0.0235,
+        "scale": 0.1523
       },
       "shot_generation": {
         "median": 0.05,
@@ -83,16 +83,16 @@
         "scale": 0.1
       },
       "team_function": {
-        "median": 0.438,
-        "scale": 0.4904
+        "median": 0.4375,
+        "scale": 0.4902
       },
       "carrying": {
         "median": -0.001,
-        "scale": 0.3006
+        "scale": 0.3003
       },
       "duels": {
         "median": 0.074,
-        "scale": 0.292
+        "scale": 0.293
       },
       "defensive": {
         "median": 0.16,

@@ -311,7 +311,7 @@ function PlayerProfilePage() {
     player.position === "RB" ||
     player.position === "LWB" ||
     player.position === "RWB";
-  const isSupported = isST || isCAM;
+  const isSupported = isST || isCAM || isWinger || isDefensiveWinger;
 
   // Passing computed values
   const passesCompleted = stats ? (stats.passes_completed ?? 0) : 0;
@@ -7987,45 +7987,81 @@ function PlayerProfilePage() {
                       }}
                     >
                       {(
-                        [
-                          {
-                            label: "Overall rating",
-                            value: activePeerRating.overall_percentile,
-                          },
-                          {
-                            label: "Finishing",
-                            value: activePeerRating.finishing_percentile,
-                          },
-                          {
-                            label: "Shot Generation",
-                            value: activePeerRating.shot_generation_percentile,
-                          },
-                          {
-                            label: "Chance Creation",
-                            value: activePeerRating.chance_creation_percentile,
-                          },
-                          {
-                            label: "Team Function",
-                            value: activePeerRating.team_function_percentile,
-                          },
-                          {
-                            label: "Carrying",
-                            value: activePeerRating.carrying_percentile,
-                          },
-                          {
-                            label: "Duels",
-                            value: activePeerRating.duels_percentile,
-                          },
-                          {
-                            label: "Defensive",
-                            value: activePeerRating.defensive_percentile,
-                          },
-                          {
-                            label: "Clinicality (vs xG)",
-                            value:
-                              activePeerRating.xg_overperformance_percentile,
-                          },
-                        ] as { label: string; value: number | null }[]
+                        (isWinger || isDefensiveWinger
+                          ? [
+                              {
+                                label: "Overall rating",
+                                value: activePeerRating.overall_percentile,
+                              },
+                              {
+                                label: "Productive Dribbling",
+                                value: activePeerRating.productive_dribbling_percentile,
+                              },
+                              {
+                                label: "Chance Creation",
+                                value: activePeerRating.chance_creation_percentile,
+                              },
+                              {
+                                label: "Goal Contribution",
+                                value: activePeerRating.goal_contribution_percentile,
+                              },
+                              {
+                                label: "Carrying",
+                                value: activePeerRating.carrying_percentile,
+                              },
+                              {
+                                label: "Shot Generation",
+                                value: activePeerRating.shot_generation_percentile,
+                              },
+                              {
+                                label: "Defensive",
+                                value: activePeerRating.defensive_percentile,
+                              },
+                              {
+                                label: "Presence",
+                                value: activePeerRating.presence_percentile,
+                              },
+                            ]
+                          : [
+                              {
+                                label: "Overall rating",
+                                value: activePeerRating.overall_percentile,
+                              },
+                              {
+                                label: "Finishing",
+                                value: activePeerRating.finishing_percentile,
+                              },
+                              {
+                                label: "Shot Generation",
+                                value: activePeerRating.shot_generation_percentile,
+                              },
+                              {
+                                label: "Chance Creation",
+                                value: activePeerRating.chance_creation_percentile,
+                              },
+                              {
+                                label: "Team Function",
+                                value: activePeerRating.team_function_percentile,
+                              },
+                              {
+                                label: "Carrying",
+                                value: activePeerRating.carrying_percentile,
+                              },
+                              {
+                                label: "Duels",
+                                value: activePeerRating.duels_percentile,
+                              },
+                              {
+                                label: "Defensive",
+                                value: activePeerRating.defensive_percentile,
+                              },
+                              {
+                                label: "Clinicality (vs xG)",
+                                value:
+                                  activePeerRating.xg_overperformance_percentile,
+                              },
+                            ]
+                        ) as { label: string; value: number | null }[]
                       ).map(({ label, value }) => {
                         const pct = value ?? 0;
                         const barColor =

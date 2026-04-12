@@ -1,13 +1,14 @@
 """
-Calibration script for ST rating normalization.
+Calibration script for rating normalization.
 
-Pulls all existing raw category scores from match_ratings (position = 'ST'),
+Pulls all existing raw category scores from match_ratings for a given position,
 computes median + IQR for each category, prints the new midpoints block,
-and optionally writes them directly into config/positions/ST.json.
+and optionally writes them directly into the position config JSON.
 
 Usage:
-  python -m pipeline.calibrate           # print only
-  python -m pipeline.calibrate --write   # print and update ST.json
+  python -m pipeline.calibrate                    # ST (default), print only
+  python -m pipeline.calibrate --position W       # Winger, print only
+  python -m pipeline.calibrate --position W --write  # Winger, update W.json
 """
 
 import json
@@ -20,46 +21,84 @@ from pipeline.logger import get_logger
 
 log = get_logger("calibrate")
 
-CONFIG_PATH = Path(__file__).parent.parent / "config" / "positions" / "ST.json"
+CONFIG_DIR = Path(__file__).parent.parent / "config" / "positions"
+
+# Dimension columns per position in match_ratings
+POSITION_DIMENSIONS: dict[str, list[str]] = {
+    "ST": [
+        "finishing",
+        "shot_generation",
+        "chance_creation",
+        "team_function",
+        "carrying",
+        "duels",
+        "defensive",
+    ],
+    "W": [
+        "productive_dribbling",
+        "chance_creation",
+        "goal_contribution",
+        "carrying",
+        "shot_generation",
+        "defensive",
+        "presence",
+    ],
+}
 
 
 def main():
     write = "--write" in sys.argv
 
-    db = DB()
-    log.info("Fetching ST raw scores from match_ratings")
+    # Parse --position flag
+    position = "ST"
+    if "--position" in sys.argv:
+        idx = sys.argv.index("--position")
+        if idx + 1 < len(sys.argv):
+            position = sys.argv[idx + 1].upper()
 
-    rows = db.query("""
-        SELECT finishing_raw, shot_generation_raw, chance_creation_raw,
-               team_function_raw, carrying_raw, duels_raw, defensive_raw
+    if position not in POSITION_DIMENSIONS:
+        log.error(
+            f"Unknown position '{position}'. "
+            f"Available: {', '.join(POSITION_DIMENSIONS.keys())}"
+        )
+        sys.exit(1)
+
+    dimensions = POSITION_DIMENSIONS[position]
+    config_path = CONFIG_DIR / f"{position}.json"
+
+    if not config_path.exists():
+        log.error(f"Config file not found: {config_path}")
+        sys.exit(1)
+
+    db = DB()
+    log.info(f"Fetching {position} raw scores from match_ratings")
+
+    cols = ", ".join(f"{d}_raw" for d in dimensions)
+    rows = db.query(f"""
+        SELECT {cols}
         FROM match_ratings
-        WHERE position = 'ST'
-    """)
+        WHERE position = %s
+    """, (position,))
     db.close()
 
     if not rows:
-        log.error("No ST ratings found — run pipeline.rate first")
+        log.error(f"No {position} ratings found — run pipeline.rate first")
         sys.exit(1)
 
-    log.info(f"Found {len(rows)} ST match ratings")
+    log.info(f"Found {len(rows)} {position} match ratings")
 
     raw_by_category = {
-        "finishing":        [float(r["finishing_raw"])        for r in rows],
-        "shot_generation":  [float(r["shot_generation_raw"])  for r in rows],
-        "chance_creation":  [float(r["chance_creation_raw"])  for r in rows],
-        "team_function":    [float(r["team_function_raw"])    for r in rows],
-        "carrying":         [float(r["carrying_raw"])         for r in rows],
-        "duels":            [float(r["duels_raw"])            for r in rows],
-        "defensive":        [float(r["defensive_raw"])        for r in rows],
+        d: [float(r[f"{d}_raw"]) for r in rows if r[f"{d}_raw"] is not None]
+        for d in dimensions
     }
 
     midpoints = calibrate_from_raw_scores(raw_by_category)
 
     # Print results
-    print("\nCalibrated midpoints:")
-    print("-" * 48)
+    print(f"\nCalibrated midpoints for {position}:")
+    print("-" * 58)
     for cat, stats in midpoints.items():
-        print(f"  {cat:12s}  median={stats['median']:+.4f}  scale={stats['scale']:.4f}"
+        print(f"  {cat:24s}  median={stats['median']:+.4f}  scale={stats['scale']:.4f}"
               f"  (n={stats['n']}, range=[{stats['min']:.3f}, {stats['max']:.3f}])")
     print()
 
@@ -71,14 +110,14 @@ def main():
 
     if write:
         import datetime
-        config = json.loads(CONFIG_PATH.read_text())
+        config = json.loads(config_path.read_text())
         config["normalization"]["midpoints"] = midpoints_for_config
         config["normalization"]["calibrated_at"] = datetime.date.today().isoformat()
         config["normalization"]["sample_size"] = len(rows)
-        CONFIG_PATH.write_text(json.dumps(config, indent=2) + "\n")
-        log.info(f"Updated {CONFIG_PATH}")
+        config_path.write_text(json.dumps(config, indent=2) + "\n")
+        log.info(f"Updated {config_path}")
     else:
-        print("Paste into ST.json → normalization.midpoints:")
+        print(f"Paste into {position}.json → normalization.midpoints:")
         print(json.dumps(midpoints_for_config, indent=4))
         print("\nRe-run with --write to update the file automatically.")
 

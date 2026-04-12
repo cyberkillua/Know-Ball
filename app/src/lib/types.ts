@@ -245,7 +245,17 @@ export interface PeerRating {
   team_function_percentile: number | null
   duels_percentile: number | null
   defensive_percentile: number | null
+  // Winger dimension percentiles
+  productive_dribbling_percentile: number | null
+  goal_contribution_percentile: number | null
+  presence_percentile: number | null
   // Consistency & peak (per-match stddev and 90th-percentile of raw scores)
+  productive_dribbling_stddev: number | null
+  productive_dribbling_p90: number | null
+  goal_contribution_stddev: number | null
+  goal_contribution_p90: number | null
+  presence_stddev: number | null
+  presence_p90: number | null
   finishing_stddev: number | null
   finishing_p90: number | null
   shot_generation_stddev: number | null

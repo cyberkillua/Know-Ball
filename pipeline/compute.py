@@ -28,7 +28,7 @@ MIN_MINUTES = 300
 POSITION_GROUPS: list[tuple[list[str], str, str]] = [
     (["ST", "CF"], "ST", "ST"),
     (["CAM"], "MID", "CAM"),
-    (["LW", "RW", "LM", "RM"], "WINGER", "WINGER"),
+    (["LW", "RW", "LM", "RM"], "W", "WINGER"),
     (["CM"], "MID", "CM"),
     (["CDM"], "MID", "CDM"),
     (["CB", "LB", "RB", "LWB", "RWB"], "DEF", "DEF"),
@@ -41,7 +41,7 @@ POSITION_GROUPS: list[tuple[list[str], str, str]] = [
 POSITION_GROUP_CASE = """
 CASE
     WHEN {alias}.position IN ('ST', 'CF', 'SS', 'FW', 'FORWARD', 'STRIKER') THEN 'ST'
-    WHEN {alias}.position IN ('LW', 'RW', 'LM', 'RM', 'WINGER') THEN 'WINGER'
+    WHEN {alias}.position IN ('LW', 'RW', 'LM', 'RM', 'W', 'WINGER') THEN 'WINGER'
     WHEN {alias}.position IN ('CAM', 'AM') THEN 'CAM'
     WHEN {alias}.position IN ('CM', 'DM', 'MID', 'MIDFIELDER') THEN 'CM'
     WHEN {alias}.position IN ('CDM') THEN 'CDM'
@@ -159,6 +159,9 @@ NULL_PERCENTILE_COLS = (
     "xg_plus_xa_raw_percentile",
     "possession_loss_rate_percentile",
     "fouls_committed_per90_percentile",
+    "productive_dribbling_percentile",
+    "goal_contribution_percentile",
+    "presence_percentile",
 )
 
 # Columns that require match_ratings data (peer comparison / model score).
@@ -175,6 +178,9 @@ NULL_RATING_COLS = (
     "team_function_percentile",
     "duels_percentile",
     "defensive_percentile",
+    "productive_dribbling_percentile",
+    "goal_contribution_percentile",
+    "presence_percentile",
     "model_score",
     "impact_rate",
     "model_score_quality",
@@ -182,6 +188,28 @@ NULL_RATING_COLS = (
     "model_score_availability",
     "model_score_confidence",
 )
+
+# Winger dimension names (for W position)
+W_DIMENSIONS = [
+    "productive_dribbling",
+    "chance_creation",
+    "goal_contribution",
+    "carrying",
+    "shot_generation",
+    "defensive",
+    "presence",
+]
+
+# ST dimension names
+ST_DIMENSIONS = [
+    "finishing",
+    "shot_generation",
+    "chance_creation",
+    "team_function",
+    "carrying",
+    "duels",
+    "defensive",
+]
 
 
 def compute_peer_ratings(
@@ -307,6 +335,18 @@ def compute_peer_ratings(
         f"[{position_label}][{peer_mode}] {len(stat_rows)} player-league-season groups (stats)"
     )
 
+    # Build dimension-specific SQL columns based on position
+    is_winger = rating_position == "W"
+    dims = W_DIMENSIONS if is_winger else ST_DIMENSIONS
+    dim_avg_cols = ",\n            ".join(
+        f"ROUND(AVG(mr.{d}_raw)::numeric, 4) AS avg_{d}_raw" for d in dims
+    )
+    dim_stat_cols = ",\n            ".join(
+        f"ROUND(STDDEV(mr.{d}_raw)::numeric, 4) AS {d}_stddev,\n"
+        f"            ROUND((PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY mr.{d}_raw))::numeric, 4) AS {d}_p90"
+        for d in dims
+    )
+
     norm_rows = db.query(
         f"""
         {annotated_cte}
@@ -316,25 +356,8 @@ def compute_peer_ratings(
             a.season,
             SUM(a.minutes_played)::int                                                                              AS rated_minutes,
             ROUND((SUM(mr.final_rating * a.minutes_played) / NULLIF(SUM(a.minutes_played), 0))::numeric, 2)       AS avg_match_rating,
-            ROUND(AVG(mr.finishing_raw)::numeric, 4)                                                                AS avg_finishing_raw,
-            ROUND(AVG(mr.shot_generation_raw)::numeric, 4)                                                          AS avg_shot_generation_raw,
-            ROUND(AVG(mr.chance_creation_raw)::numeric, 4)                                                          AS avg_chance_creation_raw,
-            ROUND(AVG(mr.team_function_raw)::numeric, 4)                                                            AS avg_team_function_raw,
-            ROUND(AVG(mr.carrying_raw)::numeric, 4)                                                                 AS avg_carrying_raw,
-            ROUND(AVG(mr.duels_raw)::numeric, 4)                                                                    AS avg_duels_raw,
-            ROUND(AVG(mr.defensive_raw)::numeric, 4)                                                                AS avg_defensive_raw,
-            ROUND(STDDEV(mr.finishing_raw)::numeric, 4)                                                             AS finishing_stddev,
-            ROUND((PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY mr.finishing_raw))::numeric, 4)                     AS finishing_p90,
-            ROUND(STDDEV(mr.shot_generation_raw)::numeric, 4)                                                       AS shot_generation_stddev,
-            ROUND((PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY mr.shot_generation_raw))::numeric, 4)               AS shot_generation_p90,
-            ROUND(STDDEV(mr.chance_creation_raw)::numeric, 4)                                                       AS chance_creation_stddev,
-            ROUND((PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY mr.chance_creation_raw))::numeric, 4)               AS chance_creation_p90,
-            ROUND(STDDEV(mr.carrying_raw)::numeric, 4)                                                              AS carrying_stddev,
-            ROUND((PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY mr.carrying_raw))::numeric, 4)                      AS carrying_p90,
-            ROUND(STDDEV(mr.duels_raw)::numeric, 4)                                                                 AS duels_stddev,
-            ROUND((PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY mr.duels_raw))::numeric, 4)                         AS duels_p90,
-            ROUND(STDDEV(mr.defensive_raw)::numeric, 4)                                                             AS defensive_stddev,
-            ROUND((PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY mr.defensive_raw))::numeric, 4)                     AS defensive_p90,
+            {dim_avg_cols},
+            {dim_stat_cols},
             ROUND(STDDEV(mr.final_rating)::numeric, 4)                                                              AS model_score_stddev,
             ROUND((PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY mr.final_rating))::numeric, 4)                      AS model_score_p90,
             ROUND((COUNT(*) FILTER (WHERE mr.final_rating >= %(consistency_threshold)s))::numeric / NULLIF(COUNT(*), 0) * 100, 1) AS consistency_score,
@@ -430,18 +453,29 @@ def compute_peer_ratings(
             "minutes_played": minutes,
             "rated_minutes": rated_minutes,
             "avg_match_rating": float(norm.get("avg_match_rating") or 0),
-            "finishing_stddev": _norm_float("finishing_stddev"),
-            "finishing_p90": _norm_float("finishing_p90"),
+            # ST dimension stddev/p90
+            "finishing_stddev": _norm_float("finishing_stddev") if not is_winger else None,
+            "finishing_p90": _norm_float("finishing_p90") if not is_winger else None,
+            "team_function_stddev": None,
+            "team_function_p90": None,
+            "duels_stddev": _norm_float("duels_stddev") if not is_winger else None,
+            "duels_p90": _norm_float("duels_p90") if not is_winger else None,
+            # Shared dimension stddev/p90
             "shot_generation_stddev": _norm_float("shot_generation_stddev"),
             "shot_generation_p90": _norm_float("shot_generation_p90"),
             "chance_creation_stddev": _norm_float("chance_creation_stddev"),
             "chance_creation_p90": _norm_float("chance_creation_p90"),
             "carrying_stddev": _norm_float("carrying_stddev"),
             "carrying_p90": _norm_float("carrying_p90"),
-            "duels_stddev": _norm_float("duels_stddev"),
-            "duels_p90": _norm_float("duels_p90"),
             "defensive_stddev": _norm_float("defensive_stddev"),
             "defensive_p90": _norm_float("defensive_p90"),
+            # Winger dimension stddev/p90
+            "productive_dribbling_stddev": _norm_float("productive_dribbling_stddev") if is_winger else None,
+            "productive_dribbling_p90": _norm_float("productive_dribbling_p90") if is_winger else None,
+            "goal_contribution_stddev": _norm_float("goal_contribution_stddev") if is_winger else None,
+            "goal_contribution_p90": _norm_float("goal_contribution_p90") if is_winger else None,
+            "presence_stddev": _norm_float("presence_stddev") if is_winger else None,
+            "presence_p90": _norm_float("presence_p90") if is_winger else None,
             "model_score_stddev": _norm_float("model_score_stddev"),
             "model_score_p90": _norm_float("model_score_p90"),
             "consistency_score": float(norm.get("consistency_score") or 0.0),
@@ -541,13 +575,9 @@ def compute_peer_ratings(
             v = norm.get(key)
             return float(v) if v is not None else 0.0
 
-        p["_dim_finishing"] = _dim("avg_finishing_raw")
-        p["_dim_shot_generation"] = _dim("avg_shot_generation_raw")
-        p["_dim_chance_creation"] = _dim("avg_chance_creation_raw")
-        p["_dim_team_function"] = _dim("avg_team_function_raw")
-        p["_dim_carrying"] = _dim("avg_carrying_raw")
-        p["_dim_duels"] = _dim("avg_duels_raw")
-        p["_dim_defensive"] = _dim("avg_defensive_raw")
+        # Extract dimension scores based on position
+        for d in dims:
+            p[f"_dim_{d}"] = _dim(f"avg_{d}_raw")
         players.append(p)
 
     # Group by (league_id, season) — rank within same league+season only
@@ -655,12 +685,10 @@ def compute_peer_ratings(
 
         # Dimension distribution vals — ranked only among players with match ratings
         if qualified:
-            carrying_vals = vals("_dim_carrying", qualified)
-            finishing_vals = vals("_dim_finishing", qualified)
-            shot_generation_vals = vals("_dim_shot_generation", qualified)
-            chance_creation_vals = vals("_dim_chance_creation", qualified)
-            duels_vals = vals("_dim_duels", qualified)
-            defensive_vals = vals("_dim_defensive", qualified)
+            # Build dimension vals dynamically based on position
+            dim_vals_map: dict[str, list[float]] = {}
+            for d in dims:
+                dim_vals_map[d] = vals(f"_dim_{d}", qualified)
 
             def zscore_lookup(
                 key: str,
@@ -688,25 +716,28 @@ def compute_peer_ratings(
                     if p.get(key) is not None
                 }
 
-            team_function_base_z = zscore_lookup("_dim_team_function", qualified)
-            xg_chain_support_z = zscore_lookup("xg_chain_per90", qualified)
-            xg_buildup_support_z = zscore_lookup("xg_buildup_per90", qualified)
-
+            # Team function blending — ST only
             team_function_blended_scores: dict[int, float] = {}
-            for p in qualified:
-                pid = p["player_id"]
-                base = team_function_base_z.get(pid, 0.0)
-                support_parts = []
-                if pid in xg_chain_support_z:
-                    support_parts.append(xg_chain_support_z[pid])
-                if pid in xg_buildup_support_z:
-                    support_parts.append(xg_buildup_support_z[pid])
-                if support_parts:
-                    support = sum(support_parts) / len(support_parts)
-                    team_function_blended_scores[pid] = base * 0.8 + support * 0.2
-                else:
-                    team_function_blended_scores[pid] = base
-            team_function_vals = sorted(team_function_blended_scores.values())
+            if not is_winger:
+                team_function_base_z = zscore_lookup("_dim_team_function", qualified)
+                xg_chain_support_z = zscore_lookup("xg_chain_per90", qualified)
+                xg_buildup_support_z = zscore_lookup("xg_buildup_per90", qualified)
+
+            if not is_winger:
+                for p in qualified:
+                    pid = p["player_id"]
+                    base = team_function_base_z.get(pid, 0.0)
+                    support_parts = []
+                    if pid in xg_chain_support_z:
+                        support_parts.append(xg_chain_support_z[pid])
+                    if pid in xg_buildup_support_z:
+                        support_parts.append(xg_buildup_support_z[pid])
+                    if support_parts:
+                        support = sum(support_parts) / len(support_parts)
+                        team_function_blended_scores[pid] = base * 0.8 + support * 0.2
+                    else:
+                        team_function_blended_scores[pid] = base
+                team_function_vals = sorted(team_function_blended_scores.values())
 
         # Stat percentiles — all players with sufficient minutes
         for p in stat_qualified:
@@ -921,34 +952,76 @@ def compute_peer_ratings(
             overall_vals = sorted(p["model_score"] for p in qualified)
 
             for p in qualified:
-                p["finishing_percentile"] = percentile_of(
-                    p["_dim_finishing"], finishing_vals
-                )
-                p["involvement_percentile"] = percentile_of(
-                    p["_dim_chance_creation"], chance_creation_vals
-                )
-                p["carrying_percentile"] = percentile_of(
-                    p["_dim_carrying"], carrying_vals
-                )
-                p["physical_percentile"] = percentile_of(p["_dim_duels"], duels_vals)
-                p["pressing_percentile"] = percentile_of(
-                    p["_dim_defensive"], defensive_vals
-                )
                 p["overall_percentile"] = percentile_of(p["model_score"], overall_vals)
-                p["shot_generation_percentile"] = percentile_of(
-                    p["_dim_shot_generation"], shot_generation_vals
-                )
-                p["chance_creation_percentile"] = percentile_of(
-                    p["_dim_chance_creation"], chance_creation_vals
-                )
-                p["team_function_percentile"] = percentile_of(
-                    team_function_blended_scores.get(p["player_id"], 0.0),
-                    team_function_vals,
-                )
-                p["duels_percentile"] = percentile_of(p["_dim_duels"], duels_vals)
-                p["defensive_percentile"] = percentile_of(
-                    p["_dim_defensive"], defensive_vals
-                )
+
+                if is_winger:
+                    # Winger dimension percentiles
+                    p["productive_dribbling_percentile"] = percentile_of(
+                        p["_dim_productive_dribbling"], dim_vals_map["productive_dribbling"]
+                    )
+                    p["chance_creation_percentile"] = percentile_of(
+                        p["_dim_chance_creation"], dim_vals_map["chance_creation"]
+                    )
+                    p["goal_contribution_percentile"] = percentile_of(
+                        p["_dim_goal_contribution"], dim_vals_map["goal_contribution"]
+                    )
+                    p["carrying_percentile"] = percentile_of(
+                        p["_dim_carrying"], dim_vals_map["carrying"]
+                    )
+                    p["shot_generation_percentile"] = percentile_of(
+                        p["_dim_shot_generation"], dim_vals_map["shot_generation"]
+                    )
+                    p["defensive_percentile"] = percentile_of(
+                        p["_dim_defensive"], dim_vals_map["defensive"]
+                    )
+                    p["presence_percentile"] = percentile_of(
+                        p["_dim_presence"], dim_vals_map["presence"]
+                    )
+                    # Map to legacy columns for compatibility
+                    p["involvement_percentile"] = p["chance_creation_percentile"]
+                    p["pressing_percentile"] = p["defensive_percentile"]
+                    # ST-only columns null for wingers
+                    p["finishing_percentile"] = None
+                    p["physical_percentile"] = None
+                    p["team_function_percentile"] = None
+                    p["duels_percentile"] = None
+                else:
+                    # ST dimension percentiles
+                    p["finishing_percentile"] = percentile_of(
+                        p["_dim_finishing"], dim_vals_map["finishing"]
+                    )
+                    p["involvement_percentile"] = percentile_of(
+                        p["_dim_chance_creation"], dim_vals_map["chance_creation"]
+                    )
+                    p["carrying_percentile"] = percentile_of(
+                        p["_dim_carrying"], dim_vals_map["carrying"]
+                    )
+                    p["physical_percentile"] = percentile_of(
+                        p["_dim_duels"], dim_vals_map["duels"]
+                    )
+                    p["pressing_percentile"] = percentile_of(
+                        p["_dim_defensive"], dim_vals_map["defensive"]
+                    )
+                    p["shot_generation_percentile"] = percentile_of(
+                        p["_dim_shot_generation"], dim_vals_map["shot_generation"]
+                    )
+                    p["chance_creation_percentile"] = percentile_of(
+                        p["_dim_chance_creation"], dim_vals_map["chance_creation"]
+                    )
+                    p["team_function_percentile"] = percentile_of(
+                        team_function_blended_scores.get(p["player_id"], 0.0),
+                        team_function_vals,
+                    )
+                    p["duels_percentile"] = percentile_of(
+                        p["_dim_duels"], dim_vals_map["duels"]
+                    )
+                    p["defensive_percentile"] = percentile_of(
+                        p["_dim_defensive"], dim_vals_map["defensive"]
+                    )
+                    # Winger-only columns null for ST
+                    p["productive_dribbling_percentile"] = None
+                    p["goal_contribution_percentile"] = None
+                    p["presence_percentile"] = None
 
         for p in group:
             if p["minutes_played"] < min_minutes:
@@ -1018,7 +1091,13 @@ def compute_peer_ratings(
                 model_score_confidence,
                 model_score_version,
                 aerial_win_rate_percentile,
-                ground_duel_win_rate_percentile
+                ground_duel_win_rate_percentile,
+                productive_dribbling_percentile,
+                goal_contribution_percentile,
+                presence_percentile,
+                productive_dribbling_stddev, productive_dribbling_p90,
+                goal_contribution_stddev, goal_contribution_p90,
+                presence_stddev, presence_p90
             ) VALUES (
                 %(player_id)s, %(league_id)s, %(season)s, %(position)s, %(peer_mode)s, %(position_scope)s,
                 %(matches_played)s, %(minutes_played)s, %(rated_minutes)s, %(avg_match_rating)s,
@@ -1081,7 +1160,13 @@ def compute_peer_ratings(
                 %(model_score_confidence)s,
                 %(model_score_version)s,
                 %(aerial_win_rate_percentile)s,
-                %(ground_duel_win_rate_percentile)s
+                %(ground_duel_win_rate_percentile)s,
+                %(productive_dribbling_percentile)s,
+                %(goal_contribution_percentile)s,
+                %(presence_percentile)s,
+                %(productive_dribbling_stddev)s, %(productive_dribbling_p90)s,
+                %(goal_contribution_stddev)s, %(goal_contribution_p90)s,
+                %(presence_stddev)s, %(presence_p90)s
             )
             ON CONFLICT (player_id, league_id, season, peer_mode, position_scope) DO UPDATE SET
                 position                          = EXCLUDED.position,
@@ -1213,7 +1298,16 @@ def compute_peer_ratings(
                 model_score_confidence             = EXCLUDED.model_score_confidence,
                 model_score_version                = EXCLUDED.model_score_version,
                 aerial_win_rate_percentile         = EXCLUDED.aerial_win_rate_percentile,
-                ground_duel_win_rate_percentile    = EXCLUDED.ground_duel_win_rate_percentile
+                ground_duel_win_rate_percentile    = EXCLUDED.ground_duel_win_rate_percentile,
+                productive_dribbling_percentile    = EXCLUDED.productive_dribbling_percentile,
+                goal_contribution_percentile       = EXCLUDED.goal_contribution_percentile,
+                presence_percentile                = EXCLUDED.presence_percentile,
+                productive_dribbling_stddev        = EXCLUDED.productive_dribbling_stddev,
+                productive_dribbling_p90           = EXCLUDED.productive_dribbling_p90,
+                goal_contribution_stddev           = EXCLUDED.goal_contribution_stddev,
+                goal_contribution_p90              = EXCLUDED.goal_contribution_p90,
+                presence_stddev                    = EXCLUDED.presence_stddev,
+                presence_p90                       = EXCLUDED.presence_p90
             """
 
     with db.conn.cursor() as cur:

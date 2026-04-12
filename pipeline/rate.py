@@ -9,6 +9,7 @@ from pipeline.db import DB
 from pipeline.logger import get_logger
 from pipeline.engine.config import load_position_config, get_available_positions
 from pipeline.engine.calculator import PlayerMatchStats, calculate_match_rating
+from pipeline.engine.w_calculator import calculate_winger_rating, W_CATEGORIES
 
 log = get_logger("rate")
 
@@ -82,9 +83,8 @@ def _normalize_position(position: str) -> str:
     # Only true centre-forwards / strikers map to ST
     if pos in {"ST", "CF", "SS"}:
         return "ST"
-    # Wingers are NOT strikers — they'll get their own config later
     if pos in {"LW", "RW", "LM", "RM"}:
-        return "WINGER"
+        return "W"
     # Attacking midfielders
     if pos in {"CAM", "AM"}:
         return "MID"
@@ -220,8 +220,33 @@ def rate_record(
         finishing_score=finishing_scores.get((match_id, player_id), 0.0),
     )
 
-    final_rating, scores = calculate_match_rating(stats, config)
+    sofascore_rating = float(record.get("sofascore_rating") or 0)
 
+    if position_key == "W":
+        final_rating, scores = calculate_winger_rating(stats, config)
+        return True, (
+            match_id,
+            player_id,
+            position_key,
+            scores.productive_dribbling_raw,
+            scores.productive_dribbling_norm,
+            scores.chance_creation_raw,
+            scores.chance_creation_norm,
+            scores.goal_contribution_raw,
+            scores.goal_contribution_norm,
+            scores.carrying_raw,
+            scores.carrying_norm,
+            scores.shot_generation_raw,
+            scores.shot_generation_norm,
+            scores.defensive_raw,
+            scores.defensive_norm,
+            scores.presence_raw,
+            scores.presence_norm,
+            final_rating,
+            sofascore_rating,
+        )
+
+    final_rating, scores = calculate_match_rating(stats, config)
     return True, (
         match_id,
         player_id,
@@ -241,7 +266,7 @@ def rate_record(
         scores.defensive_raw,
         scores.defensive_norm,
         final_rating,
-        float(record.get("sofascore_rating") or 0),
+        sofascore_rating,
     )
 
 
@@ -266,13 +291,20 @@ def main():
 
         finishing_scores = get_finishing_scores_batch(db, unrated)
 
-        insert_batch = []
+        st_batch = []
+        w_batch = []
+        batch_rated = 0
         for record in unrated:
             try:
                 success, rating_data = rate_record(record, configs, finishing_scores)
                 if success:
                     rated_count += 1
-                    insert_batch.append(rating_data)
+                    batch_rated += 1
+                    # rating_data[2] is position_key
+                    if rating_data[2] == "W":
+                        w_batch.append(rating_data)
+                    else:
+                        st_batch.append(rating_data)
                 else:
                     skipped_count += 1
             except Exception as e:
@@ -281,7 +313,7 @@ def main():
                 )
                 skipped_count += 1
 
-        if insert_batch:
+        if st_batch:
             try:
                 db.execute(
                     """INSERT INTO match_ratings
@@ -296,17 +328,40 @@ def main():
                         final_rating, sofascore_rating)
                        VALUES %s
                        ON CONFLICT (match_id, player_id) DO NOTHING""",
-                    (insert_batch,),
+                    (st_batch,),
                 )
             except Exception as e:
-                log.error(f"Batch insert failed ({len(insert_batch)} records): {e}")
-                rated_count -= len(insert_batch)
-                skipped_count += len(insert_batch)
+                log.error(f"ST batch insert failed ({len(st_batch)} records): {e}")
+                rated_count -= len(st_batch)
+                skipped_count += len(st_batch)
+
+        if w_batch:
+            try:
+                db.execute(
+                    """INSERT INTO match_ratings
+                       (match_id, player_id, position,
+                        productive_dribbling_raw, productive_dribbling_norm,
+                        chance_creation_raw, chance_creation_norm,
+                        goal_contribution_raw, goal_contribution_norm,
+                        carrying_raw, carrying_norm,
+                        shot_generation_raw, shot_generation_norm,
+                        defensive_raw, defensive_norm,
+                        presence_raw, presence_norm,
+                        final_rating, sofascore_rating)
+                       VALUES %s
+                       ON CONFLICT (match_id, player_id) DO NOTHING""",
+                    (w_batch,),
+                )
+            except Exception as e:
+                log.error(f"W batch insert failed ({len(w_batch)} records): {e}")
+                rated_count -= len(w_batch)
+                skipped_count += len(w_batch)
 
         last_id = unrated[-1]["id"]
         log.info(
             f"Processed batch ending at mps.id={last_id}: "
-            f"{len(insert_batch)} rated, {len(unrated) - len(insert_batch)} skipped"
+            f"{batch_rated} rated ({len(st_batch)} ST, {len(w_batch)} W), "
+            f"{len(unrated) - batch_rated} skipped"
         )
 
     db.close()

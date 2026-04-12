@@ -1,0 +1,110 @@
+{
+  "position": "W",
+  "version": 1,
+  "baseline": 6.5,
+  "weights": {
+    "productive_dribbling": 0.2,
+    "chance_creation": 0.25,
+    "goal_contribution": 0.22,
+    "carrying": 0.12,
+    "shot_generation": 0.08,
+    "defensive": 0.05,
+    "presence": 0.08
+  },
+  "constants": {
+    "goal_bonus": 0.5,
+    "penalty_goal_bonus": 0.35,
+    "assist_bonus": 0.45,
+    "xg_overperformance_bonus": 0.3,
+    "high_xa_bonus": 0.2,
+    "xa_high_threshold": 0.25,
+    "xg_low_threshold": 0.08,
+    "big_chance_created_reward": 0.15,
+    "key_pass_reward": 0.06,
+    "xa_threshold": 0.1,
+    "shot_volume_reward": 0.05,
+    "xg_volume_weight": 0.3,
+    "shot_on_target_weight": 0.12,
+    "shot_on_target_threshold": 0.4,
+    "self_created_shot_reward": 0.2,
+    "assisted_shot_reward": 0.05,
+    "dribble_completion_reward": 0.08,
+    "dribble_fail_penalty": 0.04,
+    "post_dribble_sca_reward": 0.25,
+    "productive_dribble_rate_weight": 0.3,
+    "dribble_volume_reward": 0.05,
+    "progressive_carry_reward": 0.0,
+    "carry_distance_weight": 0.0,
+    "possession_loss_rate_penalty": 0.08,
+    "error_lead_to_goal_penalty": 0.3,
+    "foul_won_reward": 0.1,
+    "penalty_won_reward": 0.35,
+    "passes_completed_reward": 0.04,
+    "pass_accuracy_threshold": 0.65,
+    "pass_accuracy_weight": 0.08,
+    "cross_accuracy_weight": 0.05,
+    "presence_factor": 0.002,
+    "tackle_reward": 0.08,
+    "interception_reward": 0.08,
+    "recovery_reward": 0.06,
+    "aerial_win_reward": 0.06,
+    "aerial_loss_penalty": 0.03,
+    "ground_duel_win_reward": 0.08,
+    "ground_duel_loss_penalty": 0.04,
+    "red_card_penalty": -1.0,
+    "yellow_card_penalty": -0.05
+  },
+  "season_score": {
+    "version": 2,
+    "weights": {
+      "quality": 0.7,
+      "consistency": 0.12,
+      "peak": 0.1,
+      "availability": 0.08
+    },
+    "consistency_threshold": 7.0,
+    "impact_threshold": 8.0,
+    "availability_target_minutes": 1800,
+    "availability_floor": 60
+  },
+  "display_only_stats": [
+    "hitWoodwork",
+    "totalCross",
+    "accurateCross"
+  ],
+  "normalization": {
+    "method": "median_iqr",
+    "calibrated_at": "2026-04-12",
+    "sample_size": 22536,
+    "midpoints": {
+      "productive_dribbling": {
+        "median": 0.095,
+        "scale": 0.43
+      },
+      "chance_creation": {
+        "median": 0.09,
+        "scale": 0.272
+      },
+      "goal_contribution": {
+        "median": -0.0019,
+        "scale": 0.1
+      },
+      "carrying": {
+        "median": 0.066,
+        "scale": 0.1153
+      },
+      "shot_generation": {
+        "median": 0.1123,
+        "scale": 0.247
+      },
+      "defensive": {
+        "median": 0.28,
+        "scale": 0.41
+      },
+      "presence": {
+        "median": 0.6347,
+        "scale": 0.6723
+      }
+    }
+  }
+}
