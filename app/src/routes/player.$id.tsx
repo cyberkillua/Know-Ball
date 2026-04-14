@@ -8022,6 +8022,33 @@ function PlayerProfilePage() {
                                 value: activePeerRating.presence_percentile,
                               },
                             ]
+                          : isCAM
+                          ? [
+                              {
+                                label: "Overall rating",
+                                value: activePeerRating.overall_percentile,
+                              },
+                              {
+                                label: "Chance Creation",
+                                value: activePeerRating.chance_creation_percentile,
+                              },
+                              {
+                                label: "Goal Threat",
+                                value: activePeerRating.goal_threat_percentile,
+                              },
+                              {
+                                label: "Team Function",
+                                value: activePeerRating.team_function_percentile,
+                              },
+                              {
+                                label: "Carrying",
+                                value: activePeerRating.carrying_percentile,
+                              },
+                              {
+                                label: "Defensive",
+                                value: activePeerRating.defensive_percentile,
+                              },
+                            ]
                           : [
                               {
                                 label: "Overall rating",

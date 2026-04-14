@@ -1,0 +1,85 @@
+{
+  "position": "CAM",
+  "version": 1,
+  "baseline": 6.5,
+  "weights": {
+    "chance_creation": 0.3,
+    "goal_threat": 0.25,
+    "team_function": 0.2,
+    "carrying": 0.2,
+    "defensive": 0.05
+  },
+  "constants": {
+    "goal_bonus": 0.5,
+    "penalty_goal_bonus": 0.35,
+    "assist_bonus": 0.5,
+    "big_chance_created_reward": 0.15,
+    "key_pass_reward": 0.06,
+    "high_xa_bonus": 0.2,
+    "xa_high_threshold": 0.4,
+    "shot_volume_reward": 0.05,
+    "xg_volume_weight": 0.3,
+    "shot_on_target_weight": 0.12,
+    "shot_on_target_threshold": 0.4,
+    "self_created_shot_reward": 0.2,
+    "assisted_shot_reward": 0.05,
+    "xg_overperformance_bonus": 0.3,
+    "dribble_rate_weight": 0.2,
+    "dribble_volume_reward": 0.1,
+    "possession_loss_rate_penalty": 0.1,
+    "error_lead_to_goal_penalty": 0.3,
+    "foul_won_reward": 0.1,
+    "penalty_won_reward": 0.35,
+    "passes_completed_reward": 0.05,
+    "presence_factor": 0.002,
+    "ghost_penalty": -0.7,
+    "ghost_min_minutes": 45,
+    "red_card_penalty": -1.0,
+    "yellow_card_penalty": -0.05
+  },
+  "season_score": {
+    "version": 2,
+    "weights": {
+      "quality": 0.7,
+      "consistency": 0.12,
+      "peak": 0.1,
+      "availability": 0.08
+    },
+    "consistency_threshold": 7.0,
+    "impact_threshold": 8.0,
+    "availability_target_minutes": 1800,
+    "availability_floor": 60
+  },
+  "display_only_stats": [
+    "hitWoodwork",
+    "totalCross",
+    "accurateCross"
+  ],
+  "normalization": {
+    "method": "median_iqr",
+    "calibrated_at": "2026-04-14",
+    "sample_size": 8277,
+    "midpoints": {
+      "chance_creation": {
+        "median": 0.101,
+        "scale": 0.279
+      },
+      "goal_threat": {
+        "median": 0.0696,
+        "scale": 0.2
+      },
+      "team_function": {
+        "median": 1.01,
+        "scale": 1.074
+      },
+      "carrying": {
+        "median": 0.1036,
+        "scale": 0.3836
+      },
+      "defensive": {
+        "median": 0.31,
+        "scale": 0.41
+      }
+    }
+  }
+}

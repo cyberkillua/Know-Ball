@@ -10,6 +10,7 @@ from pipeline.logger import get_logger
 from pipeline.engine.config import load_position_config, get_available_positions
 from pipeline.engine.calculator import PlayerMatchStats, calculate_match_rating
 from pipeline.engine.w_calculator import calculate_winger_rating, W_CATEGORIES
+from pipeline.engine.cam_calculator import calculate_cam_rating, CAM_CATEGORIES
 
 log = get_logger("rate")
 
@@ -87,7 +88,7 @@ def _normalize_position(position: str) -> str:
         return "W"
     # Attacking midfielders
     if pos in {"CAM", "AM"}:
-        return "MID"
+        return "CAM"
     # Central midfielders
     if pos in {"CM", "CDM", "DM"}:
         return "MID"
@@ -246,6 +247,26 @@ def rate_record(
             sofascore_rating,
         )
 
+    if position_key == "CAM":
+        final_rating, scores = calculate_cam_rating(stats, config)
+        return True, (
+            match_id,
+            player_id,
+            position_key,
+            scores.chance_creation_raw,
+            scores.chance_creation_norm,
+            scores.goal_threat_raw,
+            scores.goal_threat_norm,
+            scores.team_function_raw,
+            scores.team_function_norm,
+            scores.carrying_raw,
+            scores.carrying_norm,
+            scores.defensive_raw,
+            scores.defensive_norm,
+            final_rating,
+            sofascore_rating,
+        )
+
     final_rating, scores = calculate_match_rating(stats, config)
     return True, (
         match_id,
@@ -293,6 +314,7 @@ def main():
 
         st_batch = []
         w_batch = []
+        cam_batch = []
         batch_rated = 0
         for record in unrated:
             try:
@@ -303,6 +325,8 @@ def main():
                     # rating_data[2] is position_key
                     if rating_data[2] == "W":
                         w_batch.append(rating_data)
+                    elif rating_data[2] == "CAM":
+                        cam_batch.append(rating_data)
                     else:
                         st_batch.append(rating_data)
                 else:
@@ -357,10 +381,30 @@ def main():
                 rated_count -= len(w_batch)
                 skipped_count += len(w_batch)
 
+        if cam_batch:
+            try:
+                db.execute(
+                    """INSERT INTO match_ratings
+                       (match_id, player_id, position,
+                        chance_creation_raw, chance_creation_norm,
+                        goal_threat_raw, goal_threat_norm,
+                        team_function_raw, team_function_norm,
+                        carrying_raw, carrying_norm,
+                        defensive_raw, defensive_norm,
+                        final_rating, sofascore_rating)
+                       VALUES %s
+                       ON CONFLICT (match_id, player_id) DO NOTHING""",
+                    (cam_batch,),
+                )
+            except Exception as e:
+                log.error(f"CAM batch insert failed ({len(cam_batch)} records): {e}")
+                rated_count -= len(cam_batch)
+                skipped_count += len(cam_batch)
+
         last_id = unrated[-1]["id"]
         log.info(
             f"Processed batch ending at mps.id={last_id}: "
-            f"{batch_rated} rated ({len(st_batch)} ST, {len(w_batch)} W), "
+            f"{batch_rated} rated ({len(st_batch)} ST, {len(w_batch)} W, {len(cam_batch)} CAM), "
             f"{len(unrated) - batch_rated} skipped"
         )
 

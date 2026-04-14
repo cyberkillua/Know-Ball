@@ -7,6 +7,7 @@ touched by a plain reset — only derived/computed tables are cleared.
 Usage:
     python -m pipeline.reset                  # Clear match_ratings + peer_ratings (all leagues)
     python -m pipeline.reset --league 47      # Clear computed data for one league only
+    python -m pipeline.reset --position CAM   # Clear match_ratings + peer_ratings for one position only
     python -m pipeline.reset --full           # Clear everything including scraped stats, matches, players, teams
 """
 
@@ -21,9 +22,21 @@ def main():
     parser = argparse.ArgumentParser(description="Reset Know Ball data")
     parser.add_argument("--full", action="store_true", help="Clear all data (ratings, stats, matches, players, teams)")
     parser.add_argument("--league", type=int, help="Only clear data for a specific FotMob league ID")
+    parser.add_argument("--position", type=str, help="Only clear match_ratings + peer_ratings for a specific position (e.g. CAM, W, ST)")
     args = parser.parse_args()
 
     db = DB()
+
+    if args.position:
+        pos = args.position.upper()
+        log.info(f"Clearing match_ratings + peer_ratings for position={pos}")
+        db.execute("DELETE FROM match_ratings WHERE position = %s", (pos,))
+        log.info(f"  Cleared match_ratings ({pos})")
+        db.execute("DELETE FROM peer_ratings WHERE position = %s", (pos,))
+        log.info(f"  Cleared peer_ratings ({pos})")
+        db.close()
+        log.info("Reset complete")
+        return
 
     if args.league:
         # Get internal league ID

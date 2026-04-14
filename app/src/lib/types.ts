@@ -249,6 +249,8 @@ export interface PeerRating {
   productive_dribbling_percentile: number | null
   goal_contribution_percentile: number | null
   presence_percentile: number | null
+  // CAM dimension percentiles
+  goal_threat_percentile: number | null
   // Consistency & peak (per-match stddev and 90th-percentile of raw scores)
   productive_dribbling_stddev: number | null
   productive_dribbling_p90: number | null
@@ -256,6 +258,8 @@ export interface PeerRating {
   goal_contribution_p90: number | null
   presence_stddev: number | null
   presence_p90: number | null
+  goal_threat_stddev: number | null
+  goal_threat_p90: number | null
   finishing_stddev: number | null
   finishing_p90: number | null
   shot_generation_stddev: number | null
