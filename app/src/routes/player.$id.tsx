@@ -311,7 +311,7 @@ function PlayerProfilePage() {
     player.position === "RB" ||
     player.position === "LWB" ||
     player.position === "RWB";
-  const isSupported = isST || isCAM || isWinger || isDefensiveWinger;
+  const isSupported = isST || isCAM || isWinger || isDefensiveWinger || isCM;
 
   // Passing computed values
   const passesCompleted = stats ? (stats.passes_completed ?? 0) : 0;
@@ -8047,6 +8047,33 @@ function PlayerProfilePage() {
                               {
                                 label: "Defensive",
                                 value: activePeerRating.defensive_percentile,
+                              },
+                            ]
+                          : isCM
+                          ? [
+                              {
+                                label: "Overall rating",
+                                value: activePeerRating.overall_percentile,
+                              },
+                              {
+                                label: "Passing Progression",
+                                value: activePeerRating.passing_progression_percentile,
+                              },
+                              {
+                                label: "Carrying",
+                                value: activePeerRating.carrying_percentile,
+                              },
+                              {
+                                label: "Chance Creation",
+                                value: activePeerRating.chance_creation_percentile,
+                              },
+                              {
+                                label: "Defensive",
+                                value: activePeerRating.defensive_percentile,
+                              },
+                              {
+                                label: "Goal Threat",
+                                value: activePeerRating.goal_threat_percentile,
                               },
                             ]
                           : [

@@ -12,6 +12,7 @@ import {
 
 interface Props {
   ratings: { final_rating: number }[]
+  position?: string
 }
 
 const BUCKETS = [
@@ -24,7 +25,7 @@ const BUCKETS = [
   { label: '9', min: 9, max: 10.1, color: '#10b981' },
 ]
 
-export default function RatingDistributionChart({ ratings }: Props) {
+export default function RatingDistributionChart({ ratings, position }: Props) {
   const data = BUCKETS.map((b) => ({
     name: b.label,
     count: ratings.filter((r) => Number(r.final_rating) >= b.min && Number(r.final_rating) < b.max).length,
@@ -68,7 +69,7 @@ export default function RatingDistributionChart({ ratings }: Props) {
         </BarChart>
       </ResponsiveContainer>
       <p className="mt-1 text-center text-[11px] text-muted-foreground">
-        ST only &middot; 6.5–7 = average &middot; {ratings.length} rated
+        {position ?? 'ST'} only &middot; 6.5–7 = average &middot; {ratings.length} rated
       </p>
     </div>
   )

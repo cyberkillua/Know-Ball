@@ -20,9 +20,19 @@ log = get_logger("reset")
 
 def main():
     parser = argparse.ArgumentParser(description="Reset Know Ball data")
-    parser.add_argument("--full", action="store_true", help="Clear all data (ratings, stats, matches, players, teams)")
-    parser.add_argument("--league", type=int, help="Only clear data for a specific FotMob league ID")
-    parser.add_argument("--position", type=str, help="Only clear match_ratings + peer_ratings for a specific position (e.g. CAM, W, ST)")
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help="Clear all data (ratings, stats, matches, players, teams)",
+    )
+    parser.add_argument(
+        "--league", type=int, help="Only clear data for a specific FotMob league ID"
+    )
+    parser.add_argument(
+        "--position",
+        type=str,
+        help="Only clear match_ratings + peer_ratings for a specific position (e.g. CAM, W, ST)",
+    )
     args = parser.parse_args()
 
     db = DB()
@@ -40,7 +50,9 @@ def main():
 
     if args.league:
         # Get internal league ID
-        row = db.query_one("SELECT id, name FROM leagues WHERE fotmob_id = %s", (args.league,))
+        row = db.query_one(
+            "SELECT id, name FROM leagues WHERE fotmob_id = %s", (args.league,)
+        )
         if not row:
             log.error(f"League with fotmob_id {args.league} not found")
             return
@@ -50,14 +62,20 @@ def main():
         if args.full:
             log.info(f"Full reset for {lname} (league_id={lid})")
             # Ratings for matches in this league
-            db.execute("""
+            db.execute(
+                """
                 DELETE FROM match_ratings WHERE match_id IN (SELECT id FROM matches WHERE league_id = %s)
-            """, (lid,))
+            """,
+                (lid,),
+            )
             log.info("  Cleared match_ratings")
             # Player stats
-            db.execute("""
+            db.execute(
+                """
                 DELETE FROM match_player_stats WHERE match_id IN (SELECT id FROM matches WHERE league_id = %s)
-            """, (lid,))
+            """,
+                (lid,),
+            )
             log.info("  Cleared match_player_stats")
             # Peer ratings
             db.execute("DELETE FROM peer_ratings WHERE league_id = %s", (lid,))
@@ -67,16 +85,27 @@ def main():
             log.info("  Cleared matches")
         else:
             log.info(f"Clearing computed data for {lname}")
-            db.execute("""
+            db.execute(
+                """
                 DELETE FROM match_ratings WHERE match_id IN (SELECT id FROM matches WHERE league_id = %s)
-            """, (lid,))
+            """,
+                (lid,),
+            )
             log.info("  Cleared match_ratings")
             db.execute("DELETE FROM peer_ratings WHERE league_id = %s", (lid,))
             log.info("  Cleared peer_ratings")
     else:
         if args.full:
             log.info("Full reset — clearing ALL data")
-            for table in ["match_ratings", "match_player_stats", "peer_ratings", "shots", "matches", "players", "teams"]:
+            for table in [
+                "match_ratings",
+                "match_player_stats",
+                "peer_ratings",
+                "shots",
+                "matches",
+                "players",
+                "teams",
+            ]:
                 db.execute(f"TRUNCATE {table} CASCADE")
                 log.info(f"  Truncated {table}")
         else:

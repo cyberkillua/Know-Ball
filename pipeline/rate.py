@@ -11,6 +11,7 @@ from pipeline.engine.config import load_position_config, get_available_positions
 from pipeline.engine.calculator import PlayerMatchStats, calculate_match_rating
 from pipeline.engine.w_calculator import calculate_winger_rating, W_CATEGORIES
 from pipeline.engine.cam_calculator import calculate_cam_rating, CAM_CATEGORIES
+from pipeline.engine.cm_calculator import calculate_cm_rating, CM_CATEGORIES
 
 log = get_logger("rate")
 
@@ -89,9 +90,9 @@ def _normalize_position(position: str) -> str:
     # Attacking midfielders
     if pos in {"CAM", "AM"}:
         return "CAM"
-    # Central midfielders
+    # Central midfielders — both box-to-box CMs and defensive mids use the CM config
     if pos in {"CM", "CDM", "DM"}:
-        return "MID"
+        return "CM"
     # Defenders
     if pos in {"CB", "LB", "RB", "LWB", "RWB"}:
         return "DEF"
@@ -107,12 +108,12 @@ def _normalize_position(position: str) -> str:
     if pos == "1":
         return "DEF"
     if pos == "2":
-        return "MID"
+        return "CM"
     # Broad Sofascore profile categories (single-letter)
     if pos == "F":
         return "ST"
     if pos == "M":
-        return "MID"
+        return "CM"
     if pos == "D":
         return "DEF"
     if pos == "G":
@@ -121,7 +122,7 @@ def _normalize_position(position: str) -> str:
     if pos in {"FW", "FORWARD", "STRIKER"}:
         return "ST"
     if pos in {"MIDFIELDER"}:
-        return "MID"
+        return "CM"
     if pos in {"DEFENDER"}:
         return "DEF"
     if pos in {"GOALKEEPER"}:
@@ -247,6 +248,26 @@ def rate_record(
             sofascore_rating,
         )
 
+    if position_key == "CM":
+        final_rating, scores = calculate_cm_rating(stats, config)
+        return True, (
+            match_id,
+            player_id,
+            position_key,
+            scores.passing_progression_raw,
+            scores.passing_progression_norm,
+            scores.carrying_raw,
+            scores.carrying_norm,
+            scores.chance_creation_raw,
+            scores.chance_creation_norm,
+            scores.defensive_raw,
+            scores.defensive_norm,
+            scores.goal_threat_raw,
+            scores.goal_threat_norm,
+            final_rating,
+            sofascore_rating,
+        )
+
     if position_key == "CAM":
         final_rating, scores = calculate_cam_rating(stats, config)
         return True, (
@@ -315,6 +336,7 @@ def main():
         st_batch = []
         w_batch = []
         cam_batch = []
+        cm_batch = []
         batch_rated = 0
         for record in unrated:
             try:
@@ -327,6 +349,8 @@ def main():
                         w_batch.append(rating_data)
                     elif rating_data[2] == "CAM":
                         cam_batch.append(rating_data)
+                    elif rating_data[2] == "CM":
+                        cm_batch.append(rating_data)
                     else:
                         st_batch.append(rating_data)
                 else:
@@ -401,10 +425,31 @@ def main():
                 rated_count -= len(cam_batch)
                 skipped_count += len(cam_batch)
 
+        if cm_batch:
+            try:
+                db.execute(
+                    """INSERT INTO match_ratings
+                       (match_id, player_id, position,
+                        passing_progression_raw, passing_progression_norm,
+                        carrying_raw, carrying_norm,
+                        chance_creation_raw, chance_creation_norm,
+                        defensive_raw, defensive_norm,
+                        goal_threat_raw, goal_threat_norm,
+                        final_rating, sofascore_rating)
+                       VALUES %s
+                       ON CONFLICT (match_id, player_id) DO NOTHING""",
+                    (cm_batch,),
+                )
+            except Exception as e:
+                log.error(f"CM batch insert failed ({len(cm_batch)} records): {e}")
+                rated_count -= len(cm_batch)
+                skipped_count += len(cm_batch)
+
         last_id = unrated[-1]["id"]
         log.info(
             f"Processed batch ending at mps.id={last_id}: "
-            f"{batch_rated} rated ({len(st_batch)} ST, {len(w_batch)} W, {len(cam_batch)} CAM), "
+            f"{batch_rated} rated ({len(st_batch)} ST, {len(w_batch)} W, "
+            f"{len(cam_batch)} CAM, {len(cm_batch)} CM), "
             f"{len(unrated) - batch_rated} skipped"
         )
 

@@ -50,6 +50,13 @@ POSITION_DIMENSIONS: dict[str, list[str]] = {
         "carrying",
         "defensive",
     ],
+    "CM": [
+        "passing_progression",
+        "carrying",
+        "chance_creation",
+        "defensive",
+        "goal_threat",
+    ],
 }
 
 
@@ -81,11 +88,14 @@ def main():
     log.info(f"Fetching {position} raw scores from match_ratings")
 
     cols = ", ".join(f"{d}_raw" for d in dimensions)
-    rows = db.query(f"""
+    rows = db.query(
+        f"""
         SELECT {cols}
         FROM match_ratings
         WHERE position = %s
-    """, (position,))
+    """,
+        (position,),
+    )
     db.close()
 
     if not rows:
@@ -105,8 +115,10 @@ def main():
     print(f"\nCalibrated midpoints for {position}:")
     print("-" * 58)
     for cat, stats in midpoints.items():
-        print(f"  {cat:24s}  median={stats['median']:+.4f}  scale={stats['scale']:.4f}"
-              f"  (n={stats['n']}, range=[{stats['min']:.3f}, {stats['max']:.3f}])")
+        print(
+            f"  {cat:24s}  median={stats['median']:+.4f}  scale={stats['scale']:.4f}"
+            f"  (n={stats['n']}, range=[{stats['min']:.3f}, {stats['max']:.3f}])"
+        )
     print()
 
     # JSON block ready to paste / write
@@ -117,6 +129,7 @@ def main():
 
     if write:
         import datetime
+
         config = json.loads(config_path.read_text())
         config["normalization"]["midpoints"] = midpoints_for_config
         config["normalization"]["calibrated_at"] = datetime.date.today().isoformat()

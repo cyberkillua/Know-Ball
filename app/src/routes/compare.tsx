@@ -479,9 +479,11 @@ function PercentileComparison({
 }
 
 const POSITION_LABELS: Record<string, string> = {
-  ST: 'Strikers', CF: 'Centre-Forwards', LW: 'Left Wingers', RW: 'Right Wingers',
+  ST: 'Strikers', CF: 'Centre-Forwards', LW: 'Wingers', RW: 'Wingers',
+  WINGER: 'Wingers', LM: 'Left Midfielders', RM: 'Right Midfielders',
   CAM: 'Attacking Midfielders', CM: 'Central Midfielders', CDM: 'Defensive Midfielders',
-  LB: 'Left Backs', RB: 'Right Backs', CB: 'Centre-Backs', GK: 'Goalkeepers',
+  LB: 'Left Backs', RB: 'Right Backs', LWB: 'Left Wing-Backs', RWB: 'Right Wing-Backs',
+  CB: 'Centre-Backs', DEF: 'Defenders', GK: 'Goalkeepers',
 }
 
 function rateColor(val: number, low: number, high: number) {
