@@ -77,24 +77,24 @@
   ],
   "normalization": {
     "method": "median_iqr",
-    "calibrated_at": "2026-04-17",
-    "sample_size": 36083,
+    "calibrated_at": "2026-04-22",
+    "sample_size": 44246,
     "midpoints": {
       "volume_passing": {
-        "median": 1.0254,
-        "scale": 1.0621
+        "median": 1.029,
+        "scale": 1.0627
       },
       "carrying": {
-        "median": 0.0112,
-        "scale": 0.2094
+        "median": 0.0119,
+        "scale": 0.223
       },
       "chance_creation": {
-        "median": 0.05,
-        "scale": 0.128
+        "median": 0.048,
+        "scale": 0.119
       },
       "defensive": {
-        "median": 0.572,
-        "scale": 0.642
+        "median": 0.582,
+        "scale": 0.65
       },
       "goal_threat": {
         "median": 0.0,
