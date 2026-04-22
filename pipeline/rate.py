@@ -254,8 +254,8 @@ def rate_record(
             match_id,
             player_id,
             position_key,
-            scores.passing_progression_raw,
-            scores.passing_progression_norm,
+            scores.volume_passing_raw,
+            scores.volume_passing_norm,
             scores.carrying_raw,
             scores.carrying_norm,
             scores.chance_creation_raw,
@@ -430,7 +430,7 @@ def main():
                 db.execute(
                     """INSERT INTO match_ratings
                        (match_id, player_id, position,
-                        passing_progression_raw, passing_progression_norm,
+                        volume_passing_raw, volume_passing_norm,
                         carrying_raw, carrying_norm,
                         chance_creation_raw, chance_creation_norm,
                         defensive_raw, defensive_norm,

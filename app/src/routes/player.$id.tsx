@@ -192,24 +192,31 @@ function PlayerProfilePage() {
 
   // Load player info and available seasons
   useEffect(() => {
+    let isCurrent = true;
     const playerId = Number(id);
+    setSeason(""); // reset stale season from previous player before fetching
     setLoading(true);
     Promise.all([
       getPlayer({ data: { playerId } }),
       getPlayerSeasons({ data: { playerId } }),
     ]).then(([p, s]) => {
+      if (!isCurrent) return;
       setPlayer(p);
       setSeasons(s);
       if (s.length > 0) {
         const first = s[0];
         setSeason(`${first.league_id}|${first.season}`);
+      } else {
+        setLoading(false);
       }
     });
+    return () => { isCurrent = false; };
   }, [id]);
 
   // Load season-specific data whenever the selected season changes
   useEffect(() => {
     if (!season) return;
+    let isCurrent = true;
     const playerId = Number(id);
     const [leagueId, seasonStr] = season.split("|");
     const leagueIdNum = Number(leagueId);
@@ -245,6 +252,7 @@ function PlayerProfilePage() {
       }),
       getPlayerUnderstat({ data: { playerId, season: seasonStr } }),
     ]).then(([r, pr, apr, st, sh, xgd, ustat]) => {
+      if (!isCurrent) return;
       const leaguePeerResponse = pr as PlayerPeerRatingResponse;
       const allPeerResponse = apr as PlayerPeerRatingResponse;
       setRatings(r);
@@ -258,6 +266,7 @@ function PlayerProfilePage() {
       setLoading(false);
       setSeasonLoading(false);
     });
+    return () => { isCurrent = false; };
   }, [id, season]);
 
   if (loading) {
@@ -363,11 +372,11 @@ function PlayerProfilePage() {
                         {player.position}
                       </span>
                     )}
-                    {player.team && (
+                    {(stats?.team_name || (player.team as any)?.name) && (
                       <>
                         <span className="text-muted-foreground text-xs">·</span>
                         <span className="text-sm text-muted-foreground">
-                          {(player.team as any).name}
+                          {stats?.team_name ?? (player.team as any).name}
                         </span>
                       </>
                     )}
@@ -384,11 +393,11 @@ function PlayerProfilePage() {
                         <span>{player.nationality}</span>
                       </>
                     )}
-                    {(player.team as any)?.league?.name && (
+                    {(seasons.find((s) => `${s.league_id}|${s.season}` === season)?.league_name ?? (player.team as any)?.league?.name) && (
                       <>
                         {(calculateAge(player.date_of_birth) != null ||
                           player.nationality) && <span>·</span>}
-                        <span>{(player.team as any).league.name}</span>
+                        <span>{seasons.find((s) => `${s.league_id}|${s.season}` === season)?.league_name ?? (player.team as any)?.league?.name}</span>
                       </>
                     )}
                   </div>
@@ -8056,8 +8065,8 @@ function PlayerProfilePage() {
                                 value: activePeerRating.overall_percentile,
                               },
                               {
-                                label: "Passing Progression",
-                                value: activePeerRating.passing_progression_percentile,
+                                label: "Volume Passing",
+                                value: activePeerRating.volume_passing_percentile,
                               },
                               {
                                 label: "Carrying",

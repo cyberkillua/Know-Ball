@@ -231,8 +231,6 @@ def search_players(
         >>> players[0]['player_name']
         'Marcus Thuram'
     """
-    name_param = f"%{name}%"
-
     if league_id and season:
         return db.query(
             """
@@ -246,33 +244,35 @@ def search_players(
             FROM players p
             LEFT JOIN teams t ON t.id = p.current_team_id
             CROSS JOIN leagues l
-            LEFT JOIN peer_ratings pr ON pr.player_id = p.id 
+            LEFT JOIN peer_ratings pr ON pr.player_id = p.id
                 AND pr.league_id = l.id
                 AND pr.season = %s
                 AND pr.peer_mode = 'dominant'
                 AND pr.position_scope = ''
-            WHERE p.name ILIKE %s
+            WHERE (unaccent(p.name) ILIKE '%%' || unaccent(%s) || '%%'
+               OR similarity(unaccent(lower(p.name)), unaccent(lower(%s))) > 0.3)
             AND l.id = %s
             ORDER BY p.name
             LIMIT %s
         """,
-            (season, name_param, league_id, limit),
+            (season, name, name, league_id, limit),
         )
     else:
         return db.query(
             """
-            SELECT 
+            SELECT
                 p.id as player_id,
                 p.name as player_name,
                 t.name as current_team,
                 p.position
             FROM players p
             LEFT JOIN teams t ON t.id = p.current_team_id
-            WHERE p.name ILIKE %s
-            ORDER BY p.name
+            WHERE unaccent(p.name) ILIKE '%%' || unaccent(%s) || '%%'
+               OR similarity(unaccent(lower(p.name)), unaccent(lower(%s))) > 0.3
+            ORDER BY similarity(unaccent(lower(p.name)), unaccent(lower(%s))) DESC
             LIMIT %s
         """,
-            (name_param, limit),
+            (name, name, name, limit),
         )
 
 

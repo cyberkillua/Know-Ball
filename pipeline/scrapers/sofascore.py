@@ -566,6 +566,12 @@ def extract_player_stats(
         team_data = lineups.get(side, {})
         formation = team_data.get("formation", "")
         team_players = team_data.get("players", [])
+        # Use match_info to get authoritative team ID — player.get("teamId") is
+        # unreliable (often None or a stale transfer ID).
+        if match_info:
+            side_team_id = match_info["home_team_id"] if side == "home" else match_info["away_team_id"]
+        else:
+            side_team_id = None
 
         starters = [p for p in team_players if not p.get("substitute", False)]
         subs = [p for p in team_players if p.get("substitute", False)]
@@ -615,7 +621,7 @@ def extract_player_stats(
             player_data = {
                 "sofascore_player_id": pid,
                 "name": player_info.get("name", ""),
-                "team_id": player.get("teamId"),
+                "team_id": side_team_id if side_team_id is not None else player.get("teamId"),
                 "basic_position": player.get("position", "M"),
                 "minutes_played": mins,
                 "goals": stats.get("goals", 0) or 0,

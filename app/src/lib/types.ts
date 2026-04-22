@@ -309,6 +309,8 @@ export interface PlayerUnderstat {
 }
 
 export interface PlayerStats {
+  team_name: string | null
+  team_id: number | null
   matches: number
   starts: number
   sub_appearances: number

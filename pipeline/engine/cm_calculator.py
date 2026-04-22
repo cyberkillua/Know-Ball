@@ -5,16 +5,17 @@ Scoring mechanism differs from ST/CAM/W: instead of a flat weighted sum,
 CM uses "elite buckets". A bucket counts at full weight only when the player
 performs in the top 25% of the CM population for that bucket. Mid-tier buckets
 (25-75th percentile) count at a reduced factor. Poor buckets (bottom 25%) apply
-a flat penalty. A minimum number of buckets always contribute at full weight.
+a penalty scaled by that bucket's weight. A minimum number of buckets always
+contribute at full weight.
 
 The rationale: there is no single "correct" way to play CM. Rodri and Bellingham
 are both elite but dominate different buckets. Averaging all dimensions equally
 would produce a mediocre rating for each.
 
-Dimensions: passing_progression, carrying, chance_creation, defensive, goal_threat.
+Dimensions: volume_passing, carrying, chance_creation, defensive, goal_threat.
 
 Progressive passes, passes-into-final-third, progressive carries, and carry distance
-are not available at match level in the current dataset. passing_progression uses
+are not available at match level in the current dataset. volume_passing uses
 passes_completed volume + pass-accuracy gate; carrying uses successful_dribbles +
 foul/penalty wins as proxies. These substitutions mirror what ST/CAM/W already do.
 """
@@ -28,25 +29,26 @@ from pipeline.engine.calculator import PlayerMatchStats, normalize_score
 class CMCategoryScores:
     """Raw and normalized scores per CM bucket."""
 
-    passing_progression_raw: float = 0.0
+    volume_passing_raw: float = 0.0
     carrying_raw: float = 0.0
     chance_creation_raw: float = 0.0
     defensive_raw: float = 0.0
     goal_threat_raw: float = 0.0
-    passing_progression_norm: float = 0.0
+    volume_passing_norm: float = 0.0
     carrying_norm: float = 0.0
     chance_creation_norm: float = 0.0
     defensive_norm: float = 0.0
     goal_threat_norm: float = 0.0
 
 
-def calc_passing_progression(stats: PlayerMatchStats, constants: dict) -> float:
+def calc_volume_passing(stats: PlayerMatchStats, constants: dict) -> float:
     """
-    Passing Progression — moving the ball forward with precision.
+    Volume Passing — completed pass volume gated by accuracy.
 
-    Progressive passes and passes-into-final-third aren't in the match-level data
-    yet, so this bucket currently leans on completed pass volume plus a strict
-    accuracy gate (threshold 0.75 by default). CMs are expected to be precise.
+    Not a progression measure — no progressive-pass or passes-into-final-third
+    data at match level yet. Rewards CMs who complete many passes at acceptable
+    accuracy; blind to direction or line-breaking value. Weighted lower than
+    other buckets for that reason. Rename + reweight once progression data lands.
 
     Raw = passes_completed * passes_completed_reward
         + (pass_accuracy - pass_accuracy_threshold) * pass_accuracy_weight
@@ -179,7 +181,7 @@ def calc_goal_threat(stats: PlayerMatchStats, constants: dict) -> float:
 
 
 CM_CATEGORIES = [
-    "passing_progression",
+    "volume_passing",
     "carrying",
     "chance_creation",
     "defensive",
@@ -187,7 +189,7 @@ CM_CATEGORIES = [
 ]
 
 _CALC_MAP = {
-    "passing_progression": calc_passing_progression,
+    "volume_passing": calc_volume_passing,
     "carrying": calc_carrying,
     "chance_creation": calc_chance_creation,
     "defensive": calc_defensive,
@@ -207,8 +209,9 @@ def _score_elite_buckets(
 
     Classify each bucket as elite / mid / poor against p25/p75 raw thresholds
     from the CM population. Elite buckets contribute at full weight. Mid buckets
-    contribute at non_elite_weight_factor (default 0.4). Poor buckets apply a flat
-    poor_bucket_penalty in place of any weighted contribution.
+    contribute at non_elite_weight_factor (default 0.4). Poor buckets apply
+    poor_bucket_penalty scaled by that bucket's weight in place of any weighted
+    contribution.
 
     If fewer than min_buckets are elite, promote the highest-normalized mid
     buckets up to the floor. Poor buckets are never promoted — a player having
@@ -258,7 +261,7 @@ def _score_elite_buckets(
         elif tier == "mid":
             weighted_sum += w * n * mid_factor
         else:  # poor
-            poor_adjustment += poor_penalty
+            poor_adjustment += poor_penalty * w
 
     return weighted_sum + poor_adjustment, tiers
 
@@ -318,7 +321,9 @@ def calculate_cm_rating(
         stats.error_lead_to_goal * constants.get("error_lead_to_goal_penalty", 0.3) * -1
     )  # stored as positive magnitude, subtract
     redcard_penalty = stats.red_cards * constants.get("red_card_penalty", -1.0)
-    yellowcard_penalty = constants.get("yellow_card_penalty", -0.05)
+    yellowcard_penalty = stats.yellow_cards * constants.get(
+        "yellow_card_penalty", -0.05
+    )
 
     # Ghost penalty — CM played but barely touched anything meaningful
     ghost_pen = 0.0

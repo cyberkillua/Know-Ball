@@ -336,9 +336,12 @@ export const getPlayerStats = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     return queryOne(
       `WITH player_team AS (
-        SELECT p.id, p.current_team_id
-        FROM players p
-        WHERE p.id = $1
+        SELECT mps.team_id, COUNT(*) as cnt
+        FROM match_player_stats mps
+        JOIN matches m ON m.id = mps.match_id
+        WHERE mps.player_id = $1 AND m.season = $2 AND m.league_id = $3
+        GROUP BY mps.team_id
+        ORDER BY cnt DESC LIMIT 1
       ),
       team_matches AS (
         SELECT COUNT(*)::int as match_count, COUNT(*)::int * 90 as minutes_available
@@ -346,10 +349,12 @@ export const getPlayerStats = createServerFn({ method: 'GET' })
         WHERE m.season = $2
           AND m.league_id = $3
           AND m.home_score IS NOT NULL
-          AND (m.home_team_id = (SELECT current_team_id FROM player_team)
-               OR m.away_team_id = (SELECT current_team_id FROM player_team))
+          AND (m.home_team_id = (SELECT team_id FROM player_team)
+               OR m.away_team_id = (SELECT team_id FROM player_team))
       )
       SELECT
+          (SELECT t.name FROM teams t WHERE t.id = (SELECT team_id FROM player_team)) as team_name,
+          (SELECT team_id FROM player_team) as team_id,
           COUNT(*)::int as matches,
           COUNT(CASE WHEN mps.minutes_played >= 45 THEN 1 END)::int as starts,
           COUNT(CASE WHEN mps.minutes_played < 45 THEN 1 END)::int as sub_appearances,
@@ -494,9 +499,11 @@ export const searchPlayers = createServerFn({ method: 'GET' })
               json_build_object('id', t.id, 'name', t.name, 'league_id', t.league_id) as team
        FROM players p
        LEFT JOIN teams t ON t.id = p.current_team_id
-       WHERE p.name ILIKE $1
+       WHERE unaccent(p.name) ILIKE '%' || unaccent($1) || '%'
+          OR similarity(unaccent(lower(p.name)), unaccent(lower($1))) > 0.3
+       ORDER BY similarity(unaccent(lower(p.name)), unaccent(lower($1))) DESC
        LIMIT 10`,
-      [`%${data.query}%`],
+      [data.query],
     )
   })
 
@@ -541,8 +548,9 @@ export const getLeaguePlayers = createServerFn({ method: 'GET' })
       params.push(data.clubId)
     }
     if (data.search) {
-      searchFilter = ` AND p.name ILIKE $${params.length + 1}`
-      params.push(`%${data.search}%`)
+      const idx = params.length + 1
+      searchFilter = ` AND (unaccent(p.name) ILIKE '%' || unaccent($${idx}) || '%' OR similarity(unaccent(lower(p.name)), unaccent(lower($${idx}))) > 0.3)`
+      params.push(data.search)
     }
 
     return query<LeaguePlayer>(

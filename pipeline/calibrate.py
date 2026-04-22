@@ -51,7 +51,7 @@ POSITION_DIMENSIONS: dict[str, list[str]] = {
         "defensive",
     ],
     "CM": [
-        "passing_progression",
+        "volume_passing",
         "carrying",
         "chance_creation",
         "defensive",

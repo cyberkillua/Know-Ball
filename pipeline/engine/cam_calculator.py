@@ -177,7 +177,13 @@ def calc_defensive(stats: PlayerMatchStats, constants: dict) -> float:
 
 
 # CAM dimension names — order matters for iteration
-CAM_CATEGORIES = ["chance_creation", "goal_threat", "team_function", "carrying", "defensive"]
+CAM_CATEGORIES = [
+    "chance_creation",
+    "goal_threat",
+    "team_function",
+    "carrying",
+    "defensive",
+]
 
 # Maps dimension name -> calc function
 _CALC_MAP = {
@@ -232,7 +238,9 @@ def calculate_cam_rating(
     ) + stats.penalty_goals * constants.get("penalty_goal_bonus", 0.35)
     assist_lift = stats.assists * constants.get("assist_bonus", 0.45)
     redcard_penalty = stats.red_cards * constants.get("red_card_penalty", -1.0)
-    yellowcard_penalty = constants.get("yellow_card_penalty", -0.05)
+    yellowcard_penalty = stats.yellow_cards * constants.get(
+        "yellow_card_penalty", -0.05
+    )
 
     # Ghost penalty — fully invisible match: no xa, no key passes, no shots,
     # no goals, no assists, no big chances created

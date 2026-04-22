@@ -163,7 +163,7 @@ NULL_PERCENTILE_COLS = (
     "goal_contribution_percentile",
     "presence_percentile",
     "goal_threat_percentile",
-    "passing_progression_percentile",
+    "volume_passing_percentile",
 )
 
 # Columns that require match_ratings data (peer comparison / model score).
@@ -184,7 +184,7 @@ NULL_RATING_COLS = (
     "goal_contribution_percentile",
     "presence_percentile",
     "goal_threat_percentile",
-    "passing_progression_percentile",
+    "volume_passing_percentile",
     "model_score",
     "impact_rate",
     "model_score_quality",
@@ -226,7 +226,7 @@ CAM_DIMENSIONS = [
 
 # CM dimension names
 CM_DIMENSIONS = [
-    "passing_progression",
+    "volume_passing",
     "carrying",
     "chance_creation",
     "defensive",
@@ -511,8 +511,8 @@ def compute_peer_ratings(
             "goal_threat_stddev": _norm_float("goal_threat_stddev") if is_cam or is_cm else None,
             "goal_threat_p90": _norm_float("goal_threat_p90") if is_cam or is_cm else None,
             # CM dimension stddev/p90
-            "passing_progression_stddev": _norm_float("passing_progression_stddev") if is_cm else None,
-            "passing_progression_p90": _norm_float("passing_progression_p90") if is_cm else None,
+            "volume_passing_stddev": _norm_float("volume_passing_stddev") if is_cm else None,
+            "volume_passing_p90": _norm_float("volume_passing_p90") if is_cm else None,
             "model_score_stddev": _norm_float("model_score_stddev"),
             "model_score_p90": _norm_float("model_score_p90"),
             "consistency_score": float(norm.get("consistency_score") or 0.0),
@@ -1023,7 +1023,7 @@ def compute_peer_ratings(
                     p["team_function_percentile"] = None
                     p["duels_percentile"] = None
                     p["goal_threat_percentile"] = None
-                    p["passing_progression_percentile"] = None
+                    p["volume_passing_percentile"] = None
                 elif is_cam:
                     # CAM dimension percentiles
                     p["chance_creation_percentile"] = percentile_of(
@@ -1052,11 +1052,11 @@ def compute_peer_ratings(
                     p["productive_dribbling_percentile"] = None
                     p["goal_contribution_percentile"] = None
                     p["presence_percentile"] = None
-                    p["passing_progression_percentile"] = None
+                    p["volume_passing_percentile"] = None
                 elif is_cm:
                     # CM dimension percentiles
-                    p["passing_progression_percentile"] = percentile_of(
-                        p["_dim_passing_progression"], dim_vals_map["passing_progression"]
+                    p["volume_passing_percentile"] = percentile_of(
+                        p["_dim_volume_passing"], dim_vals_map["volume_passing"]
                     )
                     p["carrying_percentile"] = percentile_of(
                         p["_dim_carrying"], dim_vals_map["carrying"]
@@ -1120,7 +1120,7 @@ def compute_peer_ratings(
                     p["goal_contribution_percentile"] = None
                     p["presence_percentile"] = None
                     p["goal_threat_percentile"] = None
-                    p["passing_progression_percentile"] = None
+                    p["volume_passing_percentile"] = None
 
         for p in group:
             if p["minutes_played"] < min_minutes:
@@ -1199,8 +1199,8 @@ def compute_peer_ratings(
                 presence_stddev, presence_p90,
                 goal_threat_percentile,
                 goal_threat_stddev, goal_threat_p90,
-                passing_progression_percentile,
-                passing_progression_stddev, passing_progression_p90
+                volume_passing_percentile,
+                volume_passing_stddev, volume_passing_p90
             ) VALUES (
                 %(player_id)s, %(league_id)s, %(season)s, %(position)s, %(peer_mode)s, %(position_scope)s,
                 %(matches_played)s, %(minutes_played)s, %(rated_minutes)s, %(avg_match_rating)s,
@@ -1272,8 +1272,8 @@ def compute_peer_ratings(
                 %(presence_stddev)s, %(presence_p90)s,
                 %(goal_threat_percentile)s,
                 %(goal_threat_stddev)s, %(goal_threat_p90)s,
-                %(passing_progression_percentile)s,
-                %(passing_progression_stddev)s, %(passing_progression_p90)s
+                %(volume_passing_percentile)s,
+                %(volume_passing_stddev)s, %(volume_passing_p90)s
             )
             ON CONFLICT (player_id, league_id, season, peer_mode, position_scope) DO UPDATE SET
                 position                          = EXCLUDED.position,
@@ -1418,9 +1418,9 @@ def compute_peer_ratings(
                 goal_threat_percentile             = EXCLUDED.goal_threat_percentile,
                 goal_threat_stddev                 = EXCLUDED.goal_threat_stddev,
                 goal_threat_p90                    = EXCLUDED.goal_threat_p90,
-                passing_progression_percentile     = EXCLUDED.passing_progression_percentile,
-                passing_progression_stddev         = EXCLUDED.passing_progression_stddev,
-                passing_progression_p90            = EXCLUDED.passing_progression_p90
+                volume_passing_percentile     = EXCLUDED.volume_passing_percentile,
+                volume_passing_stddev         = EXCLUDED.volume_passing_stddev,
+                volume_passing_p90            = EXCLUDED.volume_passing_p90
             """
 
     with db.conn.cursor() as cur:

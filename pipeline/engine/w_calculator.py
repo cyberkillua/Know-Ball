@@ -290,7 +290,9 @@ def calculate_winger_rating(
     ) + stats.penalty_goals * constants.get("penalty_goal_bonus", 0.35)
     assist_lift = stats.assists * constants.get("assist_bonus", 0.45)
     redcard_penalty = stats.red_cards * constants.get("red_card_penalty", -1.0)
-    yellowcard_penalty = constants.get("yellow_card_penalty", -0.05)
+    yellowcard_penalty = stats.yellow_cards * constants.get(
+        "yellow_card_penalty", -0.05
+    )
 
     final = (
         baseline
