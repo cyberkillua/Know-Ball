@@ -18,6 +18,7 @@ Safe to re-run — all upserts use ON CONFLICT DO UPDATE.
 
 import argparse
 import asyncio
+import os
 
 import psycopg2.extras
 from curl_cffi.requests import AsyncSession
@@ -32,6 +33,31 @@ from pipeline.scrapers.sofascore import (
 )
 
 log = get_logger("backfill_player_season_sofascore")
+
+
+def _parse_season_id_overrides(raw: str | None) -> dict[tuple[int, str], int]:
+    """
+    Parse SOFASCORE_SEASON_IDS overrides.
+
+    Format:
+      17:2025/2026=76986,18:2025/2026=77324
+
+    Keys use Sofascore tournament ids, not FotMob league ids.
+    """
+    overrides: dict[tuple[int, str], int] = {}
+    if not raw:
+        return overrides
+    for part in raw.split(","):
+        item = part.strip()
+        if not item:
+            continue
+        try:
+            left, sid = item.split("=", 1)
+            tournament_id, season_name = left.split(":", 1)
+            overrides[(int(tournament_id), season_name.strip())] = int(sid)
+        except ValueError:
+            log.warning(f"Ignoring invalid SOFASCORE_SEASON_IDS item: {item}")
+    return overrides
 
 _UPSERT_SQL = """
 INSERT INTO player_season_sofascore (
@@ -270,6 +296,9 @@ def backfill(
 
         # Resolve a sofascore season_id per (fotmob_id, season) once.
         season_cache: dict[tuple[int, str], int | None] = {}
+        season_id_overrides = _parse_season_id_overrides(
+            os.getenv("SOFASCORE_SEASON_IDS")
+        )
 
         def _resolve_season(fm_id: int, season_name: str) -> int | None:
             key = (fm_id, season_name)
@@ -279,7 +308,22 @@ def backfill(
             if not t_id:
                 season_cache[key] = None
                 return None
-            sid = get_season_id_by_name(t_id, season_name)
+            override = season_id_overrides.get((t_id, season_name))
+            if override:
+                log.info(
+                    f"Using SOFASCORE_SEASON_IDS override: "
+                    f"tournament={t_id} season={season_name} id={override}"
+                )
+                season_cache[key] = override
+                return override
+            try:
+                sid = get_season_id_by_name(t_id, season_name)
+            except Exception as e:
+                log.warning(
+                    f"Could not resolve Sofascore season id for "
+                    f"fotmob_league={fm_id} tournament={t_id} season={season_name}: {e}"
+                )
+                sid = None
             season_cache[key] = sid
             return sid
 
