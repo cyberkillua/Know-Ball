@@ -7,9 +7,19 @@ on:
     branches:
       - main
 
+concurrency:
+  group: know-ball-daily-scrape
+  cancel-in-progress: false
+
 jobs:
   scrape-and-rate:
     runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      CURRENT_SEASON: ${{ vars.CURRENT_SEASON }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -17,27 +27,5 @@ jobs:
           python-version: '3.11'
       - name: Install dependencies
         run: pip install -r pipeline/requirements.txt
-      - name: Run scraper
-        run: python -m pipeline.scrape
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      - name: Backfill self-created shots
-        run: python -m pipeline.backfill_self_created
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      - name: Run rating engine
-        run: python -m pipeline.rate
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      - name: Compute peer ratings
-        run: python -m pipeline.compute
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - name: Run daily pipeline
+        run: python -m pipeline.daily

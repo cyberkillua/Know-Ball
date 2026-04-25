@@ -12,10 +12,12 @@ Safe to re-run — only processes matches where self_created_shots IS NULL.
 Skips leagues not covered by Understat (e.g. Championship).
 """
 
+import argparse
 import time
 
 from pipeline.db import DB
 from pipeline.logger import get_logger
+from pipeline.scrape import CURRENT_SEASON
 from pipeline.scrapers.understat import fetch_match_shots
 
 log = get_logger("backfill_self_created")
@@ -25,22 +27,38 @@ SELF_CREATED_ACTIONS = {"Dribble", "IndividualPlay"}
 REQUEST_DELAY = 3
 
 
-def get_unprocessed_matches(db: DB) -> list[dict]:
+def get_unprocessed_matches(
+    db: DB,
+    season: str | None = None,
+    fotmob_id: int | None = None,
+) -> list[dict]:
     """
     Return matches that have Understat coverage and at least one player
     with self_created_shots IS NULL in match_player_stats.
     """
+    where = [
+        "m.understat_id IS NOT NULL",
+        "l.understat_slug IS NOT NULL",
+        "mps.self_created_shots IS NULL",
+    ]
+    params: list = []
+    if season:
+        where.append("m.season = %s")
+        params.append(season)
+    if fotmob_id:
+        where.append("l.fotmob_id = %s")
+        params.append(fotmob_id)
+
     return db.query(
-        """
+        f"""
         SELECT DISTINCT m.id AS match_id, m.understat_id
         FROM matches m
         JOIN match_player_stats mps ON mps.match_id = m.id
         JOIN leagues l ON l.id = m.league_id
-        WHERE m.understat_id IS NOT NULL
-          AND l.understat_slug IS NOT NULL
-          AND mps.self_created_shots IS NULL
+        WHERE {' AND '.join(where)}
         ORDER BY m.id DESC
-        """
+        """,
+        tuple(params),
     )
 
 
@@ -111,10 +129,15 @@ def process_match(db: DB, match_db_id: int, understat_match_id: int) -> int:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Backfill self-created shot stats")
+    parser.add_argument("--season", default=CURRENT_SEASON)
+    parser.add_argument("--league", type=int, help="Optional FotMob league id")
+    args = parser.parse_args()
+
     log.info("Starting self_created backfill")
     db = DB()
 
-    matches = get_unprocessed_matches(db)
+    matches = get_unprocessed_matches(db, season=args.season, fotmob_id=args.league)
     log.info(f"Found {len(matches)} matches to process")
 
     total_updated = 0

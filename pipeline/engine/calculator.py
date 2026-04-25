@@ -56,6 +56,11 @@ class PlayerMatchStats:
     team_total_shots: int = 0
     red_cards: int = 0
     yellow_cards: int = 0
+    # Ball carry distance (from Sofascore, per-match)
+    total_ball_carries_distance: float = 0.0
+    total_progressive_ball_carries_distance: float = 0.0
+    # Match-level pass-quality signal (from Sofascore)
+    pass_value_normalized: float = 0.0
 
 
 @dataclass

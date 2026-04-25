@@ -46,7 +46,10 @@ const POSITION_LABELS: Record<string, string> = {
   WINGER: "Wingers",
   CAM: "Attacking Midfielders",
   CM: "Central Midfielders",
-  CDM: "Defensive Midfielders",
+  CDM: "Central Midfielders",
+  DM: "Central Midfielders",
+  MID: "Central Midfielders",
+  MIDFIELDER: "Central Midfielders",
   LM: "Left Midfielders",
   RM: "Right Midfielders",
   LB: "Left Backs",
@@ -74,6 +77,12 @@ const fmtSigned = (v: any) => {
   const n = Number(v);
   return n >= 0 ? `+${n.toFixed(2)}` : n.toFixed(2);
 };
+const fmtModeValue = (
+  mode: "per90" | "raw",
+  per90: number | null | undefined,
+  raw: number | null | undefined,
+  decimals = 2,
+) => (mode === "per90" ? fmt(per90, decimals) : raw == null ? "—" : fmt(raw, decimals));
 
 function calculateAge(dateOfBirth: string | null): number | null {
   if (!dateOfBirth) return null;
@@ -312,8 +321,9 @@ function PlayerProfilePage() {
   const isWinger = player.position === "LW" || player.position === "RW";
   const isDefensiveWinger =
     player.position === "LM" || player.position === "RM";
-  const isCM = player.position === "CM";
-  const isCDM = player.position === "CDM";
+  const playerPosition = (player.position ?? "").toUpperCase();
+  const isCM = ["CM", "CDM", "DM", "MID", "MIDFIELDER"].includes(playerPosition);
+  const isCDM = false;
   const isDefender =
     player.position === "CB" ||
     player.position === "LB" ||
@@ -345,6 +355,65 @@ function PlayerProfilePage() {
   const peerHasData = percentileHasData;
   const ratingPeerQualified = (activePeerRating?.rated_minutes ?? 0) >= activePeerMinMinutes;
   const peerQualified = percentileHasData;
+  const preAssistPercentile = peerRating?.pass_to_assist_per90_percentile
+    ?? (peerQualified && stats?.pass_to_assist != null ? 0 : undefined);
+  const activePreAssistPercentile =
+    activePeerRating?.pass_to_assist_per90_percentile
+    ?? (ratingPeerQualified && stats?.pass_to_assist != null ? 0 : null);
+  const extraPassingRows = [
+    {
+      label: "Final-third passes (season)",
+      value: fmtModeValue(
+        statMode,
+        stats?.accurate_final_third_passes_per90,
+        stats?.accurate_final_third_passes,
+        statMode === "per90" ? 2 : 0,
+      ),
+      percentile: pct(
+        peerRating?.accurate_final_third_passes_per90_percentile,
+        peerRating?.accurate_final_third_passes_raw_percentile,
+        statMode,
+        peerQualified,
+      ),
+    },
+    {
+      label: "Pre-assists (season)",
+      value: fmtModeValue(
+        statMode,
+        stats?.pass_to_assist_per90,
+        stats?.pass_to_assist,
+        statMode === "per90" ? 2 : 0,
+      ),
+      percentile: pct(
+        peerRating?.pass_to_assist_per90_percentile,
+        peerRating?.pass_to_assist_raw_percentile,
+        statMode,
+        peerQualified,
+      ) ?? preAssistPercentile,
+    },
+    {
+      label: "Pass value",
+      value: fmt(stats?.pass_value_normalized, 2),
+      percentile: peerQualified
+        ? (peerRating?.pass_value_normalized_percentile ?? 0)
+        : 0,
+    },
+  ];
+  const progressiveCarryDistanceRow = {
+    label: "Progressive carries distance",
+    value: fmtModeValue(
+      statMode,
+      stats?.progressive_carries_distance_per90,
+      stats?.progressive_carries_distance,
+      2,
+    ),
+    percentile: pct(
+      peerRating?.progressive_carries_distance_per90_percentile,
+      peerRating?.progressive_carries_distance_raw_percentile,
+      statMode,
+      peerQualified,
+    ),
+  };
 
   return (
     <div className="space-y-6">
@@ -3465,6 +3534,9 @@ function PlayerProfilePage() {
                               : 0
                           }
                         />
+                        {extraPassingRows.map((row) => (
+                          <StatRow key={row.label} {...row} />
+                        ))}
                       </div>
                     </div>
 
@@ -3743,6 +3815,7 @@ function PlayerProfilePage() {
                               : 0
                           }
                         />
+                        <StatRow {...progressiveCarryDistanceRow} />
                       </div>
                     </div>
 
@@ -5688,6 +5761,9 @@ function PlayerProfilePage() {
                               : 0
                           }
                         />
+                        {extraPassingRows.map((row) => (
+                          <StatRow key={row.label} {...row} />
+                        ))}
                       </div>
                     </div>
 
@@ -5984,6 +6060,7 @@ function PlayerProfilePage() {
                               : 0
                           }
                         />
+                        <StatRow {...progressiveCarryDistanceRow} />
                       </div>
                     </div>
 
@@ -8042,6 +8119,10 @@ function PlayerProfilePage() {
                                 value: activePeerRating.chance_creation_percentile,
                               },
                               {
+                                label: "Pre-assists",
+                                value: activePreAssistPercentile,
+                              },
+                              {
                                 label: "Goal Threat",
                                 value: activePeerRating.goal_threat_percentile,
                               },
@@ -8065,8 +8146,12 @@ function PlayerProfilePage() {
                                 value: activePeerRating.overall_percentile,
                               },
                               {
-                                label: "Volume Passing",
+                                label: "Passing Impact",
                                 value: activePeerRating.volume_passing_percentile,
+                              },
+                              {
+                                label: "Pre-assists",
+                                value: activePreAssistPercentile,
                               },
                               {
                                 label: "Carrying",

@@ -43,35 +43,35 @@ class CMCategoryScores:
 
 def calc_volume_passing(stats: PlayerMatchStats, constants: dict) -> float:
     """
-    Volume Passing — completed pass volume gated by accuracy.
+    Pass Impact — quality and involvement of a CM's passing.
 
-    Not a progression measure — no progressive-pass or passes-into-final-third
-    data at match level yet. Rewards CMs who complete many passes at acceptable
-    accuracy; blind to direction or line-breaking value. Weighted lower than
-    other buckets for that reason. Rename + reweight once progression data lands.
+    Anchored on Sofascore's pass_value_normalized, their per-match
+    passing impact metric (partially volume-independent at r=0.36 with
+    passes_completed). 
 
-    Raw = passes_completed * passes_completed_reward
-        + (pass_accuracy - pass_accuracy_threshold) * pass_accuracy_weight
+    Raw = pass_value_normalized * pass_value_weight
+        + passes_completed * pass_volume_reward
     """
     c = constants
-    pass_volume = stats.passes_completed * c.get("passes_completed_reward", 0.04)
-    pass_acc = stats.passes_completed / max(stats.passes_total, 1)
-    pass_delta = (pass_acc - c.get("pass_accuracy_threshold", 0.75)) * c.get(
-        "pass_accuracy_weight", 0.12
+    return (
+        stats.pass_value_normalized * c.get("pass_value_weight", 0.6)
     )
-    return pass_volume + pass_delta
-
 
 def calc_carrying(stats: PlayerMatchStats, constants: dict) -> float:
     """
     Carrying — advancing the ball yourself.
 
-    Progressive carry / carry distance aren't in the dataset yet. Falls back to
-    dribble rate + volume and foul/penalty wins as proxies for beating a defender
-    in possession. Possession loss rate acts as a soft penalty.
+    Rewards dribble rate + volume and progressive carry distance as direct
+    measures of beating a defender and moving the ball up the pitch. Foul/penalty
+    wins layer on top. Possession loss rate acts as a soft penalty.
+
+    Dribble rate delta is clipped at zero so low-dribble carriers (Kroos-type)
+    aren't penalised before progressive carry compensates. Fouls won are capped
+    to prevent cynical-foul inflation dominating the bucket.
 
     Raw = dribble_score
-        + fouls_won * foul_won_reward
+        + progressive_carry_distance * progressive_carry_distance_weight
+        + min(fouls_won, foul_won_cap) * foul_won_reward
         + penalty_won * penalty_won_reward
         - possession_loss_rate * possession_loss_rate_penalty
     """
@@ -79,17 +79,23 @@ def calc_carrying(stats: PlayerMatchStats, constants: dict) -> float:
 
     dribble_volume = stats.successful_dribbles + stats.failed_dribbles
     dribble_rate = stats.successful_dribbles / max(dribble_volume, 1)
-    dribble_score = (dribble_rate - 0.38) * c.get(
+    dribble_score = max(0, dribble_rate - 0.38) * c.get(
         "dribble_rate_weight", 0.15
     ) + stats.successful_dribbles * c.get("dribble_volume_reward", 0.05)
 
-    fouls = stats.fouls_won * c.get("foul_won_reward", 0.08)
+    progressive_carry = stats.total_progressive_ball_carries_distance * c.get(
+        "progressive_carry_distance_weight", 0.002
+    )
+
+    fouls = min(stats.fouls_won, c.get("foul_won_cap", 5)) * c.get(
+        "foul_won_reward", 0.06
+    )
     penalty_pos = stats.penalty_won * c.get("penalty_won_reward", 0.3)
 
     possession_loss_rate = stats.possession_lost_ctrl / max(stats.touches, 1)
     poss_loss = possession_loss_rate * c.get("possession_loss_rate_penalty", 0.1)
 
-    return dribble_score + fouls + penalty_pos - poss_loss
+    return dribble_score + progressive_carry + fouls + penalty_pos - poss_loss
 
 
 def calc_chance_creation(stats: PlayerMatchStats, constants: dict) -> float:

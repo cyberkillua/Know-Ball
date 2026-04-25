@@ -18,6 +18,23 @@ from pipeline.logger import get_logger
 log = get_logger("reset")
 
 
+def _get_position_bucket(pos: str) -> list[str]:
+    """Return all positions that belong to the same bucket as the given position."""
+    if pos in ("CM", "CDM", "DM"):
+        return ["CM", "CDM", "DM"]
+    if pos in ("CAM", "AM"):
+        return ["CAM", "AM"]
+    if pos in ("ST", "CF", "SS", "FW"):
+        return ["ST", "CF", "SS", "FW"]
+    if pos in ("LW", "RW", "LM", "RM", "W", "WINGER"):
+        return ["LW", "RW", "LM", "RM"]
+    if pos in ("CB", "LB", "RB", "LWB", "RWB", "DEF"):
+        return ["CB", "LB", "RB", "LWB", "RWB"]
+    if pos == "GK":
+        return ["GK"]
+    return [pos]
+
+
 def main():
     parser = argparse.ArgumentParser(description="Reset Know Ball data")
     parser.add_argument(
@@ -39,11 +56,13 @@ def main():
 
     if args.position:
         pos = args.position.upper()
-        log.info(f"Clearing match_ratings + peer_ratings for position={pos}")
-        db.execute("DELETE FROM match_ratings WHERE position = %s", (pos,))
-        log.info(f"  Cleared match_ratings ({pos})")
-        db.execute("DELETE FROM peer_ratings WHERE position = %s", (pos,))
-        log.info(f"  Cleared peer_ratings ({pos})")
+        bucket = _get_position_bucket(pos)
+        placeholders = ",".join(["%s"] * len(bucket))
+        log.info(f"Clearing match_ratings + peer_ratings for position={pos} (bucket: {bucket})")
+        db.execute(f"DELETE FROM match_ratings WHERE position IN ({placeholders})", bucket)
+        log.info(f"  Cleared match_ratings ({bucket})")
+        db.execute(f"DELETE FROM peer_ratings WHERE position IN ({placeholders})", bucket)
+        log.info(f"  Cleared peer_ratings ({bucket})")
         db.close()
         log.info("Reset complete")
         return

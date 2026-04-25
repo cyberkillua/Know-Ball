@@ -315,13 +315,12 @@ const S = {
 }
 
 function getStatSectionsForPosition(position: string | null): Section[] {
-  const pos = position ?? 'ST'
+  const pos = (position ?? 'ST').toUpperCase()
   const isST = pos === 'ST' || pos === 'CF'
   const isCAM = pos === 'CAM'
   const isWinger = pos === 'LW' || pos === 'RW'
   const isDefWinger = pos === 'LM' || pos === 'RM'
-  const isCM = pos === 'CM'
-  const isCDM = pos === 'CDM'
+  const isCM = ['CM', 'CDM', 'DM', 'MID', 'MIDFIELDER'].includes(pos)
   const isDefender = pos === 'CB' || pos === 'LB' || pos === 'RB' || pos === 'LWB' || pos === 'RWB'
 
   if (isST) {
@@ -335,9 +334,6 @@ function getStatSectionsForPosition(position: string | null): Section[] {
   }
   if (isCM) {
     return [S.chanceCreationFull, S.passing, S.goalscoring, S.carryingFull, S.physicalNoAerialWins, S.defending]
-  }
-  if (isCDM) {
-    return [S.defending, S.physicalFull, S.carryingFull, S.chanceCreationNoXgXa, S.passing, S.goalscoring]
   }
   if (isDefender) {
     return [S.physicalFull, S.defending, S.carryingDefender, S.passing, S.chanceCreationDefender, S.goalscoring]
@@ -481,7 +477,8 @@ function PercentileComparison({
 const POSITION_LABELS: Record<string, string> = {
   ST: 'Strikers', CF: 'Centre-Forwards', LW: 'Wingers', RW: 'Wingers',
   WINGER: 'Wingers', LM: 'Left Midfielders', RM: 'Right Midfielders',
-  CAM: 'Attacking Midfielders', CM: 'Central Midfielders', CDM: 'Defensive Midfielders',
+  CAM: 'Attacking Midfielders', CM: 'Central Midfielders', CDM: 'Central Midfielders',
+  DM: 'Central Midfielders', MID: 'Central Midfielders', MIDFIELDER: 'Central Midfielders',
   LB: 'Left Backs', RB: 'Right Backs', LWB: 'Left Wing-Backs', RWB: 'Right Wing-Backs',
   CB: 'Centre-Backs', DEF: 'Defenders', GK: 'Goalkeepers',
 }

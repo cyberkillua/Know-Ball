@@ -29,8 +29,7 @@ POSITION_GROUPS: list[tuple[list[str], str, str]] = [
     (["ST", "CF"], "ST", "ST"),
     (["CAM"], "CAM", "CAM"),
     (["LW", "RW", "LM", "RM"], "W", "WINGER"),
-    (["CM"], "CM", "CM"),
-    (["CDM"], "CM", "CDM"),
+    (["CM", "CDM"], "CM", "CM"),
     (["CB", "LB", "RB", "LWB", "RWB"], "DEF", "DEF"),
 ]
 # Each tuple: (profile_positions, rating_position, label)
@@ -43,8 +42,7 @@ CASE
     WHEN {alias}.position IN ('ST', 'CF', 'SS', 'FW', 'FORWARD', 'STRIKER') THEN 'ST'
     WHEN {alias}.position IN ('LW', 'RW', 'LM', 'RM', 'W', 'WINGER') THEN 'WINGER'
     WHEN {alias}.position IN ('CAM', 'AM') THEN 'CAM'
-    WHEN {alias}.position IN ('CM', 'DM', 'MID', 'MIDFIELDER') THEN 'CM'
-    WHEN {alias}.position IN ('CDM') THEN 'CDM'
+    WHEN {alias}.position IN ('CM', 'CDM', 'DM', 'MID', 'MIDFIELDER') THEN 'CM'
     WHEN {alias}.position IN ('CB', 'LB', 'RB', 'LWB', 'RWB', 'DEF', 'DEFENDER') THEN 'DEF'
     WHEN {alias}.position IN ('GK', 'GOALKEEPER') THEN 'GK'
     ELSE NULL
@@ -164,6 +162,13 @@ NULL_PERCENTILE_COLS = (
     "presence_percentile",
     "goal_threat_percentile",
     "volume_passing_percentile",
+    "progressive_carries_distance_per90_percentile",
+    "progressive_carries_distance_raw_percentile",
+    "pass_value_normalized_percentile",
+    "accurate_final_third_passes_per90_percentile",
+    "accurate_final_third_passes_raw_percentile",
+    "pass_to_assist_per90_percentile",
+    "pass_to_assist_raw_percentile",
 )
 
 # Columns that require match_ratings data (peer comparison / model score).
@@ -335,14 +340,24 @@ def compute_peer_ratings(
             SUM(a.accurate_long_balls)::int                          AS accurate_long_balls_total,
             SUM(a.total_long_balls)::int                             AS total_long_balls_total,
             SUM(a.total_contest)::int                                AS total_contests_total,
+            SUM(COALESCE(a.total_progressive_ball_carries_distance, 0))::numeric AS progressive_carries_distance_total,
+            ROUND(AVG(NULLIF(a.pass_value_normalized, 0))::numeric, 4)           AS pass_value_normalized_avg,
             MAX(psu.xg_chain_per90)                                  AS xg_chain_per90,
             MAX(psu.xg_chain)                                        AS xg_chain_raw,
             MAX(psu.xg_buildup_per90)                                AS xg_buildup_per90,
-            MAX(psu.xg_buildup)                                      AS xg_buildup_raw
+            MAX(psu.xg_buildup)                                      AS xg_buildup_raw,
+            MAX(pss.accurate_final_third_passes)                     AS accurate_final_third_passes_raw,
+            MAX(pss.pass_to_assist)                                  AS pass_to_assist_raw,
+            BOOL_OR(pss.accurate_final_third_passes IS NOT NULL)      AS has_accurate_final_third_passes,
+            BOOL_OR(pss.pass_to_assist IS NOT NULL)                   AS has_pass_to_assist
         FROM annotated_stats a
         {dominant_join}
         LEFT JOIN player_season_understat psu
             ON psu.player_id = a.player_id AND psu.season = a.season
+        LEFT JOIN player_season_sofascore pss
+            ON pss.player_id = a.player_id
+           AND pss.league_id = a.league_id
+           AND pss.season    = a.season
         WHERE {player_filter}
         GROUP BY a.player_id, a.player_position, a.league_id, a.season
         """,
@@ -574,6 +589,30 @@ def compute_peer_ratings(
             ),
             "_passes_completed_raw": passes_completed,
             "_accurate_long_balls_raw": accurate_long_balls,
+            # Progressive carry distance (per-match aggregate)
+            "progressive_carries_distance_per90": round(
+                float(r.get("progressive_carries_distance_total") or 0) / per90, 2
+            ),
+            "_progressive_carries_distance_raw": float(
+                r.get("progressive_carries_distance_total") or 0
+            ),
+            # Match-avg pass quality
+            "pass_value_normalized": float(r.get("pass_value_normalized_avg") or 0),
+            # Season-level passing (joined from player_season_sofascore)
+            "accurate_final_third_passes_per90": round(
+                float(r.get("accurate_final_third_passes_raw") or 0) / per90, 2
+            ),
+            "_accurate_final_third_passes_raw": float(
+                r.get("accurate_final_third_passes_raw") or 0
+            ),
+            "_has_accurate_final_third_passes": bool(
+                r.get("has_accurate_final_third_passes")
+            ),
+            "pass_to_assist_per90": round(
+                float(r.get("pass_to_assist_raw") or 0) / per90, 2
+            ),
+            "_pass_to_assist_raw": float(r.get("pass_to_assist_raw") or 0),
+            "_has_pass_to_assist": bool(r.get("has_pass_to_assist")),
             # xGChain / xGBuildup from Understat (None if not available)
             "xg_chain_per90": xg_chain_per90_val,
             "xg_chain_raw": xg_chain_raw_val,
@@ -704,6 +743,33 @@ def compute_peer_ratings(
         long_ball_accuracy_vals = vals("long_ball_accuracy")
         passes_completed_raw_vals = vals("_passes_completed_raw")
         accurate_lb_raw_vals = vals("_accurate_long_balls_raw")
+        prog_carry_per90_vals = vals("progressive_carries_distance_per90")
+        prog_carry_raw_vals = vals("_progressive_carries_distance_raw")
+        pass_value_norm_vals = sorted(
+            float(p["pass_value_normalized"])
+            for p in stat_qualified
+            if p.get("pass_value_normalized")
+        )
+        afl_per90_vals = sorted(
+            float(p["accurate_final_third_passes_per90"])
+            for p in stat_qualified
+            if p.get("_has_accurate_final_third_passes")
+        )
+        afl_raw_vals = sorted(
+            float(p["_accurate_final_third_passes_raw"])
+            for p in stat_qualified
+            if p.get("_has_accurate_final_third_passes")
+        )
+        pta_per90_vals = sorted(
+            float(p["pass_to_assist_per90"])
+            for p in stat_qualified
+            if p.get("_has_pass_to_assist")
+        )
+        pta_raw_vals = sorted(
+            float(p["_pass_to_assist_raw"])
+            for p in stat_qualified
+            if p.get("_has_pass_to_assist")
+        )
         # xGChain/xGBuildup — only rank players who have Understat data
         xg_chain_stat_q = [p for p in stat_qualified if p["xg_chain_per90"] is not None]
         xg_buildup_stat_q = [
@@ -943,6 +1009,42 @@ def compute_peer_ratings(
             p["long_ball_accuracy_percentile"] = percentile_of(
                 p["long_ball_accuracy"], long_ball_accuracy_vals
             )
+            # Progressive carry distance percentiles (per-match aggregate)
+            p["progressive_carries_distance_per90_percentile"] = percentile_of(
+                p["progressive_carries_distance_per90"], prog_carry_per90_vals
+            )
+            p["progressive_carries_distance_raw_percentile"] = percentile_of(
+                p["_progressive_carries_distance_raw"], prog_carry_raw_vals
+            )
+            # Match-avg pass quality (None if player has no signal)
+            if p.get("pass_value_normalized") and pass_value_norm_vals:
+                p["pass_value_normalized_percentile"] = percentile_of(
+                    p["pass_value_normalized"], pass_value_norm_vals
+                )
+            else:
+                p["pass_value_normalized_percentile"] = None
+            # Season-level final-third passes (None if no season row)
+            if p.get("_has_accurate_final_third_passes") and afl_per90_vals:
+                p["accurate_final_third_passes_per90_percentile"] = percentile_of(
+                    p["accurate_final_third_passes_per90"], afl_per90_vals
+                )
+                p["accurate_final_third_passes_raw_percentile"] = percentile_of(
+                    p["_accurate_final_third_passes_raw"], afl_raw_vals
+                )
+            else:
+                p["accurate_final_third_passes_per90_percentile"] = None
+                p["accurate_final_third_passes_raw_percentile"] = None
+            # Season-level pass to assist (pre-assist passes)
+            if p.get("_has_pass_to_assist") and pta_per90_vals:
+                p["pass_to_assist_per90_percentile"] = percentile_of(
+                    p["pass_to_assist_per90"], pta_per90_vals
+                )
+                p["pass_to_assist_raw_percentile"] = percentile_of(
+                    p["_pass_to_assist_raw"], pta_raw_vals
+                )
+            else:
+                p["pass_to_assist_per90_percentile"] = None
+                p["pass_to_assist_raw_percentile"] = None
             # xGChain/xGBuildup — None if player has no Understat data
             if p["xg_chain_per90"] is not None and xg_chain_per90_vals:
                 p["xg_chain_per90_percentile"] = percentile_of(
@@ -1200,7 +1302,14 @@ def compute_peer_ratings(
                 goal_threat_percentile,
                 goal_threat_stddev, goal_threat_p90,
                 volume_passing_percentile,
-                volume_passing_stddev, volume_passing_p90
+                volume_passing_stddev, volume_passing_p90,
+                progressive_carries_distance_per90_percentile,
+                progressive_carries_distance_raw_percentile,
+                pass_value_normalized_percentile,
+                accurate_final_third_passes_per90_percentile,
+                accurate_final_third_passes_raw_percentile,
+                pass_to_assist_per90_percentile,
+                pass_to_assist_raw_percentile
             ) VALUES (
                 %(player_id)s, %(league_id)s, %(season)s, %(position)s, %(peer_mode)s, %(position_scope)s,
                 %(matches_played)s, %(minutes_played)s, %(rated_minutes)s, %(avg_match_rating)s,
@@ -1273,7 +1382,14 @@ def compute_peer_ratings(
                 %(goal_threat_percentile)s,
                 %(goal_threat_stddev)s, %(goal_threat_p90)s,
                 %(volume_passing_percentile)s,
-                %(volume_passing_stddev)s, %(volume_passing_p90)s
+                %(volume_passing_stddev)s, %(volume_passing_p90)s,
+                %(progressive_carries_distance_per90_percentile)s,
+                %(progressive_carries_distance_raw_percentile)s,
+                %(pass_value_normalized_percentile)s,
+                %(accurate_final_third_passes_per90_percentile)s,
+                %(accurate_final_third_passes_raw_percentile)s,
+                %(pass_to_assist_per90_percentile)s,
+                %(pass_to_assist_raw_percentile)s
             )
             ON CONFLICT (player_id, league_id, season, peer_mode, position_scope) DO UPDATE SET
                 position                          = EXCLUDED.position,
@@ -1420,7 +1536,14 @@ def compute_peer_ratings(
                 goal_threat_p90                    = EXCLUDED.goal_threat_p90,
                 volume_passing_percentile     = EXCLUDED.volume_passing_percentile,
                 volume_passing_stddev         = EXCLUDED.volume_passing_stddev,
-                volume_passing_p90            = EXCLUDED.volume_passing_p90
+                volume_passing_p90            = EXCLUDED.volume_passing_p90,
+                progressive_carries_distance_per90_percentile = EXCLUDED.progressive_carries_distance_per90_percentile,
+                progressive_carries_distance_raw_percentile   = EXCLUDED.progressive_carries_distance_raw_percentile,
+                pass_value_normalized_percentile              = EXCLUDED.pass_value_normalized_percentile,
+                accurate_final_third_passes_per90_percentile  = EXCLUDED.accurate_final_third_passes_per90_percentile,
+                accurate_final_third_passes_raw_percentile    = EXCLUDED.accurate_final_third_passes_raw_percentile,
+                pass_to_assist_per90_percentile               = EXCLUDED.pass_to_assist_per90_percentile,
+                pass_to_assist_raw_percentile                 = EXCLUDED.pass_to_assist_raw_percentile
             """
 
     with db.conn.cursor() as cur:

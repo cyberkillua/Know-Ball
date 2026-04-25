@@ -110,9 +110,14 @@ class RateLimiter:
         self.burst = burst
         self.tokens = burst
         self.last_update = time.time()
-        self._lock = asyncio.Lock() if asyncio.get_event_loop().is_running() else None
+        self._lock: asyncio.Lock | None = None
+        self._lock_loop: asyncio.AbstractEventLoop | None = None
 
     async def acquire_async(self):
+        loop = asyncio.get_running_loop()
+        if self._lock is None or self._lock_loop is not loop:
+            self._lock = asyncio.Lock()
+            self._lock_loop = loop
         async with self._lock:
             now = time.time()
             elapsed = now - self.last_update
@@ -677,6 +682,13 @@ def extract_player_stats(
                 "penalty_goals": penalty_goals_map.get(pid, 0),
                 "np_xg": round(np_xg_map.get(pid, 0.0), 4),
                 "np_shots": np_shots_map.get(pid, 0),
+                "accurate_own_half_passes": stats.get("accurateOwnHalfPasses", 0) or 0,
+                "total_own_half_passes": stats.get("totalOwnHalfPasses", 0) or 0,
+                "accurate_opposition_half_passes": stats.get("accurateOppositionHalfPasses", 0) or 0,
+                "total_opposition_half_passes": stats.get("totalOppositionHalfPasses", 0) or 0,
+                "pass_value_normalized": stats.get("passValueNormalized"),
+                "total_ball_carries_distance": stats.get("totalBallCarriesDistance", 0) or 0,
+                "total_progressive_ball_carries_distance": stats.get("totalProgressiveBallCarriesDistance", 0) or 0,
             }
 
             if player.get("position") == "G":
@@ -783,6 +795,7 @@ def fetch_player_profile(player_id: int) -> dict | None:
             pos_code = positions_detailed[0]
             position = _POSITIONS_DETAILED_MAP.get(pos_code, pos_code)
 
+    mv_raw = player.get("proposedMarketValueRaw") or {}
     profile = {
         "date_of_birth": dob,
         "height_cm": player.get("height"),
@@ -790,6 +803,9 @@ def fetch_player_profile(player_id: int) -> dict | None:
         "shirt_number": player.get("jerseyNumber"),
         "nationality": player.get("country", {}).get("name"),
         "position": position,
+        "market_value": player.get("proposedMarketValue"),
+        "market_value_currency": mv_raw.get("currency"),
+        "contract_until": player.get("contractUntilTimestamp"),
     }
 
     _player_cache[player_id] = profile
@@ -837,6 +853,7 @@ async def fetch_player_profiles_batch(
                             pos_code = positions_detailed[0]
                             position = _POSITIONS_DETAILED_MAP.get(pos_code, pos_code)
 
+                    mv_raw = player.get("proposedMarketValueRaw") or {}
                     profiles[pid] = {
                         "date_of_birth": dob,
                         "height_cm": player.get("height"),
@@ -844,6 +861,9 @@ async def fetch_player_profiles_batch(
                         "shirt_number": player.get("jerseyNumber"),
                         "nationality": player.get("country", {}).get("name"),
                         "position": position,
+                        "market_value": player.get("proposedMarketValue"),
+                        "market_value_currency": mv_raw.get("currency"),
+                        "contract_until": player.get("contractUntilTimestamp"),
                     }
                     _player_cache[pid] = profiles[pid]
                 else:
@@ -1029,6 +1049,8 @@ def fetch_match_statistics(event_id: int) -> list[dict]:
             "tackles": _int("wonTackle"),
             "interceptions": _int("interceptionWon"),
             "saves_team": _int("saves"),
+            "final_third_entries": _int("finalThirdEntries"),
+            "final_third_phase_stats": _int("finalThirdPhaseStatistic"),
         }
 
     return [_parse_team(home_stats), _parse_team(away_stats)]
@@ -1175,6 +1197,494 @@ def fetch_shotmap(event_id: int) -> list[dict]:
 
     log.info(f"Fetched {len(shots)} shots for event {event_id}")
     return shots
+
+
+def fetch_match_graph(event_id: int) -> list[dict]:
+    """Momentum graph points: [{minute, value}, ...]. Positive=home, negative=away."""
+    try:
+        data = _api_get(f"event/{event_id}/graph")
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No graph for event {event_id}: {e}")
+        return []
+    return data.get("graphPoints", [])
+
+
+def fetch_best_players(event_id: int) -> dict:
+    """Best players for a match: {best_home, best_away, player_of_the_match}."""
+    try:
+        data = _api_get(f"event/{event_id}/best-players/summary")
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No best-players for event {event_id}: {e}")
+        return {}
+    return {
+        "best_home": data.get("bestHomeTeamPlayers", []),
+        "best_away": data.get("bestAwayTeamPlayers", []),
+        "player_of_the_match": data.get("playerOfTheMatch"),
+    }
+
+
+def fetch_head_to_head(event_id: int) -> dict:
+    """H2H duel record for a match: {team_duel, manager_duel}."""
+    try:
+        data = _api_get(f"event/{event_id}/h2h")
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No h2h for event {event_id}: {e}")
+        return {}
+    return {
+        "team_duel": data.get("teamDuel", {}),
+        "manager_duel": data.get("managerDuel", {}),
+    }
+
+
+def fetch_pregame_form(event_id: int) -> dict:
+    """Pregame form and label for both teams."""
+    try:
+        data = _api_get(f"event/{event_id}/pregame-form")
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No pregame-form for event {event_id}: {e}")
+        return {}
+    return {
+        "home": data.get("homeTeam", {}),
+        "away": data.get("awayTeam", {}),
+        "label": data.get("label"),
+    }
+
+
+def fetch_managers(event_id: int) -> dict:
+    """Home/away managers for a match."""
+    try:
+        data = _api_get(f"event/{event_id}/managers")
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No managers for event {event_id}: {e}")
+        return {}
+    return {
+        "home": data.get("homeManager", {}),
+        "away": data.get("awayManager", {}),
+    }
+
+
+def fetch_average_positions(event_id: int) -> dict:
+    """Per-player average on-pitch positions (x/y percent)."""
+    try:
+        data = _api_get(f"event/{event_id}/average-positions")
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No average-positions for event {event_id}: {e}")
+        return {}
+    return {
+        "home": data.get("home", []),
+        "away": data.get("away", []),
+        "substitutions": data.get("substitutions", []),
+    }
+
+
+def fetch_full_match_statistics(event_id: int) -> dict:
+    """
+    Full team stats payload, grouped by period (ALL/1ST/2ND) and section
+    (Match overview, Shots, Attack, Passes, Duels, Defending, Goalkeeping).
+
+    Unlike fetch_match_statistics which flattens to per-team totals, this
+    preserves the full nested structure for downstream storage.
+    """
+    try:
+        data = _api_get(f"event/{event_id}/statistics")
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No full statistics for event {event_id}: {e}")
+        return {}
+    return data
+
+
+def fetch_team_streaks(event_id: int) -> dict:
+    """General + head-to-head streak summary for a match."""
+    try:
+        data = _api_get(f"event/{event_id}/team-streaks")
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No team-streaks for event {event_id}: {e}")
+        return {}
+    return data
+
+
+def fetch_featured_players(event_id: int) -> dict:
+    """Featured (highlighted) players for both sides in a match."""
+    try:
+        data = _api_get(f"event/{event_id}/featured-players")
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No featured-players for event {event_id}: {e}")
+        return {}
+    return {"home": data.get("home"), "away": data.get("away")}
+
+
+def fetch_match_highlights(event_id: int) -> list[dict]:
+    """Video highlight entries for a match."""
+    try:
+        data = _api_get(f"event/{event_id}/highlights")
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No highlights for event {event_id}: {e}")
+        return []
+    return data.get("highlights", [])
+
+
+def fetch_match_odds_all(event_id: int) -> list[dict]:
+    """
+    Full odds payload across all markets (not just 1X2).
+
+    Returns list of markets, each with name, choices[{name, decimalValue,
+    fractionalValue, sourceId, winning}], marketId, etc.
+    """
+    try:
+        data = _api_get(f"event/{event_id}/odds/1/all")
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No all-odds for event {event_id}: {e}")
+        return []
+    return data.get("markets", [])
+
+
+def fetch_match_odds_featured(event_id: int) -> dict:
+    """Featured odds subset (displayed on the match page)."""
+    try:
+        data = _api_get(f"event/{event_id}/odds/1/featured")
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No featured-odds for event {event_id}: {e}")
+        return {}
+    return data
+
+
+def fetch_player_match_heatmap(event_id: int, player_id: int) -> list[dict]:
+    """Per-match heatmap points for a player: [{x, y}, ...]."""
+    try:
+        data = _api_get(f"event/{event_id}/player/{player_id}/heatmap")
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No heatmap for player {player_id} in event {event_id}: {e}")
+        return []
+    return data.get("heatmap", [])
+
+
+def fetch_player_match_statistics(event_id: int, player_id: int) -> dict:
+    """Per-match statistics for a single player (already partly used via lineups)."""
+    try:
+        data = _api_get(f"event/{event_id}/player/{player_id}/statistics")
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No per-match stats for player {player_id} in event {event_id}: {e}")
+        return {}
+    return data
+
+
+def fetch_player_season_heatmap(
+    player_id: int, tournament_id: int, season_id: int
+) -> dict:
+    """
+    Full-season heatmap for a player in a tournament/season.
+
+    Returns {points, matches, events} — points are the aggregated heatmap,
+    matches is a count, events lists contributing matches.
+    """
+    try:
+        data = _api_get(
+            f"player/{player_id}/unique-tournament/{tournament_id}/"
+            f"season/{season_id}/heatmap/overall"
+        )
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No season heatmap for player {player_id}: {e}")
+        return {}
+    return data
+
+
+def fetch_player_attribute_overview(player_id: int) -> dict:
+    """
+    Radar/attribute overview for a player (attacking, technical, tactical,
+    defending, creativity). Also includes position-average comparison.
+    """
+    try:
+        data = _api_get(f"player/{player_id}/attribute-overviews")
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No attribute-overviews for player {player_id}: {e}")
+        return {}
+    return {
+        "player": data.get("playerAttributeOverviews", []),
+        "average": data.get("averageAttributeOverviews", []),
+    }
+
+
+def fetch_player_transfer_history(player_id: int) -> list[dict]:
+    """Transfer history entries for a player."""
+    try:
+        data = _api_get(f"player/{player_id}/transfer-history")
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No transfer-history for player {player_id}: {e}")
+        return []
+    return data.get("transferHistory", [])
+
+
+def fetch_player_characteristics(player_id: int) -> dict:
+    """Strengths, weaknesses, and playable positions for a player."""
+    try:
+        data = _api_get(f"player/{player_id}/characteristics")
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No characteristics for player {player_id}: {e}")
+        return {}
+    return {
+        "positive": data.get("positive", []),
+        "negative": data.get("negative", []),
+        "positions": data.get("positions", []),
+    }
+
+
+def fetch_player_ratings_history(player_id: int) -> dict:
+    """
+    Last-year summary for a player: per-match rating history + tournaments map.
+
+    Keys: summary (list of {matchId, rating, ...}), uniqueTournamentsMap.
+    """
+    try:
+        data = _api_get(f"player/{player_id}/last-year-summary")
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No ratings history for player {player_id}: {e}")
+        return {}
+    return data
+
+
+def fetch_player_national_team_stats(player_id: int) -> list[dict]:
+    """National-team statistics for a player."""
+    try:
+        data = _api_get(f"player/{player_id}/national-team-statistics")
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No national-team stats for player {player_id}: {e}")
+        return []
+    return data.get("statistics", [])
+
+
+def fetch_player_season_statistics(
+    player_id: int, tournament_id: int, season_id: int
+) -> dict:
+    """Aggregated season statistics for a player in one tournament/season."""
+    try:
+        data = _api_get(
+            f"player/{player_id}/unique-tournament/{tournament_id}/"
+            f"season/{season_id}/statistics/overall"
+        )
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No season stats for player {player_id}: {e}")
+        return {}
+    return data
+
+
+_SEASON_STAT_FIELD_MAP = {
+    # Appearance / rating meta
+    "appearances": "appearances",
+    "matches_started": "matchesStarted",
+    "minutes_played": "minutesPlayed",
+    "rating": "rating",
+    "total_rating": "totalRating",
+    "count_rating": "countRating",
+    "totw_appearances": "totwAppearances",
+
+    # Goals / shots
+    "goals": "goals",
+    "expected_goals": "expectedGoals",
+    "penalty_goals": "penaltyGoals",
+    "headed_goals": "headedGoals",
+    "left_foot_goals": "leftFootGoals",
+    "right_foot_goals": "rightFootGoals",
+    "goals_from_inside_box": "goalsFromInsideTheBox",
+    "goals_from_outside_box": "goalsFromOutsideTheBox",
+    "shots_total": "totalShots",
+    "shots_on_target": "shotsOnTarget",
+    "shots_off_target": "shotsOffTarget",
+    "shots_from_inside_box": "shotsFromInsideTheBox",
+    "shots_from_outside_box": "shotsFromOutsideTheBox",
+    "blocked_shots": "blockedShots",
+    "hit_woodwork": "hitWoodwork",
+    "goal_conversion_pct": "goalConversionPercentage",
+    "scoring_frequency": "scoringFrequency",
+
+    # Passing
+    "accurate_passes": "accuratePasses",
+    "total_passes": "totalPasses",
+    "accurate_passes_pct": "accuratePassesPercentage",
+    "inaccurate_passes": "inaccuratePasses",
+    "accurate_opposition_half_passes": "accurateOppositionHalfPasses",
+    "total_opposition_half_passes": "totalOppositionHalfPasses",
+    "accurate_own_half_passes": "accurateOwnHalfPasses",
+    "total_own_half_passes": "totalOwnHalfPasses",
+    "accurate_final_third_passes": "accurateFinalThirdPasses",
+    "accurate_chipped_passes": "accurateChippedPasses",
+    "total_chipped_passes": "totalChippedPasses",
+    "accurate_long_balls": "accurateLongBalls",
+    "total_long_balls": "totalLongBalls",
+    "accurate_long_balls_pct": "accurateLongBallsPercentage",
+    "accurate_crosses": "accurateCrosses",
+    "total_cross": "totalCross",
+    "accurate_crosses_pct": "accurateCrossesPercentage",
+    "key_passes": "keyPasses",
+    "pass_to_assist": "passToAssist",
+    "total_attempt_assist": "totalAttemptAssist",
+
+    # Creation
+    "assists": "assists",
+    "expected_assists": "expectedAssists",
+    "goals_assists_sum": "goalsAssistsSum",
+    "big_chances_created": "bigChancesCreated",
+    "big_chances_missed": "bigChancesMissed",
+
+    # Dribbling / carrying
+    "successful_dribbles": "successfulDribbles",
+    "successful_dribbles_pct": "successfulDribblesPercentage",
+    "total_contest": "totalContest",
+    "dispossessed": "dispossessed",
+    "possession_lost": "possessionLost",
+    "possession_won_att_third": "possessionWonAttThird",
+    "dribbled_past": "dribbledPast",
+
+    # Duels / defending
+    "aerial_duels_won": "aerialDuelsWon",
+    "aerial_duels_won_pct": "aerialDuelsWonPercentage",
+    "aerial_lost": "aerialLost",
+    "ground_duels_won": "groundDuelsWon",
+    "ground_duels_won_pct": "groundDuelsWonPercentage",
+    "total_duels_won": "totalDuelsWon",
+    "total_duels_won_pct": "totalDuelsWonPercentage",
+    "duel_lost": "duelLost",
+    "tackles": "tackles",
+    "tackles_won": "tacklesWon",
+    "tackles_won_pct": "tacklesWonPercentage",
+    "interceptions": "interceptions",
+    "clearances": "clearances",
+    "outfielder_blocks": "outfielderBlocks",
+    "ball_recovery": "ballRecovery",
+    "error_lead_to_goal": "errorLeadToGoal",
+    "error_lead_to_shot": "errorLeadToShot",
+
+    # Discipline / misc
+    "fouls": "fouls",
+    "was_fouled": "wasFouled",
+    "offsides": "offsides",
+    "yellow_cards": "yellowCards",
+    "yellow_red_cards": "yellowRedCards",
+    "red_cards": "redCards",
+    "own_goals": "ownGoals",
+    "penalty_won": "penaltyWon",
+    "penalty_conceded": "penaltyConceded",
+    "touches": "touches",
+}
+
+
+def fetch_player_season_stats_flat(
+    player_id: int, tournament_id: int, season_id: int
+) -> dict | None:
+    """
+    Fetch player season stats and flatten to DB column names.
+
+    Returns None if the API returns no stats (player did not appear in
+    that tournament/season), else a dict keyed by player_season_sofascore
+    column names. Missing fields are returned as None.
+    """
+    data = fetch_player_season_statistics(player_id, tournament_id, season_id)
+    stats = data.get("statistics") if data else None
+    if not stats:
+        return None
+
+    out: dict = {}
+    for db_col, api_key in _SEASON_STAT_FIELD_MAP.items():
+        out[db_col] = stats.get(api_key)
+    return out
+
+
+def fetch_player_recent_events(player_id: int, page: int = 0) -> dict:
+    """Most recent events a player has featured in (paginated)."""
+    try:
+        data = _api_get(f"player/{player_id}/events/last/{page}")
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No recent events for player {player_id}: {e}")
+        return {}
+    return data
+
+
+def fetch_tournament_top_players(tournament_id: int, season_id: int) -> dict:
+    """
+    Top-players leaderboards for a tournament season — ranked by all
+    Sofascore-tracked stats (rating, goals, assists, etc.).
+    """
+    try:
+        data = _api_get(
+            f"unique-tournament/{tournament_id}/season/{season_id}/"
+            f"top-players/overall"
+        )
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No top-players for tournament {tournament_id}: {e}")
+        return {}
+    return data.get("topPlayers", {})
+
+
+def fetch_team_transfers(team_id: int) -> dict:
+    """Transfers in/out for a team."""
+    try:
+        data = _api_get(f"team/{team_id}/transfers")
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No transfers for team {team_id}: {e}")
+        return {}
+    return {
+        "in": data.get("transfersIn", []),
+        "out": data.get("transfersOut", []),
+    }
+
+
+def fetch_team_squad(team_id: int) -> dict:
+    """Current + foreign + national-team players and support staff for a team."""
+    try:
+        data = _api_get(f"team/{team_id}/players")
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No squad for team {team_id}: {e}")
+        return {}
+    return data
+
+
+def fetch_team_near_events(team_id: int) -> dict:
+    """Previous and next event for a team."""
+    try:
+        data = _api_get(f"team/{team_id}/near-events")
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No near-events for team {team_id}: {e}")
+        return {}
+    return data
+
+
+def fetch_scheduled_events(date_str: str) -> list[dict]:
+    """
+    All scheduled football events for a given date (YYYY-MM-DD).
+    Large payload — use for fixture discovery/backfill.
+    """
+    try:
+        data = _api_get(f"sport/football/scheduled-events/{date_str}")
+        time.sleep(REQUEST_DELAY)
+    except Exception as e:
+        log.debug(f"No scheduled events for {date_str}: {e}")
+        return []
+    return data.get("events", [])
 
 
 def clear_player_cache():

@@ -280,6 +280,14 @@ export interface PeerRating {
   xg_plus_xa_raw_percentile: number | null
   possession_loss_rate_percentile: number | null
   fouls_committed_per90_percentile: number | null
+  // Carry distance + extra passing percentiles
+  progressive_carries_distance_per90_percentile: number | null
+  progressive_carries_distance_raw_percentile: number | null
+  pass_value_normalized_percentile: number | null
+  accurate_final_third_passes_per90_percentile: number | null
+  accurate_final_third_passes_raw_percentile: number | null
+  pass_to_assist_per90_percentile: number | null
+  pass_to_assist_raw_percentile: number | null
   // Metadata
   matches_played: number
   minutes_played: number
@@ -341,11 +349,15 @@ export interface PlayerStats {
   passes_completed: number
   passes_total: number
   touches: number
+  pass_value_normalized: number | null
+  accurate_final_third_passes: number | null
+  pass_to_assist: number | null
   // Carrying
   dribbles: number
   dribbles_failed: number
   fouls_won: number
   possession_lost: number
+  progressive_carries_distance: number | null
   // Physical
   aerials_won: number
   aerials_lost: number
@@ -401,6 +413,9 @@ export interface PlayerStats {
   total_contest_per90: number | null
   total_contests: number | null
   fouls_committed_per90: number | null
+  progressive_carries_distance_per90: number | null
+  accurate_final_third_passes_per90: number | null
+  pass_to_assist_per90: number | null
   // Non-penalty stats
   np_goals: number | null
   np_xg_total: number | null

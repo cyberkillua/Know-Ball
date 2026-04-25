@@ -117,35 +117,43 @@ def calc_team_function(stats: PlayerMatchStats, constants: dict) -> float:
 
 def calc_carrying(stats: PlayerMatchStats, constants: dict) -> float:
     """
-    Carrying & Ball Retention.
+    Carrying — advancing the ball yourself.
 
-    CAMs operate in crowded central space — dribble success baseline is 0.38
-    (same as ST), reflecting tighter defensive pressure than wide areas.
-    Possession loss is rate-based (loss / touches) not raw count.
+    Rewards dribble rate + volume and progressive carry distance as direct
+    measures of beating a defender and moving the ball up the pitch. Foul/penalty
+    wins layer on top. Possession loss rate acts as a soft penalty.
+
+    Dribble rate delta is clipped at zero so low-dribble carriers (Kroos-type)
+    aren't penalised before progressive carry compensates. Fouls won are capped
+    to prevent cynical-foul inflation dominating the bucket.
 
     Raw = dribble_score
-        + fouls_won * foul_won_reward
+        + progressive_carry_distance * progressive_carry_distance_weight
+        + min(fouls_won, foul_won_cap) * foul_won_reward
         + penalty_won * penalty_won_reward
         - possession_loss_rate * possession_loss_rate_penalty
-        - error_lead_to_goal * error_lead_to_goal_penalty
     """
     c = constants
 
     dribble_volume = stats.successful_dribbles + stats.failed_dribbles
     dribble_rate = stats.successful_dribbles / max(dribble_volume, 1)
-    dribble_score = (dribble_rate - 0.38) * c.get(
-        "dribble_rate_weight", 0.2
-    ) + stats.successful_dribbles * c.get("dribble_volume_reward", 0.1)
+    dribble_score = max(0, dribble_rate - 0.38) * c.get(
+        "dribble_rate_weight", 0.15
+    ) + stats.successful_dribbles * c.get("dribble_volume_reward", 0.05)
 
-    fouls = stats.fouls_won * c.get("foul_won_reward", 0.1)
-    penalty_pos = stats.penalty_won * c.get("penalty_won_reward", 0.35)
+    progressive_carry = stats.total_progressive_ball_carries_distance * c.get(
+        "progressive_carry_distance_weight", 0.002
+    )
+
+    fouls = min(stats.fouls_won, c.get("foul_won_cap", 5)) * c.get(
+        "foul_won_reward", 0.06
+    )
+    penalty_pos = stats.penalty_won * c.get("penalty_won_reward", 0.3)
 
     possession_loss_rate = stats.possession_lost_ctrl / max(stats.touches, 1)
     poss_loss = possession_loss_rate * c.get("possession_loss_rate_penalty", 0.1)
 
-    error_pen = stats.error_lead_to_goal * c.get("error_lead_to_goal_penalty", 0.3)
-
-    return dribble_score + fouls + penalty_pos - poss_loss - error_pen
+    return dribble_score + progressive_carry + fouls + penalty_pos - poss_loss
 
 
 def calc_defensive(stats: PlayerMatchStats, constants: dict) -> float:

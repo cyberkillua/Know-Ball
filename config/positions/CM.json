@@ -11,11 +11,11 @@
     "poor_bucket_penalty": -0.15
   },
   "weights": {
-    "volume_passing": 0.14,
-    "carrying": 0.2628,
-    "chance_creation": 0.2389,
-    "defensive": 0.215,
-    "goal_threat": 0.1433
+    "volume_passing": 0.2,
+    "carrying": 0.2,
+    "chance_creation": 0.25,
+    "defensive": 0.2,
+    "goal_threat": 0.15
   },
   "constants": {
     "goal_bonus": 0.55,
@@ -35,6 +35,7 @@
     "xg_overperformance_bonus": 0.25,
     "dribble_rate_weight": 0.15,
     "dribble_volume_reward": 0.05,
+    "progressive_carry_distance_weight": 0.002,
     "possession_loss_rate_penalty": 0.1,
     "error_lead_to_goal_penalty": 0.3,
     "foul_won_reward": 0.08,
@@ -77,24 +78,24 @@
   ],
   "normalization": {
     "method": "median_iqr",
-    "calibrated_at": "2026-04-22",
-    "sample_size": 44246,
+    "calibrated_at": "2026-04-25",
+    "sample_size": 48790,
     "midpoints": {
       "volume_passing": {
-        "median": 1.029,
-        "scale": 1.0627
+        "median": 0.0,
+        "scale": 0.1
       },
       "carrying": {
-        "median": 0.0119,
-        "scale": 0.223
+        "median": 0.0675,
+        "scale": 0.1932
       },
       "chance_creation": {
-        "median": 0.048,
-        "scale": 0.119
+        "median": 0.049,
+        "scale": 0.122
       },
       "defensive": {
-        "median": 0.582,
-        "scale": 0.65
+        "median": 0.578,
+        "scale": 0.648
       },
       "goal_threat": {
         "median": 0.0,

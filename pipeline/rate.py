@@ -56,6 +56,9 @@ def get_unrated_records_batch(db: DB, last_id: int, batch_size: int) -> list[dic
                mps.penalty_won,
                mps.possession_lost_ctrl,
                mps.error_lead_to_goal,
+               mps.total_ball_carries_distance,
+               mps.total_progressive_ball_carries_distance,
+               mps.pass_value_normalized,
                mps.sofascore_rating,
                mts.possession_pct  AS team_possession_pct,
                mts.total_shots     AS team_total_shots,
@@ -217,6 +220,11 @@ def rate_record(
         penalty_won=record.get("penalty_won") or 0,
         possession_lost_ctrl=record.get("possession_lost_ctrl") or 0,
         error_lead_to_goal=record.get("error_lead_to_goal") or 0,
+        total_ball_carries_distance=float(record.get("total_ball_carries_distance") or 0),
+        total_progressive_ball_carries_distance=float(
+            record.get("total_progressive_ball_carries_distance") or 0
+        ),
+        pass_value_normalized=float(record.get("pass_value_normalized") or 0),
         team_possession_pct=float(record.get("team_possession_pct") or 0),
         team_total_shots=record.get("team_total_shots") or 0,
         finishing_score=finishing_scores.get((match_id, player_id), 0.0),

@@ -389,12 +389,16 @@ export const getPlayerStats = createServerFn({ method: 'GET' })
           SUM(mps.passes_completed)::int as passes_completed,
           SUM(mps.passes_total)::int as passes_total,
           SUM(mps.touches)::int as touches,
+          ROUND(AVG(NULLIF(mps.pass_value_normalized, 0))::numeric, 3) as pass_value_normalized,
+          MAX(pss.accurate_final_third_passes)::int as accurate_final_third_passes,
+          MAX(pss.pass_to_assist)::int as pass_to_assist,
 
           -- Carrying
           SUM(mps.successful_dribbles)::int as dribbles,
           SUM(mps.failed_dribbles)::int as dribbles_failed,
           SUM(mps.fouls_won)::int as fouls_won,
           SUM(mps.possession_lost_ctrl)::int as possession_lost,
+          ROUND(SUM(COALESCE(mps.total_progressive_ball_carries_distance, 0))::numeric, 2) as progressive_carries_distance,
 
           -- Defense
           SUM(mps.tackles_won)::int as tackles,
@@ -456,6 +460,9 @@ export const getPlayerStats = createServerFn({ method: 'GET' })
           ROUND(SUM(mps.total_contest)::numeric / NULLIF(SUM(mps.minutes_played) / 90.0, 0), 2) AS total_contest_per90,
           SUM(mps.total_contest)::int AS total_contests,
           ROUND(SUM(mps.fouls_committed)::numeric / NULLIF(SUM(mps.minutes_played) / 90.0, 0), 2) AS fouls_committed_per90,
+          ROUND(SUM(COALESCE(mps.total_progressive_ball_carries_distance, 0))::numeric / NULLIF(SUM(mps.minutes_played) / 90.0, 0), 2) AS progressive_carries_distance_per90,
+          ROUND(MAX(pss.accurate_final_third_passes)::numeric / NULLIF(SUM(mps.minutes_played) / 90.0, 0), 2) AS accurate_final_third_passes_per90,
+          ROUND(MAX(pss.pass_to_assist)::numeric / NULLIF(SUM(mps.minutes_played) / 90.0, 0), 2) AS pass_to_assist_per90,
           (SUM(mps.goals) - SUM(mps.penalty_goals))::int AS np_goals,
           ROUND(SUM(mps.np_xg)::numeric, 2) AS np_xg_total,
           ROUND((SUM(mps.goals) - SUM(mps.penalty_goals))::numeric / NULLIF(SUM(mps.minutes_played), 0) * 90, 2) AS np_goals_per90,
@@ -463,6 +470,10 @@ export const getPlayerStats = createServerFn({ method: 'GET' })
           ROUND(SUM(mps.np_xg)::numeric / NULLIF(SUM(mps.np_shots), 0), 3) AS np_xg_per_shot
         FROM match_player_stats mps
         JOIN matches mat ON mat.id = mps.match_id
+        LEFT JOIN player_season_sofascore pss
+          ON pss.player_id = mps.player_id
+         AND pss.league_id = mat.league_id
+         AND pss.season = mat.season
         WHERE mps.player_id = $1 AND mat.season = $2 AND mat.league_id = $3`,
       [data.playerId, data.season, data.leagueId],
     )

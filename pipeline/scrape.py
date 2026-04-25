@@ -11,6 +11,8 @@ Optimizations:
 - Deferred profile updates
 """
 
+from datetime import datetime
+
 from pipeline.db import DB
 from pipeline.logger import get_logger
 from pipeline.scrapers.understat import fetch_league_player_stats, fetch_league_matches as fetch_understat_matches
@@ -169,6 +171,13 @@ def _fill_player_profile(
                 f"Player {sofascore_id}: position from lineup fallback: {position}"
             )
 
+    contract_ts = profile.get("contract_until")
+    contract_dt = (
+        datetime.utcfromtimestamp(contract_ts).strftime("%Y-%m-%d %H:%M:%S")
+        if contract_ts
+        else None
+    )
+
     db.execute(
         """UPDATE players
            SET nationality = COALESCE(%s, nationality),
@@ -176,7 +185,10 @@ def _fill_player_profile(
               height_cm = COALESCE(%s, height_cm),
               preferred_foot = COALESCE(%s, preferred_foot),
               shirt_number = COALESCE(%s, shirt_number),
-              position = COALESCE(%s, position)
+              position = COALESCE(%s, position),
+              market_value = COALESCE(%s, market_value),
+              market_value_currency = COALESCE(%s, market_value_currency),
+              contract_until = COALESCE(%s, contract_until)
            WHERE id = %s""",
         (
             profile.get("nationality"),
@@ -185,6 +197,9 @@ def _fill_player_profile(
             profile.get("preferred_foot"),
             profile.get("shirt_number"),
             position,
+            profile.get("market_value"),
+            profile.get("market_value_currency"),
+            contract_dt,
             player_db_id,
         ),
     )
@@ -399,8 +414,12 @@ def _process_match(db: DB, match: dict, league_id: int, season: str) -> bool:
                 error_lead_to_goal, error_lead_to_shot,
                 possession_lost_ctrl, total_contest,
                 penalty_won, penalty_conceded, own_goals,
-                penalty_goals, np_xg, np_shots)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                penalty_goals, np_xg, np_shots,
+                accurate_own_half_passes, total_own_half_passes,
+                accurate_opposition_half_passes, total_opposition_half_passes,
+                pass_value_normalized,
+                total_ball_carries_distance, total_progressive_ball_carries_distance)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                ON CONFLICT (match_id, player_id) DO NOTHING""",
             (
                 match_db_id,
@@ -455,6 +474,13 @@ def _process_match(db: DB, match: dict, league_id: int, season: str) -> bool:
                 ps["penalty_goals"],
                 ps["np_xg"],
                 ps["np_shots"],
+                ps["accurate_own_half_passes"],
+                ps["total_own_half_passes"],
+                ps["accurate_opposition_half_passes"],
+                ps["total_opposition_half_passes"],
+                ps["pass_value_normalized"],
+                ps["total_ball_carries_distance"],
+                ps["total_progressive_ball_carries_distance"],
             ),
         )
 
@@ -534,8 +560,9 @@ def _store_match_team_stats(
                (match_id, team_id, possession_pct, total_shots, shots_on_target,
                 corners, fouls, offsides_team, expected_goals, big_chances,
                 big_chances_missed, accurate_passes, total_passes,
-                tackles, interceptions, saves_team)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                tackles, interceptions, saves_team,
+                final_third_entries, final_third_phase_stats)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                ON CONFLICT (match_id, team_id) DO NOTHING""",
             (
                 match_db_id,
@@ -554,6 +581,8 @@ def _store_match_team_stats(
                 stats["tackles"],
                 stats["interceptions"],
                 stats["saves_team"],
+                stats["final_third_entries"],
+                stats["final_third_phase_stats"],
             ),
         )
 
