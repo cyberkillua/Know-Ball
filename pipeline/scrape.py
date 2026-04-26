@@ -11,7 +11,7 @@ Optimizations:
 - Deferred profile updates
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from pipeline.db import DB
 from pipeline.logger import get_logger
@@ -26,6 +26,7 @@ from pipeline.scrapers.sofascore import (
     fetch_standings,
     fetch_match_odds,
     fetch_shotmap,
+    fetch_scheduled_events,
     get_season_id_by_name,
     list_available_seasons,
     TOURNAMENT_IDS,
@@ -46,6 +47,7 @@ LEAGUES = [
 CURRENT_SEASON = "2025/2026"
 
 MIDFIELDER_POSITIONS = {"CAM", "CM", "CDM", "LM", "RM", "AM"}
+FOTMOB_ID_BY_TOURNAMENT_ID = {v: k for k, v in TOURNAMENT_IDS.items()}
 
 
 def get_existing_match_ids(db: DB) -> set[int]:
@@ -251,6 +253,105 @@ def scrape_league(
     if understat_slug and stats_ok > 0:
         _backfill_understat_match_ids(db, understat_slug, season, league_id)
         _update_understat_stats(db, understat_slug, season)
+
+
+def _event_tournament_id(event: dict) -> int | None:
+    tournament = event.get("tournament") or {}
+    unique_tournament = tournament.get("uniqueTournament") or {}
+    return unique_tournament.get("id") or tournament.get("uniqueTournamentId")
+
+
+def _match_from_event(event: dict) -> dict | None:
+    status = event.get("status") or {}
+    if status.get("type") != "finished":
+        return None
+
+    tournament_id = _event_tournament_id(event)
+    if tournament_id not in FOTMOB_ID_BY_TOURNAMENT_ID:
+        return None
+
+    home = event.get("homeTeam") or {}
+    away = event.get("awayTeam") or {}
+    home_score = event.get("homeScore") or {}
+    away_score = event.get("awayScore") or {}
+    round_info = event.get("roundInfo") or {}
+    start_ts = event.get("startTimestamp")
+    date_str = (
+        datetime.fromtimestamp(start_ts, tz=timezone.utc).strftime("%Y-%m-%d")
+        if start_ts
+        else ""
+    )
+
+    return {
+        "sofascore_id": event["id"],
+        "fotmob_id": None,
+        "date": date_str,
+        "matchday": round_info.get("round"),
+        "home_team": home.get("name", ""),
+        "home_team_id": home.get("id", 0),
+        "away_team": away.get("name", ""),
+        "away_team_id": away.get("id", 0),
+        "home_score": home_score.get("current"),
+        "away_score": away_score.get("current"),
+        "fotmob_league_id": FOTMOB_ID_BY_TOURNAMENT_ID[tournament_id],
+    }
+
+
+def scrape_recent_matches(
+    db: DB,
+    season: str,
+    days: int,
+    existing_ids: set[int],
+) -> None:
+    today = datetime.now(timezone.utc).date()
+    league_meta = {fotmob_id: (name, understat_slug) for name, fotmob_id, understat_slug in LEAGUES}
+    matches_by_league: dict[int, list[dict]] = {}
+
+    for offset in range(1, days + 1):
+        date_str = (today - timedelta(days=offset)).isoformat()
+        log.info(f"Fetching completed scheduled events for {date_str}")
+        events = fetch_scheduled_events(date_str)
+        for event in events:
+            match = _match_from_event(event)
+            if not match or match["sofascore_id"] in existing_ids:
+                continue
+            matches_by_league.setdefault(match["fotmob_league_id"], []).append(match)
+
+    if not matches_by_league:
+        log.info(f"No new completed matches found in the previous {days} day(s)")
+        return
+
+    for fotmob_id, matches in matches_by_league.items():
+        league_id = get_league_id(db, fotmob_id)
+        if not league_id:
+            log.error(f"League not found in DB for FotMob id {fotmob_id}")
+            continue
+
+        league_name, understat_slug = league_meta[fotmob_id]
+        log.info(f"=== Recent scrape: {league_name} ({len(matches)} matches) ===")
+
+        stats_ok = 0
+        stats_skipped = 0
+        for match in sorted(matches, key=lambda m: (m["date"], m["sofascore_id"])):
+            try:
+                got_stats = _process_match(db, match, league_id, season)
+                existing_ids.add(match["sofascore_id"])
+                if got_stats:
+                    stats_ok += 1
+                else:
+                    stats_skipped += 1
+            except Exception as e:
+                log.error(f"Error processing match {match['sofascore_id']}: {e}")
+                stats_skipped += 1
+
+        log.info(
+            f"=== Recent {league_name} done: {stats_ok} with player stats, "
+            f"{stats_skipped} without ==="
+        )
+
+        if understat_slug and stats_ok > 0:
+            _backfill_understat_match_ids(db, understat_slug, season, league_id)
+            _update_understat_stats(db, understat_slug, season)
 
 
 def _store_standings(db: DB, fotmob_league_id: int, league_id: int, season: str):
@@ -768,6 +869,12 @@ def main():
         metavar="LEAGUE_ID",
         help="List available seasons for a league",
     )
+    parser.add_argument(
+        "--recent-days",
+        type=int,
+        default=0,
+        help="Only scrape completed matches from the previous N day(s)",
+    )
     args = parser.parse_args()
 
     # Handle --list-seasons
@@ -801,23 +908,34 @@ def main():
     existing_ids = get_existing_match_ids(db)
     print(f"Existing matches: {len(existing_ids)}")
 
-    for league_name, fotmob_id, understat_slug in leagues:
+    if args.recent_days > 0:
+        if args.league:
+            log.warning("--league is ignored with --recent-days; scheduled events are filtered by configured leagues")
         try:
-            scrape_league(
-                db,
-                league_name,
-                fotmob_id,
-                understat_slug,
-                args.season,
-                existing_ids,
-            )
-            clear_player_cache()
+            scrape_recent_matches(db, args.season, args.recent_days, existing_ids)
         except Exception as e:
-            log.error(f"Failed to scrape {league_name}: {e}")
+            log.error(f"Failed to scrape recent matches: {e}")
             import traceback
 
             traceback.print_exc()
-            continue
+    else:
+        for league_name, fotmob_id, understat_slug in leagues:
+            try:
+                scrape_league(
+                    db,
+                    league_name,
+                    fotmob_id,
+                    understat_slug,
+                    args.season,
+                    existing_ids,
+                )
+                clear_player_cache()
+            except Exception as e:
+                log.error(f"Failed to scrape {league_name}: {e}")
+                import traceback
+
+                traceback.print_exc()
+                continue
 
     db.close()
     log.info("Scrape complete")

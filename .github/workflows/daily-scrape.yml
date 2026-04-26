@@ -21,6 +21,7 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       CURRENT_SEASON: ${{ vars.CURRENT_SEASON }}
       SOFASCORE_SEASON_IDS: ${{ vars.SOFASCORE_SEASON_IDS }}
+      KNOW_BALL_RECENT_DAYS: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
