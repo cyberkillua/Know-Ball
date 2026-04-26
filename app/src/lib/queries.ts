@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { query, queryOne } from './db.server'
+import { POSITION_GROUPS, positionGroupSql, type PositionGroup } from './positions'
 import type { League, Match, MatchRating, Player, PeerRating, PlayerPeerRatingResponse, PlayerUnderstat, Shot } from './types'
 
 export const getLeagues = createServerFn({ method: 'GET' }).handler(async () => {
@@ -543,15 +544,15 @@ export interface LeaguePlayer {
 }
 
 export const getLeaguePlayers = createServerFn({ method: 'GET' })
-  .inputValidator((d: { leagueId: number; season: string; search?: string; position?: string; clubId?: number }) => d)
+  .inputValidator((d: { leagueId: number; season: string; search?: string; position?: PositionGroup; clubId?: number }) => d)
   .handler(async ({ data }) => {
     const params: any[] = [data.leagueId, data.season]
     let posFilter = ''
     let clubFilter = ''
     let searchFilter = ''
 
-    if (data.position && data.position !== 'All') {
-      posFilter = ` AND p.position = $${params.length + 1}`
+    if (data.position) {
+      posFilter = ` AND ${positionGroupSql('p')} = $${params.length + 1}`
       params.push(data.position)
     }
     if (data.clubId) {
@@ -617,15 +618,14 @@ export const getLeagueTeams = createServerFn({ method: 'GET' })
 export const getLeaguePositions = createServerFn({ method: 'GET' })
   .inputValidator((d: { leagueId: number; season: string }) => d)
   .handler(async ({ data }) => {
-    const rows = await query<{ position: string }>(
-      `SELECT DISTINCT p.position
+    const rows = await query<{ position_group: PositionGroup }>(
+      `SELECT DISTINCT ${positionGroupSql('p')} as position_group
        FROM players p
-       JOIN teams t ON t.id = p.current_team_id
        JOIN match_player_stats mps ON mps.player_id = p.id
        JOIN matches m ON m.id = mps.match_id
-       WHERE t.league_id = $1 AND m.season = $2 AND p.position IS NOT NULL
-       ORDER BY p.position`,
+       WHERE m.league_id = $1 AND m.season = $2 AND p.position IS NOT NULL`,
       [data.leagueId, data.season],
     )
-    return rows.map((r) => r.position)
+    const available = new Set(rows.map((r) => r.position_group).filter(Boolean))
+    return POSITION_GROUPS.filter((group) => available.has(group.value))
   })

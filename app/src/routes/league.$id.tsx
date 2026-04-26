@@ -12,6 +12,7 @@ import {
   getLeaguePositions,
   type LeaguePlayer,
 } from '../lib/queries'
+import { getPositionGroupLabel, type PositionGroup } from '../lib/positions'
 import type { League } from '../lib/types'
 import { Search, ArrowLeft } from 'lucide-react'
 
@@ -25,10 +26,10 @@ function LeagueOverviewPage() {
   const [seasons, setSeasons] = useState<string[]>([])
   const [activeSeason, setActiveSeason] = useState('2025/2026')
   const [teams, setTeams] = useState<{ id: number; name: string }[]>([])
-  const [positions, setPositions] = useState<string[]>([])
+  const [positions, setPositions] = useState<{ value: PositionGroup; label: string }[]>([])
 
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedPosition, setSelectedPosition] = useState('All')
+  const [selectedPosition, setSelectedPosition] = useState<'All' | PositionGroup>('All')
   const [selectedClub, setSelectedClub] = useState<number | null>(null)
 
   const [players, setPlayers] = useState<LeaguePlayer[]>([])
@@ -75,7 +76,12 @@ function LeagueOverviewPage() {
 
   useEffect(() => {
     if (!activeLeague) return
-    getLeaguePositions({ data: { leagueId: activeLeague, season: activeSeason } }).then(setPositions)
+    getLeaguePositions({ data: { leagueId: activeLeague, season: activeSeason } }).then((nextPositions) => {
+      setPositions(nextPositions)
+      if (selectedPosition !== 'All' && !nextPositions.some((position) => position.value === selectedPosition)) {
+        setSelectedPosition('All')
+      }
+    })
   }, [activeLeague, activeSeason])
 
   const currentLeague = leagues.find((l) => l.id === activeLeague)
@@ -120,12 +126,12 @@ function LeagueOverviewPage() {
 
             <select
               value={selectedPosition}
-              onChange={(e) => setSelectedPosition(e.target.value)}
+              onChange={(e) => setSelectedPosition(e.target.value as 'All' | PositionGroup)}
               className="h-8 rounded-none border border-input bg-background px-2 text-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
             >
               <option value="All">All Positions</option>
               {positions.map((p) => (
-                <option key={p} value={p}>{p}</option>
+                <option key={p.value} value={p.value}>{getPositionGroupLabel(p.value)}</option>
               ))}
             </select>
 
