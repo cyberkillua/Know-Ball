@@ -14,15 +14,32 @@ Optimizations:
 import asyncio
 import time
 from curl_cffi.requests import AsyncSession, Session
+from curl_cffi.requests.exceptions import HTTPError
 from datetime import datetime
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_exponential, wait_random
 
 from pipeline.logger import get_logger
 
 log = get_logger("sofascore")
 
 BASE_URL = "https://www.sofascore.com/api/v1"
-REQUEST_DELAY = 0.5
+REQUEST_DELAY = 2.0
+
+SOFASCORE_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Referer": "https://www.sofascore.com/",
+    "Origin": "https://www.sofascore.com",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-origin",
+}
 
 TOURNAMENT_IDS = {
     47: 17,
@@ -145,24 +162,37 @@ class RateLimiter:
             self.tokens -= 1
 
 
-_rate_limiter = RateLimiter(rate=2.0, burst=10)
+_rate_limiter = RateLimiter(rate=1.0, burst=5)
 
 
 async def _api_get_async(path: str, session: AsyncSession) -> dict:
     url = f"{BASE_URL}/{path}"
     await _rate_limiter.acquire_async()
-    resp = await session.get(url, impersonate="chrome", timeout=30)
+    resp = await session.get(
+        url, impersonate="chrome", headers=SOFASCORE_HEADERS, timeout=30
+    )
     resp.raise_for_status()
     return resp.json()
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(min=5, max=30))
+@retry(
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=2, min=10, max=60) + wait_random(0, 5),
+    reraise=True,
+)
 def _api_get(path: str) -> dict:
     url = f"{BASE_URL}/{path}"
     _rate_limiter.acquire_sync()
-    resp = Session().get(url, impersonate="chrome", timeout=30)
+    resp = Session().get(
+        url, impersonate="chrome", headers=SOFASCORE_HEADERS, timeout=30
+    )
     resp.raise_for_status()
     return resp.json()
+
+
+def _http_status_code(exc: Exception) -> int | None:
+    response = getattr(exc, "response", None)
+    return getattr(response, "status_code", None)
 
 
 def _generate_season_alternatives(season_name: str) -> list[str]:
@@ -333,11 +363,33 @@ def fetch_league_matches(fotmob_league_id: int, season: str) -> list[dict]:
     )
 
     matches = []
+    consecutive_forbidden = 0
+    max_consecutive_forbidden = 2
+
     for round_num in range(1, 50):
         try:
             data = _api_get(
                 f"unique-tournament/{tournament_id}/season/{season_id}/events/round/{round_num}"
             )
+            consecutive_forbidden = 0
+        except HTTPError as e:
+            if _http_status_code(e) == 403:
+                consecutive_forbidden += 1
+                log.warning(
+                    f"Round {round_num}: HTTP 403 Forbidden "
+                    f"({consecutive_forbidden}/{max_consecutive_forbidden})"
+                )
+                if consecutive_forbidden >= max_consecutive_forbidden:
+                    log.error(
+                        f"Too many 403 errors, stopping scrape for tournament "
+                        f"{tournament_id}, season {season_id}"
+                    )
+                    break
+                time.sleep(10)
+                continue
+
+            log.info(f"Round {round_num}: no data ({e}), stopping")
+            break
         except Exception as e:
             log.info(f"Round {round_num}: no data ({e}), stopping")
             break
