@@ -40,9 +40,14 @@
     "error_lead_to_goal_penalty": 0.3,
     "foul_won_reward": 0.08,
     "penalty_won_reward": 0.3,
-    "passes_completed_reward": 0.04,
-    "pass_accuracy_threshold": 0.75,
-    "pass_accuracy_weight": 0.12,
+    "pass_value_weight": 0.6,
+    "opposition_half_pass_reward": 0.008,
+    "opposition_half_pass_cap": 45,
+    "opposition_half_accuracy_min_attempts": 5,
+    "opposition_half_accuracy_threshold": 0.72,
+    "opposition_half_accuracy_weight": 0.12,
+    "accurate_long_ball_reward": 0.025,
+    "accurate_long_ball_cap": 8,
     "presence_factor": 0.002,
     "aerial_win_reward": 0.08,
     "aerial_loss_penalty": 0.04,
@@ -66,6 +71,7 @@
       "peak": 0.1,
       "availability": 0.08
     },
+    "build_up_weight": 0.12,
     "consistency_threshold": 7.0,
     "impact_threshold": 8.0,
     "availability_target_minutes": 1800,
@@ -78,28 +84,38 @@
   ],
   "normalization": {
     "method": "median_iqr",
-    "calibrated_at": "2026-04-25",
+    "calibrated_at": "2026-04-27",
     "sample_size": 48790,
     "midpoints": {
       "volume_passing": {
-        "median": 0.0,
-        "scale": 0.1
+        "median": 0.1539,
+        "scale": 0.1991,
+        "p25": 0.0716,
+        "p75": 0.2707
       },
       "carrying": {
         "median": 0.0675,
-        "scale": 0.1932
+        "scale": 0.1932,
+        "p25": -0.0111,
+        "p75": 0.1821
       },
       "chance_creation": {
         "median": 0.049,
-        "scale": 0.122
+        "scale": 0.122,
+        "p25": 0.005,
+        "p75": 0.127
       },
       "defensive": {
         "median": 0.578,
-        "scale": 0.648
+        "scale": 0.648,
+        "p25": 0.282,
+        "p75": 0.93
       },
       "goal_threat": {
         "median": 0.0,
-        "scale": 0.1
+        "scale": 0.1,
+        "p25": 0.0,
+        "p75": 0.065
       }
     }
   }

@@ -123,7 +123,12 @@ def main():
 
     # JSON block ready to paste / write
     midpoints_for_config = {
-        cat: {"median": stats["median"], "scale": stats["scale"]}
+        cat: {
+            "median": stats["median"],
+            "scale": stats["scale"],
+            "p25": stats["p25"],
+            "p75": stats["p75"],
+        }
         for cat, stats in midpoints.items()
     }
 

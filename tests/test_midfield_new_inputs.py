@@ -3,6 +3,7 @@ import unittest
 from pipeline.engine.calculator import PlayerMatchStats
 from pipeline.engine.cam_calculator import calc_carrying as calc_cam_carrying
 from pipeline.engine.cm_calculator import (
+    _weights_for_role,
     calc_carrying as calc_cm_carrying,
     calc_volume_passing,
 )
@@ -47,6 +48,41 @@ class MidfieldNewInputsTest(unittest.TestCase):
             calc_volume_passing(valuable, constants),
             calc_volume_passing(base, constants),
         )
+
+    def test_cm_volume_passing_uses_forward_pass_proxies(self):
+        constants = {
+            "pass_value_weight": 0.6,
+            "opposition_half_pass_reward": 0.008,
+            "accurate_long_ball_reward": 0.025,
+        }
+        base = PlayerMatchStats(pass_value_normalized=0.2)
+        progressive = PlayerMatchStats(
+            pass_value_normalized=0.2,
+            accurate_opposition_half_passes=20,
+            total_opposition_half_passes=28,
+            accurate_long_balls=4,
+            total_long_balls=6,
+        )
+
+        self.assertGreater(
+            calc_volume_passing(progressive, constants),
+            calc_volume_passing(base, constants),
+        )
+
+    def test_cdm_weights_reduce_goal_threat_dependence(self):
+        weights = {
+            "volume_passing": 0.2,
+            "carrying": 0.2,
+            "chance_creation": 0.25,
+            "defensive": 0.2,
+            "goal_threat": 0.15,
+        }
+
+        cdm_weights = _weights_for_role(weights, "CDM")
+
+        self.assertLess(cdm_weights["goal_threat"], weights["goal_threat"])
+        self.assertGreater(cdm_weights["volume_passing"], weights["volume_passing"])
+        self.assertGreater(cdm_weights["defensive"], weights["defensive"])
 
 
 if __name__ == "__main__":

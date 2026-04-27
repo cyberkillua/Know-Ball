@@ -14,10 +14,10 @@ would produce a mediocre rating for each.
 
 Dimensions: volume_passing, carrying, chance_creation, defensive, goal_threat.
 
-Progressive passes, passes-into-final-third, progressive carries, and carry distance
-are not available at match level in the current dataset. volume_passing uses
-passes_completed volume + pass-accuracy gate; carrying uses successful_dribbles +
-foul/penalty wins as proxies. These substitutions mirror what ST/CAM/W already do.
+Progressive-pass event tags are not available at match level in the current
+dataset. volume_passing therefore uses pass_value_normalized as the anchor,
+then adds conservative rewards for completed opposition-half passes and accurate
+long balls as forward-pass proxies.
 """
 
 from dataclasses import dataclass
@@ -43,18 +43,44 @@ class CMCategoryScores:
 
 def calc_volume_passing(stats: PlayerMatchStats, constants: dict) -> float:
     """
-    Pass Impact — quality and involvement of a CM's passing.
+    Progressive Passing — valuable passes that help the team move forward.
 
     Anchored on Sofascore's pass_value_normalized, their per-match
     passing impact metric (partially volume-independent at r=0.36 with
-    passes_completed). 
+    passes_completed).
 
     Raw = pass_value_normalized * pass_value_weight
-        + passes_completed * pass_volume_reward
+        + capped accurate_opposition_half_passes * opposition_half_pass_reward
+        + opposition-half accuracy gate
+        + capped accurate_long_balls * long_ball_reward
     """
     c = constants
+    opposition_half_accuracy = stats.accurate_opposition_half_passes / max(
+        stats.total_opposition_half_passes, 1
+    )
+    opposition_half_accuracy_delta = 0.0
+    if stats.total_opposition_half_passes >= c.get(
+        "opposition_half_accuracy_min_attempts", 5
+    ):
+        opposition_half_accuracy_delta = (
+            opposition_half_accuracy
+            - c.get("opposition_half_accuracy_threshold", 0.72)
+        ) * c.get("opposition_half_accuracy_weight", 0.12)
+
+    forward_volume = min(
+        stats.accurate_opposition_half_passes,
+        c.get("opposition_half_pass_cap", 45),
+    ) * c.get("opposition_half_pass_reward", 0.008)
+    long_ball_progression = min(
+        stats.accurate_long_balls,
+        c.get("accurate_long_ball_cap", 8),
+    ) * c.get("accurate_long_ball_reward", 0.025)
+
     return (
         stats.pass_value_normalized * c.get("pass_value_weight", 0.6)
+        + forward_volume
+        + opposition_half_accuracy_delta
+        + long_ball_progression
     )
 
 def calc_carrying(stats: PlayerMatchStats, constants: dict) -> float:
@@ -234,9 +260,9 @@ def _score_elite_buckets(
         mp = midpoints.get(cat, {})
         median = mp.get("median", 0.0)
         scale = mp.get("scale", 1.0)
-        # Fallback to median ± 0.5*scale if p25/p75 aren't calibrated yet
-        p25 = mp.get("p25", median - 0.5 * scale)
-        p75 = mp.get("p75", median + 0.5 * scale)
+        # Support both legacy q25/q75 and the newer p25/p75 names.
+        p25 = mp.get("p25", mp.get("q25", median - 0.5 * scale))
+        p75 = mp.get("p75", mp.get("q75", median + 0.5 * scale))
         raw = raw_scores[cat]
         if raw >= p75:
             tiers[cat] = "elite"
@@ -272,6 +298,18 @@ def _score_elite_buckets(
     return weighted_sum + poor_adjustment, tiers
 
 
+def _weights_for_role(weights: dict[str, float], profile_position: str | None) -> dict[str, float]:
+    role_weights = weights.copy()
+    pos = (profile_position or "").upper().strip()
+    if pos in {"CDM", "DM"}:
+        goal_threat_drop = role_weights.get("goal_threat", 0.0) * 0.5
+        role_weights["goal_threat"] = role_weights.get("goal_threat", 0.0) - goal_threat_drop
+        role_weights["volume_passing"] = role_weights.get("volume_passing", 0.0) + goal_threat_drop * 0.45
+        role_weights["defensive"] = role_weights.get("defensive", 0.0) + goal_threat_drop * 0.45
+        role_weights["carrying"] = role_weights.get("carrying", 0.0) + goal_threat_drop * 0.10
+    return role_weights
+
+
 def calculate_cm_rating(
     stats: PlayerMatchStats,
     config: dict,
@@ -282,7 +320,7 @@ def calculate_cm_rating(
     Returns (final_rating, category_scores).
     """
     constants = config["constants"]
-    weights = config["weights"]
+    weights = _weights_for_role(config["weights"], stats.profile_position)
     baseline = config["baseline"]
     scoring_cfg = config.get("scoring", {})
     normalization = config.get("normalization", {})

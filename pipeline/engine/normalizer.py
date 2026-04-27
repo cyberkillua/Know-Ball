@@ -62,6 +62,8 @@ def calibrate_from_raw_scores(
         midpoints[category] = {
             "median": round(stats.median, 4),
             "scale": round(stats.scale, 4),
+            "p25": round(stats.q25, 4),
+            "p75": round(stats.q75, 4),
             "q25": round(stats.q25, 4),
             "q75": round(stats.q75, 4),
             "min": round(stats.min_val, 4),

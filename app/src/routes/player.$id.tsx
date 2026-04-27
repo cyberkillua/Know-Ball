@@ -23,6 +23,7 @@ import {
   getPlayerXgotDelta,
   getPlayerUnderstat,
 } from "../lib/queries";
+import { formatCmArchetype } from "../lib/utils";
 import type {
   Player,
   MatchRating,
@@ -349,6 +350,7 @@ function PlayerProfilePage() {
       : null;
 
   const activePeerRating = peerScope === "league" ? peerRating : allPeerRating;
+  const cmArchetype = formatCmArchetype(activePeerRating?.cm_archetype);
   const activePeerMinMinutes = 300;
   const percentileHasEnoughTotalMinutes = (stats?.minutes ?? 0) >= PERCENTILE_MIN_MINUTES;
   const percentileHasData = percentileHasEnoughTotalMinutes && peerRating != null;
@@ -7838,6 +7840,23 @@ function PlayerProfilePage() {
                             Overall season score for this role.
                             Use percentile ranking for peer context.
                           </span>
+                          {cmArchetype && (
+                            <span
+                              style={{
+                                alignSelf: "flex-start",
+                                marginTop: 4,
+                                padding: "3px 8px",
+                                border: "1px solid var(--border)",
+                                borderRadius: 6,
+                                fontSize: 11,
+                                fontWeight: 700,
+                                color: "var(--foreground)",
+                                background: "var(--card)",
+                              }}
+                            >
+                              {cmArchetype}
+                            </span>
+                          )}
                         </div>
                         <span
                           style={{

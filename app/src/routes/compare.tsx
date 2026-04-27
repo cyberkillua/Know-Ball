@@ -11,6 +11,7 @@ import {
   getPlayerStats,
   getPlayerSeasons,
 } from '../lib/queries'
+import { formatCmArchetype } from '../lib/utils'
 import type { Player, MatchRating, PeerRating, PlayerPeerRatingResponse, PlayerStats } from '../lib/types'
 
 export const Route = createFileRoute('/compare')({ component: ComparePage })
@@ -492,6 +493,7 @@ function rateColor(val: number, low: number, high: number) {
 function PeerCard({ data }: { data: PlayerData }) {
   const pr = data.peerRating
   const qualified = (pr?.rated_minutes ?? 0) >= 300
+  const cmArchetype = formatCmArchetype(pr?.cm_archetype)
 
   if (!qualified) {
     return (
@@ -511,6 +513,11 @@ function PeerCard({ data }: { data: PlayerData }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Know Ball Score</span>
             <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>Overall season score for this role</span>
+            {cmArchetype && (
+              <span style={{ alignSelf: 'flex-start', marginTop: 4, padding: '3px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 11, fontWeight: 700, color: 'var(--foreground)', background: 'var(--card)' }}>
+                {cmArchetype}
+              </span>
+            )}
           </div>
           <span style={{ fontSize: 28, fontWeight: 700, color: Number(pr.model_score) >= 60 ? '#1d9e75' : Number(pr.model_score) >= 45 ? '#ef9f27' : '#e24b4a', flexShrink: 0, marginLeft: 16 }}>
             {Number(pr.model_score).toFixed(2)}

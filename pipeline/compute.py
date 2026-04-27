@@ -74,6 +74,65 @@ def percentile_of(value: float, sorted_values: list[float]) -> int:
     return round(pct)
 
 
+def _avg_present(*values: int | float | None) -> float | None:
+    present = [float(v) for v in values if v is not None]
+    if not present:
+        return None
+    return sum(present) / len(present)
+
+
+def cm_build_up_score(p: dict) -> float | None:
+    """Season build-up signal for CMs, using only available percentile inputs."""
+    return _avg_present(
+        p.get("volume_passing_percentile"),
+        p.get("pass_value_normalized_percentile"),
+        p.get("accurate_final_third_passes_per90_percentile"),
+        p.get("pass_to_assist_per90_percentile"),
+        p.get("xg_chain_per90_percentile"),
+        p.get("xg_buildup_per90_percentile"),
+    )
+
+
+def cm_archetype(p: dict) -> str | None:
+    """Assign a readable CM role from the player's strongest season signals."""
+    profile_pos = (p.get("player_position") or "").upper().strip()
+    build_up = cm_build_up_score(p) or 0.0
+    defensive = _avg_present(
+        p.get("defensive_percentile"),
+        p.get("ball_recoveries_per90_percentile"),
+        p.get("tackles_per90_percentile"),
+        p.get("interceptions_per90_percentile"),
+    ) or 0.0
+    carrier = _avg_present(
+        p.get("carrying_percentile"),
+        p.get("progressive_carries_distance_per90_percentile"),
+        p.get("dribbles_per90_percentile"),
+    ) or 0.0
+    creator = _avg_present(
+        p.get("chance_creation_percentile"),
+        p.get("xa_per90_percentile"),
+        p.get("key_passes_per90_percentile"),
+        p.get("big_chances_created_percentile"),
+    ) or 0.0
+    box_threat = _avg_present(
+        p.get("goal_threat_percentile"),
+        p.get("np_goals_per90_percentile"),
+        p.get("xg_per90_percentile"),
+        p.get("shots_per90_percentile"),
+    ) or 0.0
+
+    scores = {
+        "controller": build_up,
+        "ball_winner": defensive,
+        "carrier": carrier,
+        "creator": creator,
+        "box_crasher": box_threat,
+    }
+    if profile_pos in {"CDM", "DM"} and defensive >= build_up - 8:
+        scores["ball_winner"] += 6
+    return max(scores, key=scores.get)
+
+
 NULL_PERCENTILE_COLS = (
     "goals_per90_percentile",
     "shots_per90_percentile",
@@ -493,8 +552,10 @@ def compute_peer_ratings(
             "league_id": r["league_id"],
             "season": r["season"],
             "position": position_label,
+            "player_position": r["player_position"],
             "peer_mode": peer_mode,
             "position_scope": "",
+            "cm_archetype": None,
             "matches_played": r["matches_played"],
             "minutes_played": minutes,
             "rated_minutes": rated_minutes,
@@ -1082,7 +1143,19 @@ def compute_peer_ratings(
                     min_minutes=min_minutes,
                     config=season_score_config,
                 )
-                p["model_score"] = season_breakdown.final_score
+                final_score = season_breakdown.final_score
+                if is_cm:
+                    build_up = cm_build_up_score(p)
+                    if build_up is not None:
+                        build_up_weight = float(
+                            season_score_config.get("build_up_weight", 0.0)
+                        )
+                        final_score = round(
+                            final_score * (1.0 - build_up_weight)
+                            + build_up * build_up_weight,
+                            2,
+                        )
+                p["model_score"] = final_score
                 p["model_score_quality"] = season_breakdown.quality
                 p["model_score_peak"] = season_breakdown.peak
                 p["model_score_availability"] = season_breakdown.availability
@@ -1184,6 +1257,7 @@ def compute_peer_ratings(
                     p["productive_dribbling_percentile"] = None
                     p["goal_contribution_percentile"] = None
                     p["presence_percentile"] = None
+                    p["cm_archetype"] = cm_archetype(p)
                 else:
                     # ST dimension percentiles
                     p["finishing_percentile"] = percentile_of(
@@ -1232,6 +1306,7 @@ def compute_peer_ratings(
     upsert_sql = """
             INSERT INTO peer_ratings (
                 player_id, league_id, season, position, peer_mode, position_scope,
+                cm_archetype,
                 matches_played, minutes_played, rated_minutes, avg_match_rating,
                 goals_per90, shots_per90, xg_per90, xgot_per90, xa_per90,
                 assists_per90, key_passes_per90, accurate_cross_per90,
@@ -1312,6 +1387,7 @@ def compute_peer_ratings(
                 pass_to_assist_raw_percentile
             ) VALUES (
                 %(player_id)s, %(league_id)s, %(season)s, %(position)s, %(peer_mode)s, %(position_scope)s,
+                %(cm_archetype)s,
                 %(matches_played)s, %(minutes_played)s, %(rated_minutes)s, %(avg_match_rating)s,
                 %(goals_per90)s, %(shots_per90)s, %(xg_per90)s, %(xgot_per90)s, %(xa_per90)s,
                 %(assists_per90)s, %(key_passes_per90)s, %(accurate_cross_per90)s,
@@ -1395,6 +1471,7 @@ def compute_peer_ratings(
                 position                          = EXCLUDED.position,
                 peer_mode                         = EXCLUDED.peer_mode,
                 position_scope                    = EXCLUDED.position_scope,
+                cm_archetype                      = EXCLUDED.cm_archetype,
                 matches_played                    = EXCLUDED.matches_played,
                 minutes_played                    = EXCLUDED.minutes_played,
                 rated_minutes                     = EXCLUDED.rated_minutes,
