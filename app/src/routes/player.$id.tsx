@@ -8340,38 +8340,50 @@ function PlayerProfilePage() {
                         return (
                           <div
                             key={label}
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: "150px 1fr minmax(72px, 110px)",
-                              gap: 10,
-                              alignItems: "center",
-                            }}
+                            className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3"
                           >
-                            <span
-                              style={{
-                                fontSize: 12,
-                                color: "var(--foreground)",
-                              }}
-                            >
-                              {label}
-                              {sublabel && (
-                                <span
-                                  style={{
-                                    display: "block",
-                                    fontSize: 10,
-                                    color: "var(--muted-foreground)",
-                                    marginTop: 1,
-                                  }}
-                                >
-                                  {sublabel}
-                                </span>
-                              )}
-                            </span>
+                            <div className="flex items-baseline justify-between gap-3 sm:contents">
+                              <span
+                                className="sm:w-[150px] sm:flex-shrink-0"
+                                style={{
+                                  fontSize: 12,
+                                  color: "var(--foreground)",
+                                  minWidth: 0,
+                                }}
+                              >
+                                {label}
+                                {sublabel && (
+                                  <span
+                                    style={{
+                                      display: "block",
+                                      fontSize: 10,
+                                      color: "var(--muted-foreground)",
+                                      marginTop: 1,
+                                    }}
+                                  >
+                                    {sublabel}
+                                  </span>
+                                )}
+                              </span>
+                              <span
+                                className="sm:order-3 sm:min-w-[28px] sm:text-right"
+                                style={{
+                                  fontSize: 13,
+                                  fontWeight: 700,
+                                  color: barColor,
+                                  flexShrink: 0,
+                                }}
+                              >
+                                {value != null ? Math.round(value) : "—"}
+                              </span>
+                            </div>
                             <div
+                              className="sm:order-2 sm:flex-1"
                               style={{
-                                height: 5,
+                                position: "relative",
+                                height: 10,
                                 background: "var(--muted)",
-                                borderRadius: 3,
+                                borderRadius: 5,
                                 overflow: "hidden",
                               }}
                             >
@@ -8380,20 +8392,24 @@ function PlayerProfilePage() {
                                   height: "100%",
                                   width: `${pct}%`,
                                   background: barColor,
-                                  borderRadius: 3,
+                                  borderRadius: 5,
                                 }}
                               />
+                              {[25, 50, 75].map((tick) => (
+                                <div
+                                  key={tick}
+                                  style={{
+                                    position: "absolute",
+                                    top: 0,
+                                    bottom: 0,
+                                    left: `${tick}%`,
+                                    width: 1,
+                                    background: "var(--background)",
+                                    opacity: 0.6,
+                                  }}
+                                />
+                              ))}
                             </div>
-                            <span
-                              style={{
-                                fontSize: 12,
-                                fontWeight: 500,
-                                color: "var(--foreground)",
-                                textAlign: "right",
-                              }}
-                            >
-                              {value != null ? `${Math.round(value)}` : "—"}
-                            </span>
                           </div>
                         );
                       })}
