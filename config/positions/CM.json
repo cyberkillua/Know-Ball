@@ -66,10 +66,10 @@
   "season_score": {
     "version": 2,
     "weights": {
-      "quality": 0.7,
-      "consistency": 0.12,
-      "peak": 0.1,
-      "availability": 0.08
+      "quality": 0.64,
+      "consistency": 0.16,
+      "peak": 0.08,
+      "availability": 0.12
     },
     "build_up_weight": 0.12,
     "consistency_threshold": 7.0,

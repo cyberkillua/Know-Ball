@@ -142,6 +142,7 @@ export interface PeerRating {
   peer_mode: 'dominant' | 'position'
   position_scope: string
   cm_archetype: string | null
+  role_archetype: string | null
   // Per-90 base metrics
   goals_per90: number
   xa_per90: number

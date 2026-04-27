@@ -41,8 +41,8 @@
   "season_score": {
     "version": 2,
     "weights": {
-      "quality": 0.7,
-      "consistency": 0.12,
+      "quality": 0.68,
+      "consistency": 0.14,
       "peak": 0.1,
       "availability": 0.08
     },

@@ -122,14 +122,131 @@ def cm_archetype(p: dict) -> str | None:
     ) or 0.0
 
     scores = {
-        "controller": build_up,
-        "ball_winner": defensive,
-        "carrier": carrier,
+        "anchor_regista": build_up,
+        "destroyer": defensive,
+        "shuttler_space_eater": carrier,
         "creator": creator,
-        "box_crasher": box_threat,
+        "box_to_box": box_threat,
     }
     if profile_pos in {"CDM", "DM"} and defensive >= build_up - 8:
-        scores["ball_winner"] += 6
+        scores["destroyer"] += 6
+    if profile_pos in {"CDM", "DM"} and build_up >= defensive - 8:
+        scores["anchor_regista"] += 4
+    return max(scores, key=scores.get)
+
+
+def st_archetype(p: dict) -> str | None:
+    scores = {
+        "poacher": _avg_present(
+            p.get("finishing_percentile"),
+            p.get("np_goals_per90_percentile"),
+            p.get("shot_conversion_percentile"),
+        ) or 0.0,
+        "advanced_forward": _avg_present(
+            p.get("shot_generation_percentile"),
+            p.get("shots_per90_percentile"),
+            p.get("xg_per90_percentile"),
+        ) or 0.0,
+        "second_striker": _avg_present(
+            p.get("chance_creation_percentile"),
+            p.get("xa_per90_percentile"),
+            p.get("key_passes_per90_percentile"),
+            p.get("assists_per90_percentile"),
+        ) or 0.0,
+        "target_man": _avg_present(
+            p.get("duels_percentile"),
+            p.get("aerials_per90_percentile"),
+            p.get("aerial_win_rate_percentile"),
+        ) or 0.0,
+        "complete_forward": _avg_present(
+            p.get("finishing_percentile"),
+            p.get("shot_generation_percentile"),
+            p.get("chance_creation_percentile"),
+            p.get("carrying_percentile"),
+            p.get("duels_percentile"),
+            p.get("ball_recoveries_per90_percentile"),
+        ) or 0.0,
+    }
+    return max(scores, key=scores.get)
+
+
+def winger_archetype(p: dict) -> str | None:
+    scores = {
+        "inverted_winger_inside_forward": _avg_present(
+            p.get("goal_contribution_percentile"),
+            p.get("shot_generation_percentile"),
+            p.get("np_goals_per90_percentile"),
+            p.get("xg_per90_percentile"),
+        ) or 0.0,
+        "traditional_touchline_winger": _avg_present(
+            p.get("chance_creation_percentile"),
+            p.get("xa_per90_percentile"),
+            p.get("key_passes_per90_percentile"),
+            p.get("accurate_cross_per90_percentile"),
+        ) or 0.0,
+        "wide_forward": _avg_present(
+            p.get("shots_per90_percentile"),
+            p.get("xg_per90_percentile"),
+            p.get("np_goals_per90_percentile"),
+            p.get("progressive_carries_distance_per90_percentile"),
+        ) or 0.0,
+        "one_v_one_touchline_winger": _avg_present(
+            p.get("productive_dribbling_percentile"),
+            p.get("carrying_percentile"),
+            p.get("dribbles_per90_percentile"),
+            p.get("progressive_carries_distance_per90_percentile"),
+        ) or 0.0,
+        "high_volume_winger": _avg_present(
+            p.get("presence_percentile"),
+            p.get("touches_per90_percentile"),
+            p.get("passes_completed_per90_percentile"),
+        ) or 0.0,
+        "two_way_winger": _avg_present(
+            p.get("defensive_percentile"),
+            p.get("ball_recoveries_per90_percentile"),
+            p.get("tackles_per90_percentile"),
+        ) or 0.0,
+    }
+    return max(scores, key=scores.get)
+
+
+def cam_archetype(p: dict) -> str | None:
+    scores = {
+        "classic_10_trequartista": _avg_present(
+            p.get("chance_creation_percentile"),
+            p.get("xa_per90_percentile"),
+            p.get("key_passes_per90_percentile"),
+            p.get("big_chances_created_percentile"),
+        ) or 0.0,
+        "shadow_striker": _avg_present(
+            p.get("goal_threat_percentile"),
+            p.get("np_goals_per90_percentile"),
+            p.get("xg_per90_percentile"),
+            p.get("shots_per90_percentile"),
+        ) or 0.0,
+        "enganche": _avg_present(
+            p.get("team_function_percentile"),
+            p.get("passes_completed_per90_percentile"),
+            p.get("xg_chain_per90_percentile"),
+            p.get("xg_buildup_per90_percentile"),
+        ) or 0.0,
+        "raumdeuter": _avg_present(
+            p.get("goal_threat_percentile"),
+            p.get("xg_per90_percentile"),
+            p.get("np_goals_per90_percentile"),
+            p.get("touches_per90_percentile"),
+        ) or 0.0,
+        "ball_carrying_10": _avg_present(
+            p.get("carrying_percentile"),
+            p.get("progressive_carries_distance_per90_percentile"),
+            p.get("dribbles_per90_percentile"),
+        ) or 0.0,
+        "two_way_10": _avg_present(
+            p.get("defensive_percentile"),
+            p.get("ball_recoveries_per90_percentile"),
+            p.get("tackles_per90_percentile"),
+        ) or 0.0,
+    }
     return max(scores, key=scores.get)
 
 
@@ -556,6 +673,7 @@ def compute_peer_ratings(
             "peer_mode": peer_mode,
             "position_scope": "",
             "cm_archetype": None,
+            "role_archetype": None,
             "matches_played": r["matches_played"],
             "minutes_played": minutes,
             "rated_minutes": rated_minutes,
@@ -1199,6 +1317,7 @@ def compute_peer_ratings(
                     p["duels_percentile"] = None
                     p["goal_threat_percentile"] = None
                     p["volume_passing_percentile"] = None
+                    p["role_archetype"] = winger_archetype(p)
                 elif is_cam:
                     # CAM dimension percentiles
                     p["chance_creation_percentile"] = percentile_of(
@@ -1228,6 +1347,7 @@ def compute_peer_ratings(
                     p["goal_contribution_percentile"] = None
                     p["presence_percentile"] = None
                     p["volume_passing_percentile"] = None
+                    p["role_archetype"] = cam_archetype(p)
                 elif is_cm:
                     # CM dimension percentiles
                     p["volume_passing_percentile"] = percentile_of(
@@ -1258,6 +1378,7 @@ def compute_peer_ratings(
                     p["goal_contribution_percentile"] = None
                     p["presence_percentile"] = None
                     p["cm_archetype"] = cm_archetype(p)
+                    p["role_archetype"] = p["cm_archetype"]
                 else:
                     # ST dimension percentiles
                     p["finishing_percentile"] = percentile_of(
@@ -1297,6 +1418,7 @@ def compute_peer_ratings(
                     p["presence_percentile"] = None
                     p["goal_threat_percentile"] = None
                     p["volume_passing_percentile"] = None
+                    p["role_archetype"] = st_archetype(p)
 
         for p in group:
             if p["minutes_played"] < min_minutes:
@@ -1306,7 +1428,7 @@ def compute_peer_ratings(
     upsert_sql = """
             INSERT INTO peer_ratings (
                 player_id, league_id, season, position, peer_mode, position_scope,
-                cm_archetype,
+                cm_archetype, role_archetype,
                 matches_played, minutes_played, rated_minutes, avg_match_rating,
                 goals_per90, shots_per90, xg_per90, xgot_per90, xa_per90,
                 assists_per90, key_passes_per90, accurate_cross_per90,
@@ -1387,7 +1509,7 @@ def compute_peer_ratings(
                 pass_to_assist_raw_percentile
             ) VALUES (
                 %(player_id)s, %(league_id)s, %(season)s, %(position)s, %(peer_mode)s, %(position_scope)s,
-                %(cm_archetype)s,
+                %(cm_archetype)s, %(role_archetype)s,
                 %(matches_played)s, %(minutes_played)s, %(rated_minutes)s, %(avg_match_rating)s,
                 %(goals_per90)s, %(shots_per90)s, %(xg_per90)s, %(xgot_per90)s, %(xa_per90)s,
                 %(assists_per90)s, %(key_passes_per90)s, %(accurate_cross_per90)s,
@@ -1472,6 +1594,7 @@ def compute_peer_ratings(
                 peer_mode                         = EXCLUDED.peer_mode,
                 position_scope                    = EXCLUDED.position_scope,
                 cm_archetype                      = EXCLUDED.cm_archetype,
+                role_archetype                    = EXCLUDED.role_archetype,
                 matches_played                    = EXCLUDED.matches_played,
                 minutes_played                    = EXCLUDED.minutes_played,
                 rated_minutes                     = EXCLUDED.rated_minutes,

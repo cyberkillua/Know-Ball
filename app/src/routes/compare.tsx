@@ -11,7 +11,7 @@ import {
   getPlayerStats,
   getPlayerSeasons,
 } from '../lib/queries'
-import { formatCmArchetype } from '../lib/utils'
+import { formatRoleArchetype } from '../lib/utils'
 import type { Player, MatchRating, PeerRating, PlayerPeerRatingResponse, PlayerStats } from '../lib/types'
 
 export const Route = createFileRoute('/compare')({ component: ComparePage })
@@ -315,7 +315,7 @@ const S = {
   } as Section,
 }
 
-function getStatSectionsForPosition(position: string | null): Section[] {
+function getStatSectionsForPosition(position: string | null, archetype?: string | null): Section[] {
   const pos = (position ?? 'ST').toUpperCase()
   const isST = pos === 'ST' || pos === 'CF'
   const isCAM = pos === 'CAM'
@@ -325,15 +325,32 @@ function getStatSectionsForPosition(position: string | null): Section[] {
   const isDefender = pos === 'CB' || pos === 'LB' || pos === 'RB' || pos === 'LWB' || pos === 'RWB'
 
   if (isST) {
+    if (archetype === 'second_striker') return [S.chanceCreationFull, S.passing, S.goalscoring, S.carryingFull, S.physicalFull, S.defending]
+    if (archetype === 'target_man') return [S.physicalFull, S.goalscoring, S.chanceCreationFull, S.passing, S.carryingFull, S.defending]
+    if (archetype === 'complete_forward') return [S.goalscoring, S.chanceCreationFull, S.carryingFull, S.physicalFull, S.passing, S.defending]
+    if (archetype === 'advanced_forward') return [S.goalscoring, S.carryingFull, S.chanceCreationFull, S.passing, S.physicalFull, S.defending]
     return [S.goalscoring, S.chanceCreationFull, S.passing, S.carryingFull, S.physicalFull, S.defending]
   }
-  if (isCAM || isWinger) {
+  if (isCAM) {
+    if (archetype === 'shadow_striker' || archetype === 'raumdeuter') return [S.goalscoring, S.chanceCreationFull, S.carryingFull, S.passing, S.defending, S.physicalFull]
+    if (archetype === 'enganche') return [S.passing, S.chanceCreationFull, S.carryingFull, S.goalscoring, S.defending, S.physicalFull]
+    if (archetype === 'ball_carrying_10') return [S.carryingFull, S.chanceCreationFull, S.goalscoring, S.passing, S.defending, S.physicalFull]
+    return [S.chanceCreationFull, S.passing, S.goalscoring, S.carryingFull, S.physicalFull, S.defending]
+  }
+  if (isWinger) {
+    if (archetype === 'inverted_winger_inside_forward' || archetype === 'wide_forward') return [S.goalscoring, S.carryingFull, S.chanceCreationFull, S.passing, S.defending, S.physicalFull]
+    if (archetype === 'one_v_one_touchline_winger' || archetype === 'traditional_touchline_winger') return [S.carryingFull, S.chanceCreationFull, S.goalscoring, S.passing, S.defending, S.physicalFull]
+    if (archetype === 'two_way_winger') return [S.defending, S.chanceCreationFull, S.carryingFull, S.goalscoring, S.passing, S.physicalFull]
     return [S.chanceCreationFull, S.passing, S.goalscoring, S.carryingFull, S.physicalFull, S.defending]
   }
   if (isDefWinger) {
     return [S.chanceCreationDefWinger, S.passing, S.defending, S.carryingNoFouls, S.physicalNoAerialWins, S.goalscoring]
   }
   if (isCM) {
+    if (archetype === 'anchor_regista') return [S.passing, S.defending, S.carryingFull, S.chanceCreationFull, S.goalscoring, S.physicalNoAerialWins]
+    if (archetype === 'destroyer') return [S.defending, S.physicalNoAerialWins, S.passing, S.carryingFull, S.chanceCreationFull, S.goalscoring]
+    if (archetype === 'box_to_box') return [S.goalscoring, S.chanceCreationFull, S.carryingFull, S.passing, S.defending, S.physicalNoAerialWins]
+    if (archetype === 'shuttler_space_eater') return [S.carryingFull, S.defending, S.passing, S.physicalNoAerialWins, S.chanceCreationFull, S.goalscoring]
     return [S.chanceCreationFull, S.passing, S.goalscoring, S.carryingFull, S.physicalNoAerialWins, S.defending]
   }
   if (isDefender) {
@@ -341,6 +358,33 @@ function getStatSectionsForPosition(position: string | null): Section[] {
   }
   // fallback
   return [S.chanceCreationFull, S.passing, S.carryingFull, S.physicalFull, S.defending, S.goalscoring]
+}
+
+const FOOTBALL_LABELS: Record<string, string> = {
+  'Passes per 90': 'Passing Volume',
+  'Passes': 'Passing Volume',
+  'Passing accuracy': 'Ball Security',
+  'Accurate long balls / 90': 'Long Passing Progression',
+  'Accurate long balls': 'Long Passing Progression',
+  'xA per 90': 'Chance Quality',
+  'xA': 'Chance Quality',
+  'Key passes per 90': 'Final-Ball Volume',
+  'Key passes': 'Final-Ball Volume',
+  'Big chances created / 90': 'High-Value Chance Creation',
+  'Big chances created': 'High-Value Chance Creation',
+  'Dribble success %': '1v1 Efficiency',
+  'Successful dribbles / 90': '1v1 Volume',
+  'Successful dribbles': '1v1 Volume',
+  'Ball recoveries / 90': 'Defensive Coverage',
+  'Ball recoveries': 'Defensive Coverage',
+  'Tackles won / 90': 'Ball-Winning',
+  'Tackles won': 'Ball-Winning',
+  'Goals per 90': 'Goal Output',
+  'Goals': 'Goal Output',
+  'Shots per 90': 'Shot Volume',
+  'Shots': 'Shot Volume',
+  'xG per 90': 'Chance Volume',
+  'xG': 'Chance Volume',
 }
 
 function PercentileComparison({ 
@@ -361,9 +405,16 @@ function PercentileComparison({
   const qualifiedA = (prA?.minutes_played ?? 0) >= 300
   const qualifiedB = (prB?.minutes_played ?? 0) >= 300
 
-  const statSections = getStatSectionsForPosition(prA?.position ?? playerA.player.position)
+  const statSections = getStatSectionsForPosition(
+    prA?.position ?? playerA.player.position,
+    prA?.role_archetype ?? prA?.cm_archetype,
+  )
 
-  const getLabel = (stat: StatDef) => statMode === 'per90' ? stat.labelPer90 : stat.labelRaw
+  const getLabel = (stat: StatDef) => {
+    const raw = statMode === 'per90' ? stat.labelPer90 : stat.labelRaw
+    return FOOTBALL_LABELS[raw] ?? raw
+  }
+  const getMetricLabel = (stat: StatDef) => statMode === 'per90' ? stat.labelPer90 : stat.labelRaw
 
   const getVal = (stat: StatDef, stats: PlayerStats | null) => {
     if (!stats) return '—'
@@ -437,12 +488,16 @@ function PercentileComparison({
               const pctA = getPct(stat, prA, qualifiedA)
               const pctB = getPct(stat, prB, qualifiedB)
               const label = getLabel(stat)
+              const metricLabel = getMetricLabel(stat)
               return (
                 <div key={label} className="mb-3 sm:mb-2">
-                  <div className="text-center text-xs text-muted-foreground mb-1 sm:hidden">{label}</div>
+                  <div className="text-center text-xs text-muted-foreground mb-1 sm:hidden">{label} · {metricLabel}</div>
                   <div className="hidden sm:grid sm:grid-cols-3 sm:gap-4">
                     <StatRow label="" value={valA} percentile={pctA} />
-                    <div className="text-center text-xs text-muted-foreground self-center">{label}</div>
+                    <div className="text-center text-xs text-muted-foreground self-center">
+                      <div className="font-medium text-foreground">{label}</div>
+                      <div>{metricLabel}</div>
+                    </div>
                     <StatRow label="" value={valB} percentile={pctB} />
                   </div>
                   <div className="grid grid-cols-2 gap-2 sm:hidden">
@@ -490,10 +545,20 @@ function rateColor(val: number, low: number, high: number) {
   return '#e24b4a'
 }
 
+function scorePhrase(score: number | null | undefined, role: string | null) {
+  if (score == null) return 'Season-level performance score'
+  const roleText = role ? ` ${role}` : ''
+  if (score >= 75) return `Excellent${roleText} season`
+  if (score >= 62) return `Strong${roleText} season`
+  if (score >= 48) return `Solid${roleText} season`
+  return `Below standout${roleText} level so far`
+}
+
 function PeerCard({ data }: { data: PlayerData }) {
   const pr = data.peerRating
   const qualified = (pr?.rated_minutes ?? 0) >= 300
-  const cmArchetype = formatCmArchetype(pr?.cm_archetype)
+  const roleArchetype = formatRoleArchetype(pr?.role_archetype ?? pr?.cm_archetype)
+  const seasonInfo = data.seasons.find(s => `${s.league_id}|${s.season}` === data.season)
 
   if (!qualified) {
     return (
@@ -512,16 +577,26 @@ function PeerCard({ data }: { data: PlayerData }) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'var(--muted)', borderRadius: 8 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Know Ball Score</span>
-            <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>Overall season score for this role</span>
-            {cmArchetype && (
+            <span style={{ fontSize: 13, color: 'var(--foreground)', fontWeight: 600 }}>{scorePhrase(Number(pr.model_score), roleArchetype)}</span>
+            <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>
+              Compared with {POSITION_LABELS[pr.position ?? data.player.position ?? ''] ?? pr.position ?? 'players'} in {seasonInfo?.league_name ?? 'this league'} {seasonInfo?.season ?? data.season.split('|')[1]}
+            </span>
+            {roleArchetype && (
               <span style={{ alignSelf: 'flex-start', marginTop: 4, padding: '3px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 11, fontWeight: 700, color: 'var(--foreground)', background: 'var(--card)' }}>
-                {cmArchetype}
+                {roleArchetype}
               </span>
             )}
           </div>
-          <span style={{ fontSize: 28, fontWeight: 700, color: Number(pr.model_score) >= 60 ? '#1d9e75' : Number(pr.model_score) >= 45 ? '#ef9f27' : '#e24b4a', flexShrink: 0, marginLeft: 16 }}>
-            {Number(pr.model_score).toFixed(2)}
-          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0, marginLeft: 16 }}>
+            <span style={{ fontSize: 28, fontWeight: 700, color: Number(pr.model_score) >= 60 ? '#1d9e75' : Number(pr.model_score) >= 45 ? '#ef9f27' : '#e24b4a' }}>
+              {Number(pr.model_score).toFixed(2)}
+            </span>
+            {pr.model_score_confidence != null && (
+              <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>
+                {Math.round(Number(pr.model_score_confidence))}% confidence
+              </span>
+            )}
+          </div>
         </div>
       )}
       {(pr.consistency_score != null || pr.impact_rate != null) && (

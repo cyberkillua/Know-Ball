@@ -23,7 +23,7 @@ import {
   getPlayerXgotDelta,
   getPlayerUnderstat,
 } from "../lib/queries";
-import { formatCmArchetype } from "../lib/utils";
+import { formatRoleArchetype } from "../lib/utils";
 import type {
   Player,
   MatchRating,
@@ -109,6 +109,97 @@ function avgPercentile(
   const valid = vals.filter((v) => v != null) as number[];
   if (valid.length === 0) return undefined;
   return Math.round(valid.reduce((s, v) => s + v, 0) / valid.length);
+}
+
+type PeerDimensionRow = {
+  label: string;
+  sublabel?: string;
+  value: number | null | undefined;
+};
+
+function percentileBand(value: number | null | undefined, roleLabel = "role") {
+  if (value == null) return "No signal yet";
+  if (value >= 90) return `Elite for ${roleLabel}`;
+  if (value >= 75) return `Strong for ${roleLabel}`;
+  if (value >= 55) return `Solid for ${roleLabel}`;
+  if (value >= 35) return `Watch area`;
+  return `Low signal`;
+}
+
+function confidenceCopy(confidence: number | null | undefined, ratedMinutes: number | null | undefined) {
+  const mins = ratedMinutes ?? 0;
+  if (confidence == null) return mins < 600 ? `Limited sample: ${mins} rated minutes` : null;
+  if (confidence < 45) return `Limited sample: ${mins} rated minutes`;
+  if (confidence < 70) return `Moderate sample: ${mins} rated minutes`;
+  return `Trusted sample: ${mins} rated minutes`;
+}
+
+function scoreCopy(score: number | null | undefined, roleLabel: string | null) {
+  if (score == null) return "Season-level performance score.";
+  const role = roleLabel ? ` ${roleLabel}` : "";
+  if (score >= 75) return `Excellent${role} season.`;
+  if (score >= 62) return `Strong${role} season.`;
+  if (score >= 48) return `Solid${role} season.`;
+  return `Below standout${role} level so far.`;
+}
+
+function getPeerDimensionRows(
+  pr: PeerRating,
+  flags: { isWinger: boolean; isDefensiveWinger: boolean; isCAM: boolean; isCM: boolean },
+  preAssistPercentile: number | undefined,
+): PeerDimensionRow[] {
+  if (flags.isWinger || flags.isDefensiveWinger) {
+    return [
+      { label: "Overall Season Value", sublabel: "Know Ball Score percentile", value: pr.overall_percentile },
+      { label: "1v1 Threat", sublabel: "productive dribbling", value: pr.productive_dribbling_percentile },
+      { label: "Chance Creation", sublabel: "xA, key passes, big chances", value: pr.chance_creation_percentile },
+      { label: "End Product", sublabel: "goals and assists contribution", value: pr.goal_contribution_percentile },
+      { label: "Ball Carrying", sublabel: "dribbles, touches, retention", value: pr.carrying_percentile },
+      { label: "Shot Threat", sublabel: "shot generation", value: pr.shot_generation_percentile },
+      { label: "Defensive Work", sublabel: "recoveries and duels", value: pr.defensive_percentile },
+      { label: "Involvement", sublabel: "presence", value: pr.presence_percentile },
+    ];
+  }
+  if (flags.isCAM) {
+    return [
+      { label: "Overall Season Value", sublabel: "Know Ball Score percentile", value: pr.overall_percentile },
+      { label: "Chance Creation", sublabel: "xA, key passes, big chances", value: pr.chance_creation_percentile },
+      { label: "Pre-Assists", sublabel: "pass before assist", value: preAssistPercentile },
+      { label: "Goal Threat", sublabel: "shots, xG, goals", value: pr.goal_threat_percentile },
+      { label: "Connective Play", sublabel: "team function", value: pr.team_function_percentile },
+      { label: "Ball Carrying", sublabel: "progression and retention", value: pr.carrying_percentile },
+      { label: "Defensive Work", sublabel: "recoveries and pressure events", value: pr.defensive_percentile },
+    ];
+  }
+  if (flags.isCM) {
+    return [
+      { label: "Overall Season Value", sublabel: "Know Ball Score percentile", value: pr.overall_percentile },
+      { label: "Forward Passing Value", sublabel: "pass impact and progression", value: pr.volume_passing_percentile },
+      { label: "Pre-Assists", sublabel: "pass before assist", value: preAssistPercentile },
+      { label: "Ball Carrying", sublabel: "progressive carries", value: pr.carrying_percentile },
+      { label: "Chance Creation", sublabel: "xA, key passes, big chances", value: pr.chance_creation_percentile },
+      { label: "Defensive Coverage", sublabel: "recoveries, tackles, interceptions", value: pr.defensive_percentile },
+      { label: "Box Threat", sublabel: "shots, xG, goals", value: pr.goal_threat_percentile },
+    ];
+  }
+  return [
+    { label: "Overall Season Value", sublabel: "Know Ball Score percentile", value: pr.overall_percentile },
+    { label: "Finishing", sublabel: "goals versus chance quality", value: pr.finishing_percentile },
+    { label: "Shot Generation", sublabel: "shots and xG volume", value: pr.shot_generation_percentile },
+    { label: "Chance Creation", sublabel: "xA and key passes", value: pr.chance_creation_percentile },
+    { label: "Link Play", sublabel: "team function", value: pr.team_function_percentile },
+    { label: "Ball Carrying", sublabel: "dribbles and retention", value: pr.carrying_percentile },
+    { label: "Duels", sublabel: "aerial and ground contests", value: pr.duels_percentile },
+    { label: "Defensive Work", sublabel: "pressing and recoveries", value: pr.defensive_percentile },
+    { label: "Clinicality", sublabel: "finishing versus xG", value: pr.xg_overperformance_percentile },
+  ];
+}
+
+function strongestSignals(rows: PeerDimensionRow[], takeWeak = false) {
+  return rows
+    .filter((row) => row.value != null && row.label !== "Overall Season Value")
+    .sort((a, b) => takeWeak ? Number(a.value) - Number(b.value) : Number(b.value) - Number(a.value))
+    .slice(0, 3);
 }
 
 // Select percentile based on mode (per90 vs raw)
@@ -350,7 +441,9 @@ function PlayerProfilePage() {
       : null;
 
   const activePeerRating = peerScope === "league" ? peerRating : allPeerRating;
-  const cmArchetype = formatCmArchetype(activePeerRating?.cm_archetype);
+  const roleArchetype = formatRoleArchetype(
+    activePeerRating?.role_archetype ?? activePeerRating?.cm_archetype,
+  );
   const activePeerMinMinutes = 300;
   const percentileHasEnoughTotalMinutes = (stats?.minutes ?? 0) >= PERCENTILE_MIN_MINUTES;
   const percentileHasData = percentileHasEnoughTotalMinutes && peerRating != null;
@@ -362,6 +455,21 @@ function PlayerProfilePage() {
   const activePreAssistPercentile =
     activePeerRating?.pass_to_assist_per90_percentile
     ?? (ratingPeerQualified && stats?.pass_to_assist != null ? 0 : null);
+  const currentSeason = seasons.find((s) => `${s.league_id}|${s.season}` === season);
+  const comparisonPool = `${peerScope === "league" ? (currentSeason?.league_name ?? "this league") : "all tracked leagues"} ${currentSeason?.season ?? season.split("|")[1] ?? ""}`;
+  const peerDimensionRows = activePeerRating
+    ? getPeerDimensionRows(
+        activePeerRating,
+        { isWinger, isDefensiveWinger, isCAM, isCM },
+        activePreAssistPercentile ?? undefined,
+      )
+    : [];
+  const bestSignals = strongestSignals(peerDimensionRows);
+  const weakSignals = strongestSignals(peerDimensionRows, true);
+  const confidenceMessage = confidenceCopy(
+    activePeerRating?.model_score_confidence,
+    activePeerRating?.rated_minutes,
+  );
   const extraPassingRows = [
     {
       label: "Final-third passes (season)",
@@ -7731,13 +7839,13 @@ function PlayerProfilePage() {
 
             {/* ── Peer Comparison ──────────────────────────────────────────── */}
             <Card className="mt-4">
-              <CardContent className="p-6">
+              <CardContent className="p-5">
                 <div
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
-                    marginBottom: 16,
+                    marginBottom: 12,
                   }}
                 >
                   <span
@@ -7797,7 +7905,7 @@ function PlayerProfilePage() {
                     style={{
                       display: "flex",
                       flexDirection: "column",
-                      gap: 16,
+                      gap: 12,
                     }}
                   >
                     {/* Model score */}
@@ -7807,7 +7915,7 @@ function PlayerProfilePage() {
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "space-between",
-                          padding: "12px 16px",
+                          padding: "10px 14px",
                           background: "var(--muted)",
                           borderRadius: 8,
                         }}
@@ -7832,15 +7940,24 @@ function PlayerProfilePage() {
                           </span>
                           <span
                             style={{
+                              fontSize: 13,
+                              color: "var(--foreground)",
+                              fontWeight: 600,
+                              maxWidth: 360,
+                            }}
+                          >
+                            {scoreCopy(activePeerRating.model_score, roleArchetype)}
+                          </span>
+                          <span
+                            style={{
                               fontSize: 11,
                               color: "var(--muted-foreground)",
                               maxWidth: 320,
                             }}
                           >
-                            Overall season score for this role.
-                            Use percentile ranking for peer context.
+                            Compared with {POSITION_LABELS[activePeerRating.position ?? "ST"] ?? activePeerRating.position ?? "players"} in {comparisonPool}.
                           </span>
-                          {cmArchetype && (
+                          {roleArchetype && (
                             <span
                               style={{
                                 alignSelf: "flex-start",
@@ -7854,26 +7971,149 @@ function PlayerProfilePage() {
                                 background: "var(--card)",
                               }}
                             >
-                              {cmArchetype}
+                              {roleArchetype}
+                            </span>
+                          )}
+                          {confidenceMessage && (
+                            <span
+                              style={{
+                                fontSize: 11,
+                                color:
+                                  Number(activePeerRating.model_score_confidence ?? 0) < 45
+                                    ? "#ef9f27"
+                                    : "var(--muted-foreground)",
+                                marginTop: 2,
+                              }}
+                            >
+                              {confidenceMessage}
                             </span>
                           )}
                         </div>
-                        <span
+                        <div
                           style={{
-                            fontSize: 28,
-                            fontWeight: 700,
-                            color:
-                              Number(activePeerRating.model_score) >= 60
-                                ? "#1d9e75"
-                                : Number(activePeerRating.model_score) >= 45
-                                  ? "#ef9f27"
-                                  : "#e24b4a",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "flex-end",
+                            gap: 2,
                             flexShrink: 0,
                             marginLeft: 16,
                           }}
                         >
-                          {Number(activePeerRating.model_score).toFixed(2)}
-                        </span>
+                          <span
+                            style={{
+                              fontSize: 24,
+                              fontWeight: 700,
+                              lineHeight: 1.1,
+                              color:
+                                Number(activePeerRating.model_score) >= 60
+                                  ? "#1d9e75"
+                                  : Number(activePeerRating.model_score) >= 45
+                                    ? "#ef9f27"
+                                    : "#e24b4a",
+                            }}
+                          >
+                            {Number(activePeerRating.model_score).toFixed(2)}
+                          </span>
+                          {activePeerRating.model_score_confidence != null && (
+                            <span
+                              style={{
+                                fontSize: 11,
+                                color: "var(--muted-foreground)",
+                              }}
+                            >
+                              {Math.round(
+                                Number(activePeerRating.model_score_confidence),
+                              )}
+                              % confidence
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {(bestSignals.length > 0 || weakSignals.length > 0) && (
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                          gap: 8,
+                        }}
+                      >
+                        {[
+                          { title: "Best Signals", rows: bestSignals },
+                          { title: "Watch Areas", rows: weakSignals },
+                        ].map(({ title, rows }) => (
+                          <div
+                            key={title}
+                            style={{
+                              padding: "10px 12px",
+                              background: "var(--muted)",
+                              borderRadius: 8,
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: 6,
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 700,
+                                color: "var(--muted-foreground)",
+                                textTransform: "uppercase",
+                                letterSpacing: "0.08em",
+                              }}
+                            >
+                              {title}
+                            </div>
+                            {rows.map((row) => (
+                              <div
+                                key={`${title}-${row.label}`}
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  gap: 12,
+                                  alignItems: "baseline",
+                                }}
+                              >
+                                <div style={{ minWidth: 0 }}>
+                                  <div
+                                    style={{
+                                      fontSize: 12,
+                                      fontWeight: 600,
+                                      color: "var(--foreground)",
+                                    }}
+                                  >
+                                    {row.label}
+                                  </div>
+                                  {row.sublabel && (
+                                    <div
+                                      style={{
+                                        fontSize: 11,
+                                        color: "var(--muted-foreground)",
+                                      }}
+                                    >
+                                      {row.sublabel}
+                                    </div>
+                                  )}
+                                </div>
+                                <div
+                                  style={{
+                                    fontSize: 13,
+                                    fontWeight: 700,
+                                    color:
+                                      Number(row.value) >= 70
+                                        ? "#1d9e75"
+                                        : Number(row.value) >= 40
+                                          ? "#ef9f27"
+                                          : "#e24b4a",
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  {Math.round(Number(row.value))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
                       </div>
                     )}
                     {/* Good match rate & high impact rate */}
@@ -7883,8 +8123,8 @@ function PlayerProfilePage() {
                         style={{
                           display: "flex",
                           flexDirection: "column",
-                          gap: 8,
-                          padding: "14px 16px",
+                          gap: 6,
+                          padding: "10px 14px",
                           background: "var(--muted)",
                           borderRadius: 8,
                         }}
@@ -7930,7 +8170,7 @@ function PlayerProfilePage() {
                                   </span>
                                   <span
                                     style={{
-                                      fontSize: 16,
+                                      fontSize: 15,
                                       fontWeight: 700,
                                       color: labelColor,
                                     }}
@@ -7952,7 +8192,7 @@ function PlayerProfilePage() {
                                         key={i}
                                         style={{
                                           flex: 1,
-                                          height: 6,
+                                          height: 5,
                                           borderRadius: 2,
                                           background:
                                             opacity > 0
@@ -7998,7 +8238,7 @@ function PlayerProfilePage() {
                                   </span>
                                   <span
                                     style={{
-                                      fontSize: 16,
+                                      fontSize: 15,
                                       fontWeight: 700,
                                       color: labelColor,
                                     }}
@@ -8020,7 +8260,7 @@ function PlayerProfilePage() {
                                         key={i}
                                         style={{
                                           flex: 1,
-                                          height: 6,
+                                          height: 5,
                                           borderRadius: 2,
                                           background:
                                             opacity > 0
@@ -8079,157 +8319,17 @@ function PlayerProfilePage() {
                         margin: 0,
                       }}
                     >
-                      Percentile ranks show how this player compares to{" "}
-                      {POSITION_LABELS[activePeerRating.position ?? "ST"] ?? activePeerRating.position ?? "Strikers"}{" "}
-                      in the same league and season with {activePeerMinMinutes}+ rated minutes.{" "}
-                      99 = top 1%.
+                      Match Rating = individual games. Know Ball Score = season-level performance.
+                      Percentile = rank versus this peer pool. Confidence = how much the sample is trusted.
                     </p>
                     <div
                       style={{
                         display: "flex",
                         flexDirection: "column",
-                        gap: 10,
+                        gap: 8,
                       }}
                     >
-                      {(
-                        (isWinger || isDefensiveWinger
-                          ? [
-                              {
-                                label: "Overall rating",
-                                value: activePeerRating.overall_percentile,
-                              },
-                              {
-                                label: "Productive Dribbling",
-                                value: activePeerRating.productive_dribbling_percentile,
-                              },
-                              {
-                                label: "Chance Creation",
-                                value: activePeerRating.chance_creation_percentile,
-                              },
-                              {
-                                label: "Goal Contribution",
-                                value: activePeerRating.goal_contribution_percentile,
-                              },
-                              {
-                                label: "Carrying",
-                                value: activePeerRating.carrying_percentile,
-                              },
-                              {
-                                label: "Shot Generation",
-                                value: activePeerRating.shot_generation_percentile,
-                              },
-                              {
-                                label: "Defensive",
-                                value: activePeerRating.defensive_percentile,
-                              },
-                              {
-                                label: "Presence",
-                                value: activePeerRating.presence_percentile,
-                              },
-                            ]
-                          : isCAM
-                          ? [
-                              {
-                                label: "Overall rating",
-                                value: activePeerRating.overall_percentile,
-                              },
-                              {
-                                label: "Chance Creation",
-                                value: activePeerRating.chance_creation_percentile,
-                              },
-                              {
-                                label: "Pre-assists",
-                                value: activePreAssistPercentile,
-                              },
-                              {
-                                label: "Goal Threat",
-                                value: activePeerRating.goal_threat_percentile,
-                              },
-                              {
-                                label: "Team Function",
-                                value: activePeerRating.team_function_percentile,
-                              },
-                              {
-                                label: "Carrying",
-                                value: activePeerRating.carrying_percentile,
-                              },
-                              {
-                                label: "Defensive",
-                                value: activePeerRating.defensive_percentile,
-                              },
-                            ]
-                          : isCM
-                          ? [
-                              {
-                                label: "Overall rating",
-                                value: activePeerRating.overall_percentile,
-                              },
-                              {
-                                label: "Passing Impact",
-                                value: activePeerRating.volume_passing_percentile,
-                              },
-                              {
-                                label: "Pre-assists",
-                                value: activePreAssistPercentile,
-                              },
-                              {
-                                label: "Carrying",
-                                value: activePeerRating.carrying_percentile,
-                              },
-                              {
-                                label: "Chance Creation",
-                                value: activePeerRating.chance_creation_percentile,
-                              },
-                              {
-                                label: "Defensive",
-                                value: activePeerRating.defensive_percentile,
-                              },
-                              {
-                                label: "Goal Threat",
-                                value: activePeerRating.goal_threat_percentile,
-                              },
-                            ]
-                          : [
-                              {
-                                label: "Overall rating",
-                                value: activePeerRating.overall_percentile,
-                              },
-                              {
-                                label: "Finishing",
-                                value: activePeerRating.finishing_percentile,
-                              },
-                              {
-                                label: "Shot Generation",
-                                value: activePeerRating.shot_generation_percentile,
-                              },
-                              {
-                                label: "Chance Creation",
-                                value: activePeerRating.chance_creation_percentile,
-                              },
-                              {
-                                label: "Team Function",
-                                value: activePeerRating.team_function_percentile,
-                              },
-                              {
-                                label: "Carrying",
-                                value: activePeerRating.carrying_percentile,
-                              },
-                              {
-                                label: "Duels",
-                                value: activePeerRating.duels_percentile,
-                              },
-                              {
-                                label: "Defensive",
-                                value: activePeerRating.defensive_percentile,
-                              },
-                              {
-                                label: "Clinicality (vs xG)",
-                                value:
-                                  activePeerRating.xg_overperformance_percentile,
-                              },
-                            ]
-                        ) as { label: string; value: number | null }[]
-                      ).map(({ label, value }) => {
+                      {peerDimensionRows.map(({ label, sublabel, value }) => {
                         const pct = value ?? 0;
                         const barColor =
                           pct >= 70
@@ -8242,22 +8342,34 @@ function PlayerProfilePage() {
                             key={label}
                             style={{
                               display: "grid",
-                              gridTemplateColumns: "160px 1fr 40px",
-                              gap: 12,
+                              gridTemplateColumns: "150px 1fr minmax(72px, 110px)",
+                              gap: 10,
                               alignItems: "center",
                             }}
                           >
                             <span
                               style={{
-                                fontSize: 13,
-                                color: "var(--muted-foreground)",
+                                fontSize: 12,
+                                color: "var(--foreground)",
                               }}
                             >
                               {label}
+                              {sublabel && (
+                                <span
+                                  style={{
+                                    display: "block",
+                                    fontSize: 10,
+                                    color: "var(--muted-foreground)",
+                                    marginTop: 1,
+                                  }}
+                                >
+                                  {sublabel}
+                                </span>
+                              )}
                             </span>
                             <div
                               style={{
-                                height: 6,
+                                height: 5,
                                 background: "var(--muted)",
                                 borderRadius: 3,
                                 overflow: "hidden",
@@ -8280,7 +8392,7 @@ function PlayerProfilePage() {
                                 textAlign: "right",
                               }}
                             >
-                              {value != null ? Math.round(value) : "—"}
+                              {value != null ? `${Math.round(value)}` : "—"}
                             </span>
                           </div>
                         );
