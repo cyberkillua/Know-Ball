@@ -82,6 +82,18 @@ class ScheduledEventsTest(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 sofascore.fetch_scheduled_events("2026-04-27")
 
+    def test_season_id_override_skips_season_lookup(self):
+        with (
+            patch.dict(
+                "os.environ",
+                {"SOFASCORE_SEASON_IDS": "17:2025/2026=76986"},
+            ),
+            patch.object(sofascore, "_season_id_override_cache", None),
+            patch.object(sofascore, "list_available_seasons") as list_seasons,
+        ):
+            self.assertEqual(sofascore.get_season_id_by_name(17, "2025/2026"), 76986)
+            list_seasons.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -28,36 +28,12 @@ from pipeline.logger import get_logger
 from pipeline.scrapers.sofascore import (
     _SEASON_STAT_FIELD_MAP,
     _api_get_async,
+    _parse_season_id_overrides,
     TOURNAMENT_IDS,
     get_season_id_by_name,
 )
 
 log = get_logger("backfill_player_season_sofascore")
-
-
-def _parse_season_id_overrides(raw: str | None) -> dict[tuple[int, str], int]:
-    """
-    Parse SOFASCORE_SEASON_IDS overrides.
-
-    Format:
-      17:2025/2026=76986,18:2025/2026=77324
-
-    Keys use Sofascore tournament ids, not FotMob league ids.
-    """
-    overrides: dict[tuple[int, str], int] = {}
-    if not raw:
-        return overrides
-    for part in raw.split(","):
-        item = part.strip()
-        if not item:
-            continue
-        try:
-            left, sid = item.split("=", 1)
-            tournament_id, season_name = left.split(":", 1)
-            overrides[(int(tournament_id), season_name.strip())] = int(sid)
-        except ValueError:
-            log.warning(f"Ignoring invalid SOFASCORE_SEASON_IDS item: {item}")
-    return overrides
 
 _UPSERT_SQL = """
 INSERT INTO player_season_sofascore (

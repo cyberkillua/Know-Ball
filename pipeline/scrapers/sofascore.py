@@ -12,6 +12,7 @@ Optimizations:
 """
 
 import asyncio
+import os
 import time
 from curl_cffi.requests import AsyncSession, Session
 from curl_cffi.requests.exceptions import HTTPError
@@ -119,6 +120,7 @@ _player_cache: dict[int, dict] = {}
 _season_cache: dict[
     int, list[dict]
 ] = {}  # tournament_id -> [{"id": 123, "name": "2024/2025"}, ...]
+_season_id_override_cache: dict[tuple[int, str], int] | None = None
 
 
 class RateLimiter:
@@ -270,6 +272,40 @@ def _seasons_match(season1: str, season2: str) -> bool:
     return years1 is not None and years2 is not None and years1 == years2
 
 
+def _parse_season_id_overrides(raw: str | None) -> dict[tuple[int, str], int]:
+    """
+    Parse SOFASCORE_SEASON_IDS overrides.
+
+    Format:
+      17:2025/2026=76986,18:2025/2026=77324
+
+    Keys use Sofascore tournament ids, not FotMob league ids.
+    """
+    overrides: dict[tuple[int, str], int] = {}
+    if not raw:
+        return overrides
+    for part in raw.split(","):
+        item = part.strip()
+        if not item:
+            continue
+        try:
+            left, season_id = item.split("=", 1)
+            tournament_id, season_name = left.split(":", 1)
+            overrides[(int(tournament_id), season_name.strip())] = int(season_id)
+        except ValueError:
+            log.warning(f"Ignoring invalid SOFASCORE_SEASON_IDS item: {item}")
+    return overrides
+
+
+def _season_id_overrides() -> dict[tuple[int, str], int]:
+    global _season_id_override_cache
+    if _season_id_override_cache is None:
+        _season_id_override_cache = _parse_season_id_overrides(
+            os.getenv("SOFASCORE_SEASON_IDS")
+        )
+    return _season_id_override_cache
+
+
 def list_available_seasons(tournament_id: int) -> list[dict]:
     """
     List all available seasons for a tournament.
@@ -305,6 +341,14 @@ def get_season_id_by_name(tournament_id: int, season_name: str) -> int | None:
 
     Returns season ID or None if not found.
     """
+    override = _season_id_overrides().get((tournament_id, season_name.strip()))
+    if override:
+        log.info(
+            f"Using SOFASCORE_SEASON_IDS override: "
+            f"tournament={tournament_id} season={season_name} id={override}"
+        )
+        return override
+
     seasons = list_available_seasons(tournament_id)
     if not seasons:
         log.error(f"No seasons found for tournament {tournament_id}")

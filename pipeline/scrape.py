@@ -222,7 +222,10 @@ def scrape_league(
 
     log.info(f"=== Scraping {league_name} ({season}) ===")
 
-    _store_standings(db, fotmob_league_id, league_id, season)
+    try:
+        _store_standings(db, fotmob_league_id, league_id, season)
+    except Exception as e:
+        log.warning(f"Skipping standings for {league_name} ({season}): {e}")
 
     matches = fetch_league_matches(fotmob_league_id, season)
     new_matches = [m for m in matches if m["sofascore_id"] not in existing_ids]
