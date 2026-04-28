@@ -3,6 +3,11 @@ on:
   schedule:
     - cron: '0 6 * * *'
   workflow_dispatch:
+    inputs:
+      recent_days:
+        description: "Rolling lookback window for completed matches"
+        required: false
+        default: "21"
   push:
     branches:
       - main
@@ -21,7 +26,9 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       CURRENT_SEASON: ${{ vars.CURRENT_SEASON }}
       SOFASCORE_SEASON_IDS: ${{ vars.SOFASCORE_SEASON_IDS }}
-      KNOW_BALL_RECENT_DAYS: "1"
+      # Scan a rolling window so missed/blocked/too-early runs can catch up.
+      # Existing matches with player stats are skipped by the pipeline.
+      KNOW_BALL_RECENT_DAYS: ${{ github.event.inputs.recent_days || '21' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
