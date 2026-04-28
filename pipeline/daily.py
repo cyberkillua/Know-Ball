@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 from pipeline.logger import get_logger
-from pipeline.scrape import CURRENT_SEASON
+from pipeline.leagues import CURRENT_SEASON
 
 log = get_logger("daily")
 
@@ -37,7 +37,7 @@ def main() -> None:
     parser.add_argument(
         "--season",
         default=os.getenv("CURRENT_SEASON") or CURRENT_SEASON,
-        help="Season string, defaults to CURRENT_SEASON env or pipeline.scrape.CURRENT_SEASON",
+        help="Season string, defaults to CURRENT_SEASON env or pipeline.leagues.CURRENT_SEASON",
     )
     parser.add_argument("--league", type=int, help="Optional FotMob league id")
     parser.add_argument("--season-stats-concurrency", type=int, default=8)
@@ -66,8 +66,8 @@ def main() -> None:
         action="store_true",
         default=_env_truthy("KNOW_BALL_SKIP_SOFASCORE_INGEST"),
         help=(
-            "Skip Sofascore-backed scrape/backfill steps. Useful for GitHub-hosted "
-            "Actions runners when Sofascore blocks their IP ranges."
+            "Skip Sofascore-backed scrape/backfill steps and only recompute "
+            "from existing database rows."
         ),
     )
     args = parser.parse_args()

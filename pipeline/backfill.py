@@ -13,7 +13,8 @@ import sys
 
 from pipeline.db import DB
 from pipeline.logger import get_logger
-from pipeline.scrape import scrape_league, get_existing_match_ids, LEAGUES
+from pipeline.leagues import LEAGUES
+from pipeline.scrape import scrape_league, get_existing_match_ids
 
 log = get_logger("backfill")
 
@@ -27,12 +28,6 @@ def main():
     )
     parser.add_argument(
         "--season", type=str, help="Specific season to backfill (e.g. 2024/2025)"
-    )
-    parser.add_argument(
-        "--skip-odds", action="store_true", help="Skip fetching betting odds (saves API calls)"
-    )
-    parser.add_argument(
-        "--skip-shotmap", action="store_true", help="Skip fetching shot map data (saves API calls)"
     )
     args = parser.parse_args()
 
@@ -63,8 +58,6 @@ def main():
                     understat_slug,
                     season,
                     existing_ids,
-                    skip_odds=args.skip_odds,
-                    skip_shotmap=args.skip_shotmap,
                 )
                 existing_ids = get_existing_match_ids(db)
                 added = len(existing_ids) - before

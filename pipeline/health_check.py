@@ -9,7 +9,7 @@ import sys
 
 from pipeline.db import DB
 from pipeline.logger import get_logger
-from pipeline.scrape import CURRENT_SEASON
+from pipeline.leagues import CURRENT_SEASON
 
 log = get_logger("health_check")
 

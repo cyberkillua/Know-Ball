@@ -2,7 +2,7 @@
 Main scraping entrypoint - Optimized version.
 
 Fetches new matches and player stats from Sofascore,
-then stores them in Postgres. Designed to run daily via GitHub Actions.
+then stores them in Postgres.
 
 Optimizations:
 - Player profile caching to avoid duplicate fetches
@@ -14,8 +14,8 @@ Optimizations:
 from datetime import datetime, timedelta, timezone
 
 from pipeline.db import DB
+from pipeline.leagues import CURRENT_SEASON, FOTMOB_ID_BY_TOURNAMENT_ID, LEAGUES
 from pipeline.logger import get_logger
-from pipeline.scrapers.understat import fetch_league_player_stats, fetch_league_matches as fetch_understat_matches
 from pipeline.scrapers.sofascore import (
     fetch_league_matches,
     fetch_match_details,
@@ -29,113 +29,21 @@ from pipeline.scrapers.sofascore import (
     fetch_scheduled_events,
     get_season_id_by_name,
     list_available_seasons,
-    TOURNAMENT_IDS,
     clear_player_cache,
+)
+from pipeline.store import (
+    get_existing_match_ids,
+    get_league_id,
+    needs_profile_fetch,
+    upsert_player,
+    upsert_team,
+)
+from pipeline.understat_sync import (
+    backfill_understat_match_ids,
+    update_understat_stats,
 )
 
 log = get_logger("scrape")
-
-LEAGUES = [
-    ("Premier League", 47, "EPL"),
-    ("Championship", 48, None),
-    ("La Liga", 87, "La_liga"),
-    ("Ligue 1", 53, "Ligue_1"),
-    ("Serie A", 55, "Serie_A"),
-    ("Bundesliga", 54, "Bundesliga"),
-]
-
-CURRENT_SEASON = "2025/2026"
-
-MIDFIELDER_POSITIONS = {"CAM", "CM", "CDM", "LM", "RM", "AM"}
-FOTMOB_ID_BY_TOURNAMENT_ID = {v: k for k, v in TOURNAMENT_IDS.items()}
-
-
-def get_existing_match_ids(db: DB) -> set[int]:
-    """Return sofascore IDs of matches that have player stats.
-
-    Matches where fetch_match_details failed (no player stats) are
-    excluded so they get retried on the next run.
-    """
-    rows = db.query(
-        """SELECT m.sofascore_id
-           FROM matches m
-           WHERE m.sofascore_id IS NOT NULL
-             AND EXISTS (
-                 SELECT 1 FROM match_player_stats mps
-                 WHERE mps.match_id = m.id
-             )"""
-    )
-    return {r["sofascore_id"] for r in rows}
-
-
-def get_league_id(db: DB, fotmob_id: int) -> int | None:
-    row = db.query_one("SELECT id FROM leagues WHERE fotmob_id = %s", (fotmob_id,))
-    return row["id"] if row else None
-
-
-def upsert_team(db: DB, name: str, sofascore_id: int, league_id: int) -> int:
-    row = db.query_one("SELECT id FROM teams WHERE sofascore_id = %s", (sofascore_id,))
-    if row:
-        return row["id"]
-    row = db.insert_returning(
-        "INSERT INTO teams (name, sofascore_id, league_id) VALUES (%s, %s, %s) RETURNING id",
-        (name, sofascore_id, league_id),
-    )
-    return row["id"]
-
-
-def upsert_player(
-    db: DB, name: str, sofascore_id: int, team_id: int, match_date: str
-) -> int:
-    """
-    Create or update player with minimal data.
-    Position will be filled by _fill_player_profile().
-
-    Only updates current_team_id if this match is from the same date or newer
-    than the player's last recorded match. This prevents historical scrapes
-    from overwriting current team assignments.
-    """
-    row = db.query_one(
-        "SELECT id, nationality, position FROM players WHERE sofascore_id = %s",
-        (sofascore_id,),
-    )
-    if row:
-        # Only update team if match is same or newer than player's last match
-        last_match = db.query_one(
-            """SELECT MAX(m.date) as last_date
-               FROM match_player_stats mps
-               JOIN matches m ON m.id = mps.match_id
-               WHERE mps.player_id = %s""",
-            (row["id"],),
-        )
-
-        if not last_match or str(match_date) >= str(last_match["last_date"]):
-            db.execute(
-                "UPDATE players SET current_team_id = %s WHERE id = %s",
-                (team_id, row["id"]),
-            )
-        return row["id"]
-
-    row = db.insert_returning(
-        "INSERT INTO players (name, sofascore_id, current_team_id) VALUES (%s, %s, %s) RETURNING id",
-        (name, sofascore_id, team_id),
-    )
-    return row["id"]
-
-
-def needs_profile_fetch(db: DB, player_id: int, sofascore_id: int) -> bool:
-    """Check if we need to fetch profile for this player."""
-    row = db.query_one(
-        "SELECT position, nationality FROM players WHERE id = %s", (player_id,)
-    )
-    if not row:
-        return True
-    if not row["position"] or row["position"] in ("G", "D", "M", "F"):
-        return True
-    if not row["nationality"]:
-        return True
-    return False
-
 
 def _fill_player_profile(
     db: DB, player_db_id: int, sofascore_id: int, match_detail: dict | None = None
@@ -254,8 +162,8 @@ def scrape_league(
     # Post-Sofascore: link understat match IDs and pull player stats from Understat.
     # Only fires when new match data was actually processed (avoids unnecessary requests).
     if understat_slug and stats_ok > 0:
-        _backfill_understat_match_ids(db, understat_slug, season, league_id)
-        _update_understat_stats(db, understat_slug, season)
+        backfill_understat_match_ids(db, understat_slug, season, league_id)
+        update_understat_stats(db, understat_slug, season)
 
 
 def _event_tournament_id(event: dict) -> int | None:
@@ -355,8 +263,8 @@ def scrape_recent_matches(
         )
 
         if understat_slug and stats_ok > 0:
-            _backfill_understat_match_ids(db, understat_slug, season, league_id)
-            _update_understat_stats(db, understat_slug, season)
+            backfill_understat_match_ids(db, understat_slug, season, league_id)
+            update_understat_stats(db, understat_slug, season)
 
 
 def _store_standings(db: DB, fotmob_league_id: int, league_id: int, season: str):
@@ -502,7 +410,7 @@ def _process_match(db: DB, match: dict, league_id: int, season: str) -> bool:
             match["date"],
         )
 
-        if needs_profile_fetch(db, player_id, ps["sofascore_player_id"]):
+        if needs_profile_fetch(db, player_id):
             players_to_update.append((player_id, ps["sofascore_player_id"]))
 
         db.execute(
@@ -753,104 +661,6 @@ def _store_shotmap(
                 shot["sofascore_id"],
             ),
         )
-
-
-def _match_player_by_understat_id(db: DB, understat_id: int) -> int | None:
-    row = db.query_one(
-        "SELECT id FROM players WHERE understat_id = %s", (understat_id,)
-    )
-    return row["id"] if row else None
-
-
-def _match_player_by_name(db: DB, name: str) -> int | None:
-    """Case-insensitive exact name match."""
-    row = db.query_one(
-        "SELECT id FROM players WHERE LOWER(name) = LOWER(%s)",
-        (name,),
-    )
-    return row["id"] if row else None
-
-
-def _backfill_understat_match_ids(db: DB, understat_slug: str, season: str, league_id: int) -> None:
-    """
-    Fetch Understat match list and link each match to its understat_id
-    by matching on (league_id, date, home_score, away_score).
-    """
-    season_int = int(season.split("/")[0])
-    try:
-        u_matches = fetch_understat_matches(understat_slug, season_int)
-    except Exception as e:
-        log.warning(f"Understat match list fetch failed for {understat_slug} {season_int}: {e}")
-        return
-    for um in u_matches:
-        db.execute(
-            """UPDATE matches
-               SET understat_id = %s
-               WHERE league_id = %s
-                 AND date = %s
-                 AND home_score = %s
-                 AND away_score = %s
-                 AND understat_id IS NULL""",
-            (um["understat_id"], league_id, um["date"], um["home_score"], um["away_score"]),
-        )
-    log.info(f"Linked understat IDs for up to {len(u_matches)} matches in {understat_slug} {season}")
-
-
-def _update_understat_stats(db: DB, understat_slug: str, season: str) -> None:
-    """
-    Fetch Understat season stats for a league and upsert xGChain/xGBuildup
-    for midfielder positions (CAM, CM, CDM, LM, RM, AM) only.
-    """
-    if not understat_slug:
-        return
-    # Our seasons are "2024/2025"; Understat uses the start year integer.
-    season_int = int(season.split("/")[0])
-
-    try:
-        players = fetch_league_player_stats(understat_slug, season_int)
-    except Exception as e:
-        log.error(f"Understat fetch failed for {understat_slug} {season_int}: {e}")
-        return
-
-    upserted = 0
-    for p in players:
-        player_id = _match_player_by_understat_id(db, p["understat_id"])
-        if not player_id:
-            player_id = _match_player_by_name(db, p["player_name"])
-        if not player_id:
-            continue
-
-        # Persist understat_id for faster future lookups
-        db.execute(
-            "UPDATE players SET understat_id = %s WHERE id = %s AND understat_id IS NULL",
-            (p["understat_id"], player_id),
-        )
-
-        db.execute(
-            """INSERT INTO player_season_understat
-               (player_id, season, xg_chain, xg_buildup, xg_chain_per90,
-                xg_buildup_per90, minutes_played, fetched_at)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-               ON CONFLICT (player_id, season) DO UPDATE SET
-                 xg_chain         = EXCLUDED.xg_chain,
-                 xg_buildup       = EXCLUDED.xg_buildup,
-                 xg_chain_per90   = EXCLUDED.xg_chain_per90,
-                 xg_buildup_per90 = EXCLUDED.xg_buildup_per90,
-                 minutes_played   = EXCLUDED.minutes_played,
-                 fetched_at       = NOW()""",
-            (
-                player_id,
-                season,
-                p["xg_chain"],
-                p["xg_buildup"],
-                p["xg_chain_per90"],
-                p["xg_buildup_per90"],
-                p["minutes"],
-            ),
-        )
-        upserted += 1
-
-    log.info(f"Understat: upserted {upserted} records for {understat_slug} {season}")
 
 
 def main():

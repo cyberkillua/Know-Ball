@@ -184,7 +184,12 @@ ON CONFLICT (player_id, league_id, season) DO UPDATE SET
 
 
 def _discover_targets(
-    db: DB, fotmob_id: int | None, season: str | None
+    db: DB,
+    fotmob_id: int | None,
+    season: str | None,
+    *,
+    skip_populated: bool = True,
+    stale_days: int = 7,
 ) -> list[dict]:
     """
     Return [{player_id, sofascore_player_id, league_id, fotmob_id, season}, ...].
@@ -197,20 +202,43 @@ def _discover_targets(
         where.append("m.season = %s")
         params.append(season)
 
+    having_params: list = []
+    if skip_populated:
+        stale_clause = ""
+        if stale_days > 0:
+            stale_clause = " OR MAX(pss.fetched_at) < NOW() - (%s * INTERVAL '1 day')"
+            having_params.append(stale_days)
+        having = (
+            "MAX(pss.fetched_at) IS NULL "
+            "OR MAX(pss.fetched_at) < MAX(m.date)::timestamp"
+            f"{stale_clause}"
+        )
+    else:
+        having = "TRUE"
+
     sql = f"""
-        SELECT DISTINCT
+        SELECT
           p.id              AS player_id,
           p.sofascore_id    AS sofascore_player_id,
           l.id              AS league_id,
           l.fotmob_id       AS fotmob_id,
-          m.season          AS season
+          m.season          AS season,
+          MAX(m.date)       AS latest_match_date,
+          MAX(pss.fetched_at) AS existing_fetched_at
         FROM match_player_stats mps
         JOIN players p ON p.id = mps.player_id
         JOIN matches m ON m.id = mps.match_id
         JOIN leagues l ON l.id = m.league_id
+        LEFT JOIN player_season_sofascore pss
+          ON pss.player_id = p.id
+         AND pss.league_id = l.id
+         AND pss.season = m.season
         WHERE {' AND '.join(where)}
+        GROUP BY p.id, p.sofascore_id, l.id, l.fotmob_id, m.season
+        HAVING {having}
+        ORDER BY MAX(m.date) DESC, p.id
     """
-    return db.query(sql, tuple(params))
+    return db.query(sql, (*params, *having_params))
 
 
 async def _fetch_flat(
@@ -262,13 +290,24 @@ def backfill(
     concurrency: int = 8,
     batch_size: int = 200,
     limit: int | None = None,
+    skip_populated: bool = True,
+    stale_days: int = 7,
 ) -> None:
     db = DB()
     try:
-        targets = _discover_targets(db, fotmob_id, season)
+        targets = _discover_targets(
+            db,
+            fotmob_id,
+            season,
+            skip_populated=skip_populated,
+            stale_days=stale_days,
+        )
         if limit:
             targets = targets[:limit]
-        log.info(f"Found {len(targets)} (player, league, season) triples to backfill")
+        log.info(
+            f"Found {len(targets)} (player, league, season) triples to backfill "
+            f"(skip_populated={skip_populated}, stale_days={stale_days})"
+        )
 
         # Resolve a sofascore season_id per (fotmob_id, season) once.
         season_cache: dict[tuple[int, str], int | None] = {}
@@ -361,6 +400,17 @@ def main() -> None:
     ap.add_argument("--concurrency", type=int, default=8, help="Concurrent in-flight HTTP requests")
     ap.add_argument("--batch-size", type=int, default=200, help="Targets per fetch+upsert batch")
     ap.add_argument("--limit", type=int, help="Cap number of targets, useful for smoke tests")
+    ap.add_argument(
+        "--stale-days",
+        type=int,
+        default=7,
+        help="With skip-populated, re-fetch rows older than this many days; 0 disables age-based refresh",
+    )
+    ap.add_argument(
+        "--no-skip-populated",
+        action="store_true",
+        help="Re-fetch every discovered player-season row, even if it is already current",
+    )
     args = ap.parse_args()
     backfill(
         fotmob_id=args.league,
@@ -368,6 +418,8 @@ def main() -> None:
         concurrency=args.concurrency,
         batch_size=args.batch_size,
         limit=args.limit,
+        skip_populated=not args.no_skip_populated,
+        stale_days=args.stale_days,
     )
 
 

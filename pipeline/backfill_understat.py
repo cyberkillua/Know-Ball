@@ -14,8 +14,9 @@ Safe to re-run — all upserts use ON CONFLICT DO UPDATE.
 """
 
 from pipeline.db import DB
+from pipeline.leagues import LEAGUES
 from pipeline.logger import get_logger
-from pipeline.scrape import LEAGUES, _update_understat_stats
+from pipeline.understat_sync import update_understat_stats
 
 log = get_logger("backfill_understat")
 
@@ -45,7 +46,7 @@ def main() -> None:
             season = row["season"]
             log.info(f"Backfilling {slug} {season}")
             try:
-                _update_understat_stats(db, slug, season)
+                update_understat_stats(db, slug, season)
             except Exception as e:
                 log.error(f"Failed {slug} {season}: {e}")
                 continue

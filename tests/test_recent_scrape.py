@@ -63,8 +63,8 @@ class RecentScrapeTest(unittest.TestCase):
             patch.object(scrape, "fetch_scheduled_events", return_value=[event]),
             patch.object(scrape, "get_league_id", return_value=1),
             patch.object(scrape, "_process_match", side_effect=fake_process_match),
-            patch.object(scrape, "_backfill_understat_match_ids"),
-            patch.object(scrape, "_update_understat_stats"),
+            patch.object(scrape, "backfill_understat_match_ids"),
+            patch.object(scrape, "update_understat_stats"),
         ):
             scrape.scrape_recent_matches(
                 db=None,
