@@ -5,9 +5,13 @@ on:
   workflow_dispatch:
     inputs:
       recent_days:
-        description: "Rolling lookback window for completed matches"
+        description: "0 = league-season reconciliation; otherwise use a rolling date window"
         required: false
-        default: "21"
+        default: "0"
+      full_backfills:
+        description: "Run heavyweight full-season backfills"
+        required: false
+        default: "false"
   push:
     branches:
       - main
@@ -26,9 +30,10 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       CURRENT_SEASON: ${{ vars.CURRENT_SEASON }}
       SOFASCORE_SEASON_IDS: ${{ vars.SOFASCORE_SEASON_IDS }}
-      # Scan a rolling window so missed/blocked/too-early runs can catch up.
-      # Existing matches with player stats are skipped by the pipeline.
-      KNOW_BALL_RECENT_DAYS: ${{ github.event.inputs.recent_days || '21' }}
+      # 0 reconciles each configured league season and only processes
+      # matches missing player stats. Non-zero keeps the old date-window mode.
+      KNOW_BALL_RECENT_DAYS: ${{ github.event.inputs.recent_days || '0' }}
+      KNOW_BALL_FULL_BACKFILLS: ${{ github.event.inputs.full_backfills || 'false' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

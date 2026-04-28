@@ -306,6 +306,7 @@ def scrape_recent_matches(
     today = datetime.now(timezone.utc).date()
     league_meta = {fotmob_id: (name, understat_slug) for name, fotmob_id, understat_slug in LEAGUES}
     matches_by_league: dict[int, list[dict]] = {}
+    seen_ids = set(existing_ids)
 
     for offset in range(1, days + 1):
         date_str = (today - timedelta(days=offset)).isoformat()
@@ -313,8 +314,9 @@ def scrape_recent_matches(
         events = fetch_scheduled_events(date_str)
         for event in events:
             match = _match_from_event(event)
-            if not match or match["sofascore_id"] in existing_ids:
+            if not match or match["sofascore_id"] in seen_ids:
                 continue
+            seen_ids.add(match["sofascore_id"])
             matches_by_league.setdefault(match["fotmob_league_id"], []).append(match)
 
     if not matches_by_league:
@@ -918,7 +920,9 @@ def main():
             import traceback
 
             traceback.print_exc()
+            raise
     else:
+        failed_leagues = []
         for league_name, fotmob_id, understat_slug in leagues:
             try:
                 scrape_league(
@@ -935,9 +939,12 @@ def main():
                 import traceback
 
                 traceback.print_exc()
+                failed_leagues.append(league_name)
                 continue
 
     db.close()
+    if args.recent_days == 0 and failed_leagues:
+        raise RuntimeError(f"Failed to scrape leagues: {', '.join(failed_leagues)}")
     log.info("Scrape complete")
 
 

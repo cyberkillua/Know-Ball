@@ -380,11 +380,10 @@ def fetch_league_matches(fotmob_league_id: int, season: str) -> list[dict]:
                     f"({consecutive_forbidden}/{max_consecutive_forbidden})"
                 )
                 if consecutive_forbidden >= max_consecutive_forbidden:
-                    log.error(
-                        f"Too many 403 errors, stopping scrape for tournament "
+                    raise RuntimeError(
+                        f"Too many 403 errors fetching tournament "
                         f"{tournament_id}, season {season_id}"
                     )
-                    break
                 time.sleep(10)
                 continue
 
@@ -1734,8 +1733,8 @@ def fetch_scheduled_events(date_str: str) -> list[dict]:
         data = _api_get(f"sport/football/scheduled-events/{date_str}")
         time.sleep(REQUEST_DELAY)
     except Exception as e:
-        log.debug(f"No scheduled events for {date_str}: {e}")
-        return []
+        log.warning(f"Failed to fetch scheduled events for {date_str}: {e}")
+        raise
     return data.get("events", [])
 
 

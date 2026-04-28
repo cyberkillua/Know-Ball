@@ -47,7 +47,19 @@ def main() -> None:
         "--recent-days",
         type=int,
         default=_env_int("KNOW_BALL_RECENT_DAYS", 0),
-        help="Only scrape completed matches from the previous N day(s)",
+        help=(
+            "Only scrape completed matches from the previous N day(s). "
+            "Use 0 to reconcile finished matches from each configured league season."
+        ),
+    )
+    parser.add_argument(
+        "--full-backfills",
+        action="store_true",
+        default=_env_truthy("KNOW_BALL_FULL_BACKFILLS"),
+        help=(
+            "Run heavyweight full-season backfills after scraping. Daily runs "
+            "leave this off and only scrape missing/incomplete matches."
+        ),
     )
     parser.add_argument(
         "--skip-sofascore-ingest",
@@ -76,10 +88,10 @@ def main() -> None:
 
         _run("pipeline.scrape", *scrape_args)
 
-        if args.recent_days == 0:
+        if args.full_backfills:
             _run("pipeline.backfill_match_player_extras", *scoped)
         _run("pipeline.backfill_self_created", *scoped)
-        if args.recent_days == 0:
+        if args.full_backfills:
             _run(
                 "pipeline.backfill_player_season_sofascore",
                 *scoped,
