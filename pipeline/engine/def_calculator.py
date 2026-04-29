@@ -81,7 +81,6 @@ def calc_team_function(stats: PlayerMatchStats, constants: dict) -> float:
         + stats.touches * c.get("presence_factor", 0.0015)
         - possession_loss_rate * c.get("possession_loss_rate_penalty", 0.18)
         - stats.error_lead_to_shot * c.get("error_lead_to_shot_penalty", 0.35)
-        - stats.error_lead_to_goal * c.get("error_lead_to_goal_penalty", 0.9)
     )
 
 
@@ -109,11 +108,10 @@ def calc_volume_passing(stats: PlayerMatchStats, constants: dict) -> float:
 
 
 def calc_goal_threat(stats: PlayerMatchStats, constants: dict) -> float:
-    """Set-piece and goal threat."""
+    """Set-piece and shot threat, before actual goal conversion."""
     c = constants
     return (
-        stats.goals * c.get("goal_bonus", 0.7)
-        + stats.xg * c.get("xg_volume_weight", 0.25)
+        stats.xg * c.get("xg_volume_weight", 0.25)
         + stats.shots_total * c.get("shot_volume_reward", 0.035)
     )
 
@@ -157,10 +155,25 @@ def calculate_def_rating(
         setattr(scores, f"{cat}_norm", round(norm, 2))
         weighted += weights.get(cat, 0.0) * norm
 
+    # Goals and assists are post-normalization bonuses, matching the other
+    # calculators: they matter, but they are not part of the core CB judgement.
+    np_goals = stats.goals - stats.penalty_goals
+    goal_lift = np_goals * constants.get(
+        "goal_bonus", 0.55
+    ) + stats.penalty_goals * constants.get("penalty_goal_bonus", 0.35)
+    assist_lift = stats.assists * constants.get("match_assist_lift", 0.35)
+    clean_sheet_lift = 0.0
+    if (
+        stats.team_goals_conceded == 0
+        and stats.minutes_played >= constants.get("clean_sheet_min_minutes", 60)
+    ):
+        clean_sheet_lift = constants.get("clean_sheet_bonus", 0.25)
+
     final = baseline + weighted
-    final += stats.goals * constants.get("match_goal_lift", 0.25)
-    final -= stats.error_lead_to_shot * constants.get("error_lead_to_shot_match_penalty", 0.25)
-    final -= stats.error_lead_to_goal * constants.get("error_lead_to_goal_match_penalty", 0.75)
+    final += goal_lift
+    final += assist_lift
+    final += clean_sheet_lift
+    final -= stats.error_lead_to_goal * constants.get("error_lead_to_goal_penalty", 0.65)
     final += stats.red_cards * constants.get("red_card_penalty", -1.0)
     final += stats.yellow_cards * constants.get("yellow_card_penalty", -0.05)
 

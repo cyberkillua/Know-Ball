@@ -70,10 +70,16 @@ def get_unrated_records_batch(db: DB, last_id: int, batch_size: int) -> list[dic
                mps.accurate_long_balls,
                mps.total_long_balls,
                mps.sofascore_rating,
+               CASE
+                   WHEN mps.team_id = m.home_team_id THEN m.away_score
+                   WHEN mps.team_id = m.away_team_id THEN m.home_score
+                   ELSE NULL
+               END AS team_goals_conceded,
                mts.possession_pct  AS team_possession_pct,
                mts.total_shots     AS team_total_shots,
                p.position AS player_position
         FROM match_player_stats mps
+        JOIN matches m ON m.id = mps.match_id
         JOIN players p ON p.id = mps.player_id
         LEFT JOIN match_team_stats mts ON mts.match_id = mps.match_id AND mts.team_id = mps.team_id
         WHERE mps.id > %s
@@ -235,6 +241,7 @@ def rate_record(
         error_lead_to_shot=record.get("error_lead_to_shot") or 0,
         yellow_cards=record.get("yellow_cards") or 0,
         red_cards=record.get("red_cards") or 0,
+        team_goals_conceded=record.get("team_goals_conceded"),
         total_ball_carries_distance=float(record.get("total_ball_carries_distance") or 0),
         total_progressive_ball_carries_distance=float(
             record.get("total_progressive_ball_carries_distance") or 0

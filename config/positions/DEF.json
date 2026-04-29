@@ -28,7 +28,7 @@
     "presence_factor": 0.0015,
     "possession_loss_rate_penalty": 0.18,
     "error_lead_to_shot_penalty": 0.35,
-    "error_lead_to_goal_penalty": 0.9,
+    "error_lead_to_goal_penalty": 0.65,
     "pass_value_weight": 0.65,
     "accurate_long_ball_reward": 0.025,
     "accurate_long_ball_cap": 10,
@@ -37,12 +37,13 @@
     "long_ball_accuracy_min_attempts": 3,
     "long_ball_accuracy_threshold": 0.48,
     "long_ball_accuracy_weight": 0.18,
-    "goal_bonus": 0.7,
-    "match_goal_lift": 0.25,
+    "goal_bonus": 0.55,
+    "penalty_goal_bonus": 0.35,
     "xg_volume_weight": 0.25,
     "shot_volume_reward": 0.035,
-    "error_lead_to_shot_match_penalty": 0.25,
-    "error_lead_to_goal_match_penalty": 0.75,
+    "match_assist_lift": 0.35,
+    "clean_sheet_bonus": 0.25,
+    "clean_sheet_min_minutes": 60,
     "red_card_penalty": -1.0,
     "yellow_card_penalty": -0.05
   },
@@ -67,32 +68,44 @@
   ],
   "normalization": {
     "method": "median_iqr",
-    "calibrated_at": null,
-    "sample_size": 0,
+    "calibrated_at": "2026-04-29",
+    "sample_size": 74566,
     "midpoints": {
       "defensive": {
-        "median": 0.45,
-        "scale": 0.55
+        "median": 0.595,
+        "scale": 0.46,
+        "p25": 0.365,
+        "p75": 0.825
       },
       "duels": {
-        "median": 0.18,
-        "scale": 0.35
+        "median": 0.17,
+        "scale": 0.304,
+        "p25": 0.034,
+        "p75": 0.338
       },
       "carrying": {
-        "median": 0.12,
-        "scale": 0.22
+        "median": 0.1805,
+        "scale": 0.1844,
+        "p25": 0.092,
+        "p75": 0.2764
       },
       "team_function": {
-        "median": 0.1,
-        "scale": 0.22
+        "median": 0.088,
+        "scale": 0.1038,
+        "p25": 0.0373,
+        "p75": 0.1411
       },
       "volume_passing": {
-        "median": 0.12,
-        "scale": 0.24
+        "median": 0.107,
+        "scale": 0.1386,
+        "p25": 0.049,
+        "p75": 0.1876
       },
       "goal_threat": {
         "median": 0.0,
-        "scale": 0.08
+        "scale": 0.1,
+        "p25": 0.0,
+        "p75": 0.041
       }
     }
   }
