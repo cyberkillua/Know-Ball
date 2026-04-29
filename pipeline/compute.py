@@ -137,48 +137,42 @@ def cm_archetype(p: dict) -> str | None:
 
 
 def def_archetype(p: dict) -> str | None:
-    """Assign a readable defender role from the strongest CB/DEF signals."""
-    box_defending = _avg_present(
+    """Assign a user-facing CB role from the strongest season signals."""
+    stopper = _avg_present(
         p.get("defensive_percentile"),
-        p.get("aerials_per90_percentile"),
-        p.get("aerial_win_rate_percentile"),
-    ) or 0.0
-    front_foot = _avg_present(
-        p.get("tackles_per90_percentile"),
-        p.get("interceptions_per90_percentile"),
-        p.get("ball_recoveries_per90_percentile"),
-        p.get("ground_duel_win_rate_percentile"),
-    ) or 0.0
-    aerial = _avg_present(
         p.get("duels_percentile"),
         p.get("aerials_per90_percentile"),
         p.get("aerial_win_rate_percentile"),
+        p.get("tackles_per90_percentile"),
+        p.get("interceptions_per90_percentile"),
     ) or 0.0
     ball_playing = _avg_present(
         p.get("volume_passing_percentile"),
+        p.get("team_function_percentile"),
         p.get("passes_completed_per90_percentile"),
         p.get("accurate_long_balls_per90_percentile"),
         p.get("long_ball_accuracy_percentile"),
         p.get("pass_value_normalized_percentile"),
     ) or 0.0
-    composed = _avg_present(
-        p.get("team_function_percentile"),
-        p.get("passing_accuracy_percentile"),
-        p.get("possession_loss_rate_percentile"),
-    ) or 0.0
-    recovery = _avg_present(
+    sweeper = _avg_present(
         p.get("carrying_percentile"),
         p.get("ball_recoveries_per90_percentile"),
+        p.get("ground_duel_win_rate_percentile"),
+        p.get("team_function_percentile"),
+    ) or 0.0
+    wide_cb = _avg_present(
+        p.get("carrying_percentile"),
+        p.get("progressive_carries_distance_per90_percentile"),
+        p.get("volume_passing_percentile"),
+        p.get("tackles_per90_percentile"),
         p.get("ground_duel_win_rate_percentile"),
     ) or 0.0
 
     scores = {
-        "box_defender": box_defending,
-        "front_foot_stopper": front_foot,
-        "aerial_dominator": aerial,
-        "ball_playing_cb": ball_playing,
-        "composed_retainer": composed,
-        "sweeper_recovery_cb": recovery,
+        "stopper_no_nonsense_cb": stopper,
+        "ball_playing_defender": ball_playing,
+        "sweeper_libero": sweeper,
+        "wide_centre_back": wide_cb,
     }
     return max(scores, key=scores.get)
 

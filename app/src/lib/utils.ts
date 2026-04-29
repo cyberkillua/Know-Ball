@@ -43,6 +43,16 @@ export function formatRoleArchetype(archetype: string | null | undefined) {
     shadow_striker: "Shadow Striker",
     enganche: "Enganche",
     raumdeuter: "Raumdeuter",
+    stopper_no_nonsense_cb: "Stopper / No-nonsense CB",
+    ball_playing_defender: "Ball-Playing Defender",
+    sweeper_libero: "Sweeper / Libero",
+    wide_centre_back: "Wide Centre-Back",
+    box_defender: "Stopper / No-nonsense CB",
+    front_foot_stopper: "Stopper / No-nonsense CB",
+    aerial_dominator: "Stopper / No-nonsense CB",
+    ball_playing_cb: "Ball-Playing Defender",
+    composed_retainer: "Ball-Playing Defender",
+    sweeper_recovery_cb: "Sweeper / Libero",
   }
   return archetype ? labels[archetype] ?? archetype : null
 }

@@ -354,6 +354,15 @@ function getStatSectionsForPosition(position: string | null, archetype?: string 
     return [S.chanceCreationFull, S.passing, S.goalscoring, S.carryingFull, S.physicalNoAerialWins, S.defending]
   }
   if (isDefender) {
+    if (archetype === 'stopper_no_nonsense_cb' || archetype === 'box_defender' || archetype === 'front_foot_stopper' || archetype === 'aerial_dominator') {
+      return [S.physicalFull, S.defending, S.passing, S.carryingDefender, S.chanceCreationDefender, S.goalscoring]
+    }
+    if (archetype === 'ball_playing_defender' || archetype === 'ball_playing_cb' || archetype === 'composed_retainer') {
+      return [S.passing, S.defending, S.physicalFull, S.carryingDefender, S.chanceCreationDefender, S.goalscoring]
+    }
+    if (archetype === 'sweeper_libero' || archetype === 'sweeper_recovery_cb' || archetype === 'wide_centre_back') {
+      return [S.carryingDefender, S.passing, S.defending, S.physicalFull, S.chanceCreationDefender, S.goalscoring]
+    }
     return [S.physicalFull, S.defending, S.carryingDefender, S.passing, S.chanceCreationDefender, S.goalscoring]
   }
   // fallback
