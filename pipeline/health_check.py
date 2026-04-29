@@ -24,89 +24,93 @@ def run_checks(season: str = CURRENT_SEASON, strict: bool = True) -> bool:
     try:
         checks: list[tuple[str, bool, int]] = []
 
+        completed_matches = _count(
+            db,
+            """
+            SELECT COUNT(*)::int AS n
+            FROM matches
+            WHERE season = %s AND home_score IS NOT NULL
+            """,
+            (season,),
+        )
         checks.append(
             (
                 "completed matches",
-                _count(
-                    db,
-                    """
-                    SELECT COUNT(*)::int AS n
-                    FROM matches
-                    WHERE season = %s AND home_score IS NOT NULL
-                    """,
-                    (season,),
-                )
-                > 0,
-                0,
+                completed_matches > 0,
+                completed_matches,
             )
+        )
+
+        match_player_stats = _count(
+            db,
+            """
+            SELECT COUNT(*)::int AS n
+            FROM match_player_stats mps
+            JOIN matches m ON m.id = mps.match_id
+            WHERE m.season = %s
+            """,
+            (season,),
         )
         checks.append(
             (
                 "match player stats",
-                _count(
-                    db,
-                    """
-                    SELECT COUNT(*)::int AS n
-                    FROM match_player_stats mps
-                    JOIN matches m ON m.id = mps.match_id
-                    WHERE m.season = %s
-                    """,
-                    (season,),
-                )
-                > 0,
-                0,
+                match_player_stats > 0,
+                match_player_stats,
             )
+        )
+
+        sofascore_season_stats = _count(
+            db,
+            """
+            SELECT COUNT(*)::int AS n
+            FROM player_season_sofascore
+            WHERE season = %s
+            """,
+            (season,),
         )
         checks.append(
             (
                 "Sofascore season stats",
-                _count(
-                    db,
-                    """
-                    SELECT COUNT(*)::int AS n
-                    FROM player_season_sofascore
-                    WHERE season = %s
-                    """,
-                    (season,),
-                )
-                > 0,
-                0,
+                sofascore_season_stats > 0,
+                sofascore_season_stats,
             )
+        )
+
+        progressive_carry_distance_rows = _count(
+            db,
+            """
+            SELECT COUNT(*)::int AS n
+            FROM match_player_stats mps
+            JOIN matches m ON m.id = mps.match_id
+            WHERE m.season = %s
+              AND COALESCE(mps.total_progressive_ball_carries_distance, 0) > 0
+            """,
+            (season,),
         )
         checks.append(
             (
                 "progressive carry distance rows",
-                _count(
-                    db,
-                    """
-                    SELECT COUNT(*)::int AS n
-                    FROM match_player_stats mps
-                    JOIN matches m ON m.id = mps.match_id
-                    WHERE m.season = %s
-                      AND COALESCE(mps.total_progressive_ball_carries_distance, 0) > 0
-                    """,
-                    (season,),
-                )
-                > 0,
-                0,
+                progressive_carry_distance_rows > 0,
+                progressive_carry_distance_rows,
             )
+        )
+
+        pass_value_rows = _count(
+            db,
+            """
+            SELECT COUNT(*)::int AS n
+            FROM match_player_stats mps
+            JOIN matches m ON m.id = mps.match_id
+            WHERE m.season = %s
+              AND mps.pass_value_normalized IS NOT NULL
+            """,
+            (season,),
         )
         checks.append(
             (
                 "pass value rows",
-                _count(
-                    db,
-                    """
-                    SELECT COUNT(*)::int AS n
-                    FROM match_player_stats mps
-                    JOIN matches m ON m.id = mps.match_id
-                    WHERE m.season = %s
-                      AND mps.pass_value_normalized IS NOT NULL
-                    """,
-                    (season,),
-                )
-                > 0,
-                0,
+                pass_value_rows > 0,
+                pass_value_rows,
             )
         )
 
