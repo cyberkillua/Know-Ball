@@ -167,7 +167,7 @@ def calculate_def_rating(
         stats.team_goals_conceded == 0
         and stats.minutes_played >= constants.get("clean_sheet_min_minutes", 60)
     ):
-        clean_sheet_lift = constants.get("clean_sheet_bonus", 0.25)
+        clean_sheet_lift = constants.get("clean_sheet_bonus", 0.40)
 
     final = baseline + weighted
     final += goal_lift

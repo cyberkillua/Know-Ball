@@ -145,7 +145,7 @@ function scoreCopy(score: number | null | undefined, roleLabel: string | null) {
 
 function getPeerDimensionRows(
   pr: PeerRating,
-  flags: { isWinger: boolean; isDefensiveWinger: boolean; isCAM: boolean; isCM: boolean },
+  flags: { isWinger: boolean; isDefensiveWinger: boolean; isCAM: boolean; isCM: boolean; isDefender: boolean },
   preAssistPercentile: number | undefined,
 ): PeerDimensionRow[] {
   if (flags.isWinger || flags.isDefensiveWinger) {
@@ -180,6 +180,17 @@ function getPeerDimensionRows(
       { label: "Chance Creation", sublabel: "xA, key passes, big chances", value: pr.chance_creation_percentile },
       { label: "Defensive Coverage", sublabel: "recoveries, tackles, interceptions", value: pr.defensive_percentile },
       { label: "Box Threat", sublabel: "shots, xG, goals", value: pr.goal_threat_percentile },
+    ];
+  }
+  if (flags.isDefender) {
+    return [
+      { label: "Overall Season Value", sublabel: "Know Ball Score percentile", value: pr.overall_percentile },
+      { label: "Box Defending", sublabel: "clearances, blocks, interceptions", value: pr.defensive_percentile },
+      { label: "Duels", sublabel: "aerial and ground contests", value: pr.duels_percentile },
+      { label: "Composure", sublabel: "pass security and mistake control", value: pr.team_function_percentile },
+      { label: "Recovery & Carrying", sublabel: "mobility, recoveries, retention", value: pr.carrying_percentile },
+      { label: "Ball Playing", sublabel: "passing value and progression", value: pr.volume_passing_percentile },
+      { label: "Set-Piece Threat", sublabel: "shots and xG threat", value: pr.goal_threat_percentile },
     ];
   }
   return [
@@ -422,7 +433,7 @@ function PlayerProfilePage() {
     player.position === "RB" ||
     player.position === "LWB" ||
     player.position === "RWB";
-  const isSupported = isST || isCAM || isWinger || isDefensiveWinger || isCM;
+  const isSupported = isST || isCAM || isWinger || isDefensiveWinger || isCM || isDefender;
 
   // Passing computed values
   const passesCompleted = stats ? (stats.passes_completed ?? 0) : 0;
@@ -460,7 +471,7 @@ function PlayerProfilePage() {
   const peerDimensionRows = activePeerRating
     ? getPeerDimensionRows(
         activePeerRating,
-        { isWinger, isDefensiveWinger, isCAM, isCM },
+        { isWinger, isDefensiveWinger, isCAM, isCM, isDefender },
         activePreAssistPercentile ?? undefined,
       )
     : [];
