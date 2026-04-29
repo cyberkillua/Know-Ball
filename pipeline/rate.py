@@ -12,6 +12,7 @@ from pipeline.engine.calculator import PlayerMatchStats, calculate_match_rating
 from pipeline.engine.w_calculator import calculate_winger_rating, W_CATEGORIES
 from pipeline.engine.cam_calculator import calculate_cam_rating, CAM_CATEGORIES
 from pipeline.engine.cm_calculator import calculate_cm_rating, CM_CATEGORIES
+from pipeline.engine.def_calculator import calculate_def_rating
 
 log = get_logger("rate")
 
@@ -53,9 +54,14 @@ def get_unrated_records_batch(db: DB, last_id: int, batch_size: int) -> list[dic
                mps.big_chance_missed,
                mps.big_chance_created,
                mps.blocked_scoring_attempt,
+               mps.clearances,
+               mps.outfielder_block,
                mps.penalty_won,
                mps.possession_lost_ctrl,
                mps.error_lead_to_goal,
+               mps.error_lead_to_shot,
+               mps.yellow_cards,
+               mps.red_cards,
                mps.total_ball_carries_distance,
                mps.total_progressive_ball_carries_distance,
                mps.pass_value_normalized,
@@ -221,9 +227,14 @@ def rate_record(
         big_chance_missed=record.get("big_chance_missed") or 0,
         big_chance_created=record.get("big_chance_created") or 0,
         blocked_scoring_attempt=record.get("blocked_scoring_attempt") or 0,
+        clearances=record.get("clearances") or 0,
+        outfielder_block=record.get("outfielder_block") or 0,
         penalty_won=record.get("penalty_won") or 0,
         possession_lost_ctrl=record.get("possession_lost_ctrl") or 0,
         error_lead_to_goal=record.get("error_lead_to_goal") or 0,
+        error_lead_to_shot=record.get("error_lead_to_shot") or 0,
+        yellow_cards=record.get("yellow_cards") or 0,
+        red_cards=record.get("red_cards") or 0,
         total_ball_carries_distance=float(record.get("total_ball_carries_distance") or 0),
         total_progressive_ball_carries_distance=float(
             record.get("total_progressive_ball_carries_distance") or 0
@@ -305,6 +316,28 @@ def rate_record(
             sofascore_rating,
         )
 
+    if position_key == "DEF":
+        final_rating, scores = calculate_def_rating(stats, config)
+        return True, (
+            match_id,
+            player_id,
+            position_key,
+            scores.defensive_raw,
+            scores.defensive_norm,
+            scores.duels_raw,
+            scores.duels_norm,
+            scores.carrying_raw,
+            scores.carrying_norm,
+            scores.team_function_raw,
+            scores.team_function_norm,
+            scores.volume_passing_raw,
+            scores.volume_passing_norm,
+            scores.goal_threat_raw,
+            scores.goal_threat_norm,
+            final_rating,
+            sofascore_rating,
+        )
+
     final_rating, scores = calculate_match_rating(stats, config)
     return True, (
         match_id,
@@ -354,6 +387,7 @@ def main():
         w_batch = []
         cam_batch = []
         cm_batch = []
+        def_batch = []
         batch_rated = 0
         for record in unrated:
             try:
@@ -368,6 +402,8 @@ def main():
                         cam_batch.append(rating_data)
                     elif rating_data[2] == "CM":
                         cm_batch.append(rating_data)
+                    elif rating_data[2] == "DEF":
+                        def_batch.append(rating_data)
                     else:
                         st_batch.append(rating_data)
                 else:
@@ -462,11 +498,32 @@ def main():
                 rated_count -= len(cm_batch)
                 skipped_count += len(cm_batch)
 
+        if def_batch:
+            try:
+                db.execute(
+                    """INSERT INTO match_ratings
+                       (match_id, player_id, position,
+                        defensive_raw, defensive_norm,
+                        duels_raw, duels_norm,
+                        carrying_raw, carrying_norm,
+                        team_function_raw, team_function_norm,
+                        volume_passing_raw, volume_passing_norm,
+                        goal_threat_raw, goal_threat_norm,
+                        final_rating, sofascore_rating)
+                       VALUES %s
+                       ON CONFLICT (match_id, player_id) DO NOTHING""",
+                    (def_batch,),
+                )
+            except Exception as e:
+                log.error(f"DEF batch insert failed ({len(def_batch)} records): {e}")
+                rated_count -= len(def_batch)
+                skipped_count += len(def_batch)
+
         last_id = unrated[-1]["id"]
         log.info(
             f"Processed batch ending at mps.id={last_id}: "
             f"{batch_rated} rated ({len(st_batch)} ST, {len(w_batch)} W, "
-            f"{len(cam_batch)} CAM, {len(cm_batch)} CM), "
+            f"{len(cam_batch)} CAM, {len(cm_batch)} CM, {len(def_batch)} DEF), "
             f"{len(unrated) - batch_rated} skipped"
         )
 

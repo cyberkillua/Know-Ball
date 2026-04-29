@@ -30,7 +30,7 @@ POSITION_GROUPS: list[tuple[list[str], str, str]] = [
     (["CAM"], "CAM", "CAM"),
     (["LW", "RW", "LM", "RM"], "W", "WINGER"),
     (["CM", "CDM"], "CM", "CM"),
-    (["CB", "LB", "RB", "LWB", "RWB"], "DEF", "DEF"),
+    (["CB"], "DEF", "CB"),
 ]
 # Each tuple: (profile_positions, rating_position, label)
 # profile_positions — players.position values that belong to the peer group
@@ -43,7 +43,8 @@ CASE
     WHEN {alias}.position IN ('LW', 'RW', 'LM', 'RM', 'W', 'WINGER') THEN 'WINGER'
     WHEN {alias}.position IN ('CAM', 'AM') THEN 'CAM'
     WHEN {alias}.position IN ('CM', 'CDM', 'DM', 'MID', 'MIDFIELDER') THEN 'CM'
-    WHEN {alias}.position IN ('CB', 'LB', 'RB', 'LWB', 'RWB', 'DEF', 'DEFENDER') THEN 'DEF'
+    WHEN {alias}.position IN ('CB') THEN 'CB'
+    WHEN {alias}.position IN ('LB', 'RB', 'LWB', 'RWB', 'DEF', 'DEFENDER') THEN 'DEF'
     WHEN {alias}.position IN ('GK', 'GOALKEEPER') THEN 'GK'
     ELSE NULL
 END
@@ -132,6 +133,53 @@ def cm_archetype(p: dict) -> str | None:
         scores["destroyer"] += 6
     if profile_pos in {"CDM", "DM"} and build_up >= defensive - 8:
         scores["anchor_regista"] += 4
+    return max(scores, key=scores.get)
+
+
+def def_archetype(p: dict) -> str | None:
+    """Assign a readable defender role from the strongest CB/DEF signals."""
+    box_defending = _avg_present(
+        p.get("defensive_percentile"),
+        p.get("aerials_per90_percentile"),
+        p.get("aerial_win_rate_percentile"),
+    ) or 0.0
+    front_foot = _avg_present(
+        p.get("tackles_per90_percentile"),
+        p.get("interceptions_per90_percentile"),
+        p.get("ball_recoveries_per90_percentile"),
+        p.get("ground_duel_win_rate_percentile"),
+    ) or 0.0
+    aerial = _avg_present(
+        p.get("duels_percentile"),
+        p.get("aerials_per90_percentile"),
+        p.get("aerial_win_rate_percentile"),
+    ) or 0.0
+    ball_playing = _avg_present(
+        p.get("volume_passing_percentile"),
+        p.get("passes_completed_per90_percentile"),
+        p.get("accurate_long_balls_per90_percentile"),
+        p.get("long_ball_accuracy_percentile"),
+        p.get("pass_value_normalized_percentile"),
+    ) or 0.0
+    composed = _avg_present(
+        p.get("team_function_percentile"),
+        p.get("passing_accuracy_percentile"),
+        p.get("possession_loss_rate_percentile"),
+    ) or 0.0
+    recovery = _avg_present(
+        p.get("carrying_percentile"),
+        p.get("ball_recoveries_per90_percentile"),
+        p.get("ground_duel_win_rate_percentile"),
+    ) or 0.0
+
+    scores = {
+        "box_defender": box_defending,
+        "front_foot_stopper": front_foot,
+        "aerial_dominator": aerial,
+        "ball_playing_cb": ball_playing,
+        "composed_retainer": composed,
+        "sweeper_recovery_cb": recovery,
+    }
     return max(scores, key=scores.get)
 
 
@@ -414,6 +462,16 @@ CM_DIMENSIONS = [
     "goal_threat",
 ]
 
+# DEF dimension names
+DEF_DIMENSIONS = [
+    "defensive",
+    "duels",
+    "carrying",
+    "team_function",
+    "volume_passing",
+    "goal_threat",
+]
+
 
 def compute_peer_ratings(
     db: DB,
@@ -552,12 +610,15 @@ def compute_peer_ratings(
     is_winger = rating_position == "W"
     is_cam = rating_position == "CAM"
     is_cm = rating_position == "CM"
+    is_def = rating_position == "DEF"
     if is_winger:
         dims = W_DIMENSIONS
     elif is_cam:
         dims = CAM_DIMENSIONS
     elif is_cm:
         dims = CM_DIMENSIONS
+    elif is_def:
+        dims = DEF_DIMENSIONS
     else:
         dims = ST_DIMENSIONS
     dim_avg_cols = ",\n            ".join(
@@ -679,15 +740,15 @@ def compute_peer_ratings(
             "rated_minutes": rated_minutes,
             "avg_match_rating": float(norm.get("avg_match_rating") or 0),
             # ST dimension stddev/p90
-            "finishing_stddev": _norm_float("finishing_stddev") if not is_winger and not is_cam and not is_cm else None,
-            "finishing_p90": _norm_float("finishing_p90") if not is_winger and not is_cam and not is_cm else None,
+            "finishing_stddev": _norm_float("finishing_stddev") if not is_winger and not is_cam and not is_cm and not is_def else None,
+            "finishing_p90": _norm_float("finishing_p90") if not is_winger and not is_cam and not is_cm and not is_def else None,
             "team_function_stddev": _norm_float("team_function_stddev") if not is_winger and not is_cm else None,
             "team_function_p90": _norm_float("team_function_p90") if not is_winger and not is_cm else None,
             "duels_stddev": _norm_float("duels_stddev") if not is_winger and not is_cam and not is_cm else None,
             "duels_p90": _norm_float("duels_p90") if not is_winger and not is_cam and not is_cm else None,
             # Shared dimension stddev/p90
-            "shot_generation_stddev": _norm_float("shot_generation_stddev") if not is_cam and not is_cm else None,
-            "shot_generation_p90": _norm_float("shot_generation_p90") if not is_cam and not is_cm else None,
+            "shot_generation_stddev": _norm_float("shot_generation_stddev") if not is_cam and not is_cm and not is_def else None,
+            "shot_generation_p90": _norm_float("shot_generation_p90") if not is_cam and not is_cm and not is_def else None,
             "chance_creation_stddev": _norm_float("chance_creation_stddev"),
             "chance_creation_p90": _norm_float("chance_creation_p90"),
             "carrying_stddev": _norm_float("carrying_stddev"),
@@ -702,11 +763,11 @@ def compute_peer_ratings(
             "presence_stddev": _norm_float("presence_stddev") if is_winger else None,
             "presence_p90": _norm_float("presence_p90") if is_winger else None,
             # CAM + CM shared dimension stddev/p90
-            "goal_threat_stddev": _norm_float("goal_threat_stddev") if is_cam or is_cm else None,
-            "goal_threat_p90": _norm_float("goal_threat_p90") if is_cam or is_cm else None,
+            "goal_threat_stddev": _norm_float("goal_threat_stddev") if is_cam or is_cm or is_def else None,
+            "goal_threat_p90": _norm_float("goal_threat_p90") if is_cam or is_cm or is_def else None,
             # CM dimension stddev/p90
-            "volume_passing_stddev": _norm_float("volume_passing_stddev") if is_cm else None,
-            "volume_passing_p90": _norm_float("volume_passing_p90") if is_cm else None,
+            "volume_passing_stddev": _norm_float("volume_passing_stddev") if is_cm or is_def else None,
+            "volume_passing_p90": _norm_float("volume_passing_p90") if is_cm or is_def else None,
             "model_score_stddev": _norm_float("model_score_stddev"),
             "model_score_p90": _norm_float("model_score_p90"),
             "consistency_score": float(norm.get("consistency_score") or 0.0),
@@ -1000,12 +1061,12 @@ def compute_peer_ratings(
 
             # Team function blending — ST only (CAM uses raw team_function without xGchain overlay)
             team_function_blended_scores: dict[int, float] = {}
-            if not is_winger and not is_cam and not is_cm:
+            if not is_winger and not is_cam and not is_cm and not is_def:
                 team_function_base_z = zscore_lookup("_dim_team_function", qualified)
                 xg_chain_support_z = zscore_lookup("xg_chain_per90", qualified)
                 xg_buildup_support_z = zscore_lookup("xg_buildup_per90", qualified)
 
-            if not is_winger and not is_cam and not is_cm:
+            if not is_winger and not is_cam and not is_cm and not is_def:
                 for p in qualified:
                     pid = p["player_id"]
                     base = team_function_base_z.get(pid, 0.0)
@@ -1379,6 +1440,37 @@ def compute_peer_ratings(
                     p["presence_percentile"] = None
                     p["cm_archetype"] = cm_archetype(p)
                     p["role_archetype"] = p["cm_archetype"]
+                elif is_def:
+                    p["defensive_percentile"] = percentile_of(
+                        p["_dim_defensive"], dim_vals_map["defensive"]
+                    )
+                    p["duels_percentile"] = percentile_of(
+                        p["_dim_duels"], dim_vals_map["duels"]
+                    )
+                    p["physical_percentile"] = p["duels_percentile"]
+                    p["carrying_percentile"] = percentile_of(
+                        p["_dim_carrying"], dim_vals_map["carrying"]
+                    )
+                    p["team_function_percentile"] = percentile_of(
+                        p["_dim_team_function"], dim_vals_map["team_function"]
+                    )
+                    p["volume_passing_percentile"] = percentile_of(
+                        p["_dim_volume_passing"], dim_vals_map["volume_passing"]
+                    )
+                    p["goal_threat_percentile"] = percentile_of(
+                        p["_dim_goal_threat"], dim_vals_map["goal_threat"]
+                    )
+                    # Compatibility columns: old UI reads defending as pressing and
+                    # broad involvement as composure/build-up for non-attackers.
+                    p["pressing_percentile"] = p["defensive_percentile"]
+                    p["involvement_percentile"] = p["team_function_percentile"]
+                    p["finishing_percentile"] = None
+                    p["shot_generation_percentile"] = None
+                    p["chance_creation_percentile"] = None
+                    p["productive_dribbling_percentile"] = None
+                    p["goal_contribution_percentile"] = None
+                    p["presence_percentile"] = None
+                    p["role_archetype"] = def_archetype(p)
                 else:
                     # ST dimension percentiles
                     p["finishing_percentile"] = percentile_of(

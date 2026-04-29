@@ -46,9 +46,12 @@ class PlayerMatchStats:
     big_chance_missed: int = 0
     big_chance_created: int = 0
     blocked_scoring_attempt: int = 0
+    clearances: int = 0
+    outfielder_block: int = 0
     penalty_won: int = 0
     possession_lost_ctrl: int = 0
     error_lead_to_goal: int = 0
+    error_lead_to_shot: int = 0
     # Per-shot finishing signal: sum(goal - xG) from shots table
     finishing_score: float = 0.0
     # Team context (from match_team_stats, for contextual no-shot penalty)

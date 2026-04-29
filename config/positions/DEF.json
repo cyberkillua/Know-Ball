@@ -1,0 +1,99 @@
+{
+  "position": "DEF",
+  "version": 1,
+  "baseline": 6.5,
+  "weights": {
+    "defensive": 0.3,
+    "duels": 0.22,
+    "team_function": 0.16,
+    "carrying": 0.12,
+    "volume_passing": 0.14,
+    "goal_threat": 0.06
+  },
+  "constants": {
+    "clearance_reward": 0.045,
+    "block_reward": 0.12,
+    "interception_reward": 0.12,
+    "recovery_reward": 0.06,
+    "tackle_reward": 0.08,
+    "aerial_win_reward": 0.1,
+    "aerial_loss_penalty": 0.05,
+    "ground_duel_win_reward": 0.08,
+    "ground_duel_loss_penalty": 0.05,
+    "duel_volume_reward": 0.002,
+    "mobility_action_reward": 0.035,
+    "progressive_carry_distance_weight": 0.0012,
+    "pass_accuracy_threshold": 0.78,
+    "pass_accuracy_weight": 0.55,
+    "presence_factor": 0.0015,
+    "possession_loss_rate_penalty": 0.18,
+    "error_lead_to_shot_penalty": 0.35,
+    "error_lead_to_goal_penalty": 0.9,
+    "pass_value_weight": 0.65,
+    "accurate_long_ball_reward": 0.025,
+    "accurate_long_ball_cap": 10,
+    "opposition_half_pass_reward": 0.004,
+    "opposition_half_pass_cap": 30,
+    "long_ball_accuracy_min_attempts": 3,
+    "long_ball_accuracy_threshold": 0.48,
+    "long_ball_accuracy_weight": 0.18,
+    "goal_bonus": 0.7,
+    "match_goal_lift": 0.25,
+    "xg_volume_weight": 0.25,
+    "shot_volume_reward": 0.035,
+    "error_lead_to_shot_match_penalty": 0.25,
+    "error_lead_to_goal_match_penalty": 0.75,
+    "red_card_penalty": -1.0,
+    "yellow_card_penalty": -0.05
+  },
+  "season_score": {
+    "version": 2,
+    "weights": {
+      "quality": 0.66,
+      "consistency": 0.16,
+      "peak": 0.08,
+      "availability": 0.1
+    },
+    "consistency_threshold": 7.0,
+    "impact_threshold": 8.0,
+    "availability_target_minutes": 1800,
+    "availability_floor": 60
+  },
+  "display_only_stats": [
+    "clearances",
+    "outfielderBlock",
+    "errorLeadToShot",
+    "errorLeadToGoal"
+  ],
+  "normalization": {
+    "method": "median_iqr",
+    "calibrated_at": null,
+    "sample_size": 0,
+    "midpoints": {
+      "defensive": {
+        "median": 0.45,
+        "scale": 0.55
+      },
+      "duels": {
+        "median": 0.18,
+        "scale": 0.35
+      },
+      "carrying": {
+        "median": 0.12,
+        "scale": 0.22
+      },
+      "team_function": {
+        "median": 0.1,
+        "scale": 0.22
+      },
+      "volume_passing": {
+        "median": 0.12,
+        "scale": 0.24
+      },
+      "goal_threat": {
+        "median": 0.0,
+        "scale": 0.08
+      }
+    }
+  }
+}

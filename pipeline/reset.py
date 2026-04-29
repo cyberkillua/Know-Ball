@@ -18,21 +18,23 @@ from pipeline.logger import get_logger
 log = get_logger("reset")
 
 
-def _get_position_bucket(pos: str) -> list[str]:
-    """Return all positions that belong to the same bucket as the given position."""
+def _get_position_bucket(pos: str) -> tuple[list[str], list[str]]:
+    """Return match_ratings and peer_ratings position buckets."""
     if pos in ("CM", "CDM", "DM"):
-        return ["CM", "CDM", "DM"]
+        return ["CM"], ["CM"]
     if pos in ("CAM", "AM"):
-        return ["CAM", "AM"]
+        return ["CAM"], ["CAM"]
     if pos in ("ST", "CF", "SS", "FW"):
-        return ["ST", "CF", "SS", "FW"]
+        return ["ST"], ["ST"]
     if pos in ("LW", "RW", "LM", "RM", "W", "WINGER"):
-        return ["LW", "RW", "LM", "RM"]
-    if pos in ("CB", "LB", "RB", "LWB", "RWB", "DEF"):
-        return ["CB", "LB", "RB", "LWB", "RWB"]
+        return ["W"], ["WINGER"]
+    if pos in ("CB", "DEF"):
+        return ["DEF"], ["CB"]
+    if pos in ("LB", "RB", "LWB", "RWB"):
+        return ["DEF"], ["DEF"]
     if pos == "GK":
-        return ["GK"]
-    return [pos]
+        return ["GK"], ["GK"]
+    return [pos], [pos]
 
 
 def main():
@@ -56,13 +58,23 @@ def main():
 
     if args.position:
         pos = args.position.upper()
-        bucket = _get_position_bucket(pos)
-        placeholders = ",".join(["%s"] * len(bucket))
-        log.info(f"Clearing match_ratings + peer_ratings for position={pos} (bucket: {bucket})")
-        db.execute(f"DELETE FROM match_ratings WHERE position IN ({placeholders})", bucket)
-        log.info(f"  Cleared match_ratings ({bucket})")
-        db.execute(f"DELETE FROM peer_ratings WHERE position IN ({placeholders})", bucket)
-        log.info(f"  Cleared peer_ratings ({bucket})")
+        rating_bucket, peer_bucket = _get_position_bucket(pos)
+        rating_placeholders = ",".join(["%s"] * len(rating_bucket))
+        peer_placeholders = ",".join(["%s"] * len(peer_bucket))
+        log.info(
+            f"Clearing match_ratings + peer_ratings for position={pos} "
+            f"(ratings: {rating_bucket}, peers: {peer_bucket})"
+        )
+        db.execute(
+            f"DELETE FROM match_ratings WHERE position IN ({rating_placeholders})",
+            rating_bucket,
+        )
+        log.info(f"  Cleared match_ratings ({rating_bucket})")
+        db.execute(
+            f"DELETE FROM peer_ratings WHERE position IN ({peer_placeholders})",
+            peer_bucket,
+        )
+        log.info(f"  Cleared peer_ratings ({peer_bucket})")
         db.close()
         log.info("Reset complete")
         return
