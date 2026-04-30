@@ -71,6 +71,8 @@ class PlayerMatchStats:
     total_progressive_ball_carries_distance: float = 0.0
     # Match-level pass-quality signal (from Sofascore)
     pass_value_normalized: float = 0.0
+    accurate_own_half_passes: int = 0
+    total_own_half_passes: int = 0
     accurate_opposition_half_passes: int = 0
     total_opposition_half_passes: int = 0
     accurate_long_balls: int = 0

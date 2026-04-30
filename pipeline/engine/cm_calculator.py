@@ -12,7 +12,7 @@ The rationale: there is no single "correct" way to play CM. Rodri and Bellingham
 are both elite but dominate different buckets. Averaging all dimensions equally
 would produce a mediocre rating for each.
 
-Dimensions: volume_passing, carrying, chance_creation, defensive, goal_threat.
+Dimensions: volume_passing, control, carrying, chance_creation, defensive, goal_threat.
 
 Progressive-pass event tags are not available at match level in the current
 dataset. volume_passing therefore uses pass_value_normalized as the anchor,
@@ -30,11 +30,13 @@ class CMCategoryScores:
     """Raw and normalized scores per CM bucket."""
 
     volume_passing_raw: float = 0.0
+    control_raw: float = 0.0
     carrying_raw: float = 0.0
     chance_creation_raw: float = 0.0
     defensive_raw: float = 0.0
     goal_threat_raw: float = 0.0
     volume_passing_norm: float = 0.0
+    control_norm: float = 0.0
     carrying_norm: float = 0.0
     chance_creation_norm: float = 0.0
     defensive_norm: float = 0.0
@@ -82,6 +84,75 @@ def calc_volume_passing(stats: PlayerMatchStats, constants: dict) -> float:
         + opposition_half_accuracy_delta
         + long_ball_progression
     )
+
+
+def calc_control(stats: PlayerMatchStats, constants: dict) -> float:
+    """
+    Control / Ball Security — helping the team keep the ball available.
+
+    This is deliberately match-level only. It rewards secure passing, available
+    touches, and low loss rate without using season-only build-up signals.
+
+    Raw = pass accuracy delta
+        + own-half accuracy gate
+        + opposition-half accuracy gate
+        + capped touch presence
+        + capped completed-pass presence
+        - possession loss per touch
+        - error penalties
+    """
+    c = constants
+
+    pass_accuracy = stats.passes_completed / max(stats.passes_total, 1)
+    pass_accuracy_delta = (pass_accuracy - c.get("control_pass_accuracy_threshold", 0.78)) * c.get(
+        "control_pass_accuracy_weight", 0.35
+    )
+
+    own_half_accuracy_delta = 0.0
+    if stats.total_own_half_passes >= c.get("control_own_half_min_attempts", 5):
+        own_half_accuracy = stats.accurate_own_half_passes / max(
+            stats.total_own_half_passes, 1
+        )
+        own_half_accuracy_delta = (
+            own_half_accuracy - c.get("control_own_half_accuracy_threshold", 0.85)
+        ) * c.get("control_own_half_accuracy_weight", 0.15)
+
+    opposition_half_accuracy_delta = 0.0
+    if stats.total_opposition_half_passes >= c.get(
+        "control_opposition_half_min_attempts", 5
+    ):
+        opposition_half_accuracy = stats.accurate_opposition_half_passes / max(
+            stats.total_opposition_half_passes, 1
+        )
+        opposition_half_accuracy_delta = (
+            opposition_half_accuracy
+            - c.get("control_opposition_half_accuracy_threshold", 0.70)
+        ) * c.get("control_opposition_half_accuracy_weight", 0.12)
+
+    touch_presence = min(stats.touches, c.get("control_touch_cap", 100)) * c.get(
+        "control_touch_reward", 0.0015
+    )
+    pass_presence = min(
+        stats.passes_completed, c.get("control_completed_pass_cap", 90)
+    ) * c.get("control_completed_pass_reward", 0.001)
+
+    possession_loss_rate = stats.possession_lost_ctrl / max(stats.touches, 1)
+    possession_loss = possession_loss_rate * c.get("control_possession_loss_penalty", 0.45)
+    errors = (
+        stats.error_lead_to_goal * c.get("error_lead_to_goal_penalty", 0.3)
+        + stats.error_lead_to_shot * c.get("control_error_lead_to_shot_penalty", 0.12)
+    )
+
+    return (
+        pass_accuracy_delta
+        + own_half_accuracy_delta
+        + opposition_half_accuracy_delta
+        + touch_presence
+        + pass_presence
+        - possession_loss
+        - errors
+    )
+
 
 def calc_carrying(stats: PlayerMatchStats, constants: dict) -> float:
     """
@@ -214,6 +285,7 @@ def calc_goal_threat(stats: PlayerMatchStats, constants: dict) -> float:
 
 CM_CATEGORIES = [
     "volume_passing",
+    "control",
     "carrying",
     "chance_creation",
     "defensive",
@@ -222,6 +294,7 @@ CM_CATEGORIES = [
 
 _CALC_MAP = {
     "volume_passing": calc_volume_passing,
+    "control": calc_control,
     "carrying": calc_carrying,
     "chance_creation": calc_chance_creation,
     "defensive": calc_defensive,
@@ -304,9 +377,10 @@ def _weights_for_role(weights: dict[str, float], profile_position: str | None) -
     if pos in {"CDM", "DM"}:
         goal_threat_drop = role_weights.get("goal_threat", 0.0) * 0.5
         role_weights["goal_threat"] = role_weights.get("goal_threat", 0.0) - goal_threat_drop
-        role_weights["volume_passing"] = role_weights.get("volume_passing", 0.0) + goal_threat_drop * 0.45
-        role_weights["defensive"] = role_weights.get("defensive", 0.0) + goal_threat_drop * 0.45
-        role_weights["carrying"] = role_weights.get("carrying", 0.0) + goal_threat_drop * 0.10
+        role_weights["volume_passing"] = role_weights.get("volume_passing", 0.0) + goal_threat_drop * 0.35
+        role_weights["control"] = role_weights.get("control", 0.0) + goal_threat_drop * 0.25
+        role_weights["defensive"] = role_weights.get("defensive", 0.0) + goal_threat_drop * 0.35
+        role_weights["carrying"] = role_weights.get("carrying", 0.0) + goal_threat_drop * 0.05
     return role_weights
 
 

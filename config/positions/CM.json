@@ -4,18 +4,19 @@
   "baseline": 6.5,
   "scoring": {
     "method": "elite_buckets",
-    "min_buckets": 3,
+    "min_buckets": 2,
     "elite_percentile_threshold": 0.75,
     "non_elite_weight_factor": 0.4,
     "poor_percentile_threshold": 0.25,
     "poor_bucket_penalty": -0.15
   },
   "weights": {
-    "volume_passing": 0.2,
-    "carrying": 0.2,
-    "chance_creation": 0.25,
-    "defensive": 0.2,
-    "goal_threat": 0.15
+    "volume_passing": 0.18,
+    "control": 0.17,
+    "carrying": 0.18,
+    "chance_creation": 0.22,
+    "defensive": 0.18,
+    "goal_threat": 0.07
   },
   "constants": {
     "goal_bonus": 0.55,
@@ -48,6 +49,20 @@
     "opposition_half_accuracy_weight": 0.12,
     "accurate_long_ball_reward": 0.025,
     "accurate_long_ball_cap": 8,
+    "control_pass_accuracy_threshold": 0.78,
+    "control_pass_accuracy_weight": 0.35,
+    "control_own_half_min_attempts": 5,
+    "control_own_half_accuracy_threshold": 0.85,
+    "control_own_half_accuracy_weight": 0.15,
+    "control_opposition_half_min_attempts": 5,
+    "control_opposition_half_accuracy_threshold": 0.7,
+    "control_opposition_half_accuracy_weight": 0.12,
+    "control_touch_reward": 0.0015,
+    "control_touch_cap": 100,
+    "control_completed_pass_reward": 0.001,
+    "control_completed_pass_cap": 90,
+    "control_possession_loss_penalty": 0.45,
+    "control_error_lead_to_shot_penalty": 0.12,
     "presence_factor": 0.002,
     "aerial_win_reward": 0.08,
     "aerial_loss_penalty": 0.04,
@@ -84,38 +99,44 @@
   ],
   "normalization": {
     "method": "median_iqr",
-    "calibrated_at": "2026-04-27",
-    "sample_size": 48790,
+    "calibrated_at": "2026-04-30",
+    "sample_size": 56481,
     "midpoints": {
       "volume_passing": {
-        "median": 0.1539,
-        "scale": 0.1991,
-        "p25": 0.0716,
-        "p75": 0.2707
+        "median": 0.154,
+        "scale": 0.1964,
+        "p25": 0.0736,
+        "p75": 0.27
+      },
+      "control": {
+        "median": 0.0514,
+        "scale": 0.1707,
+        "p25": -0.0412,
+        "p75": 0.1295
       },
       "carrying": {
-        "median": 0.0675,
-        "scale": 0.1932,
+        "median": 0.0679,
+        "scale": 0.1951,
         "p25": -0.0111,
-        "p75": 0.1821
+        "p75": 0.184
       },
       "chance_creation": {
-        "median": 0.049,
-        "scale": 0.122,
+        "median": 0.048,
+        "scale": 0.119,
         "p25": 0.005,
-        "p75": 0.127
+        "p75": 0.124
       },
       "defensive": {
-        "median": 0.578,
-        "scale": 0.648,
-        "p25": 0.282,
-        "p75": 0.93
+        "median": 0.588,
+        "scale": 0.654,
+        "p25": 0.286,
+        "p75": 0.94
       },
       "goal_threat": {
         "median": 0.0,
         "scale": 0.1,
         "p25": 0.0,
-        "p75": 0.065
+        "p75": 0.0653
       }
     }
   }

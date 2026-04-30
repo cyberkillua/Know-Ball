@@ -4,6 +4,7 @@ from pipeline.engine.calculator import PlayerMatchStats
 from pipeline.engine.cam_calculator import calc_carrying as calc_cam_carrying
 from pipeline.engine.cm_calculator import (
     _weights_for_role,
+    calc_control,
     calc_carrying as calc_cm_carrying,
     calc_volume_passing,
 )
@@ -69,19 +70,48 @@ class MidfieldNewInputsTest(unittest.TestCase):
             calc_volume_passing(base, constants),
         )
 
+    def test_cm_control_rewards_secure_match_level_possession(self):
+        constants = {
+            "control_pass_accuracy_threshold": 0.78,
+            "control_pass_accuracy_weight": 0.35,
+            "control_own_half_accuracy_threshold": 0.85,
+            "control_own_half_accuracy_weight": 0.15,
+            "control_possession_loss_penalty": 0.45,
+        }
+        loose = PlayerMatchStats(
+            touches=45,
+            passes_completed=24,
+            passes_total=36,
+            accurate_own_half_passes=10,
+            total_own_half_passes=15,
+            possession_lost_ctrl=10,
+        )
+        secure = PlayerMatchStats(
+            touches=70,
+            passes_completed=54,
+            passes_total=60,
+            accurate_own_half_passes=28,
+            total_own_half_passes=30,
+            possession_lost_ctrl=4,
+        )
+
+        self.assertGreater(calc_control(secure, constants), calc_control(loose, constants))
+
     def test_cdm_weights_reduce_goal_threat_dependence(self):
         weights = {
-            "volume_passing": 0.2,
-            "carrying": 0.2,
-            "chance_creation": 0.25,
-            "defensive": 0.2,
-            "goal_threat": 0.15,
+            "volume_passing": 0.18,
+            "control": 0.17,
+            "carrying": 0.18,
+            "chance_creation": 0.22,
+            "defensive": 0.18,
+            "goal_threat": 0.07,
         }
 
         cdm_weights = _weights_for_role(weights, "CDM")
 
         self.assertLess(cdm_weights["goal_threat"], weights["goal_threat"])
         self.assertGreater(cdm_weights["volume_passing"], weights["volume_passing"])
+        self.assertGreater(cdm_weights["control"], weights["control"])
         self.assertGreater(cdm_weights["defensive"], weights["defensive"])
 
 

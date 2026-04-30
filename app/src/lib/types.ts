@@ -135,6 +135,8 @@ export interface MatchRating {
   defensive_norm: number
   volume_passing_raw: number | null
   volume_passing_norm: number | null
+  control_raw: number | null
+  control_norm: number | null
   goal_threat_raw: number | null
   goal_threat_norm: number | null
   final_rating: number
@@ -258,6 +260,7 @@ export interface PeerRating {
   duels_percentile: number | null
   defensive_percentile: number | null
   volume_passing_percentile: number | null
+  control_percentile: number | null
   // Winger dimension percentiles
   productive_dribbling_percentile: number | null
   goal_contribution_percentile: number | null
@@ -273,6 +276,8 @@ export interface PeerRating {
   presence_p90: number | null
   goal_threat_stddev: number | null
   goal_threat_p90: number | null
+  control_stddev: number | null
+  control_p90: number | null
   finishing_stddev: number | null
   finishing_p90: number | null
   shot_generation_stddev: number | null

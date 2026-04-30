@@ -382,6 +382,7 @@ NULL_PERCENTILE_COLS = (
     "presence_percentile",
     "goal_threat_percentile",
     "volume_passing_percentile",
+    "control_percentile",
     "progressive_carries_distance_per90_percentile",
     "progressive_carries_distance_raw_percentile",
     "pass_value_normalized_percentile",
@@ -410,6 +411,7 @@ NULL_RATING_COLS = (
     "presence_percentile",
     "goal_threat_percentile",
     "volume_passing_percentile",
+    "control_percentile",
     "model_score",
     "impact_rate",
     "model_score_quality",
@@ -452,6 +454,7 @@ CAM_DIMENSIONS = [
 # CM dimension names
 CM_DIMENSIONS = [
     "volume_passing",
+    "control",
     "carrying",
     "chance_creation",
     "defensive",
@@ -764,6 +767,8 @@ def compute_peer_ratings(
             # CM dimension stddev/p90
             "volume_passing_stddev": _norm_float("volume_passing_stddev") if is_cm or is_def else None,
             "volume_passing_p90": _norm_float("volume_passing_p90") if is_cm or is_def else None,
+            "control_stddev": _norm_float("control_stddev") if is_cm else None,
+            "control_p90": _norm_float("control_p90") if is_cm else None,
             "model_score_stddev": _norm_float("model_score_stddev"),
             "model_score_p90": _norm_float("model_score_p90"),
             "consistency_score": float(norm.get("consistency_score") or 0.0),
@@ -1374,6 +1379,7 @@ def compute_peer_ratings(
                     p["duels_percentile"] = None
                     p["goal_threat_percentile"] = None
                     p["volume_passing_percentile"] = None
+                    p["control_percentile"] = None
                     p["role_archetype"] = winger_archetype(p)
                 elif is_cam:
                     # CAM dimension percentiles
@@ -1404,11 +1410,15 @@ def compute_peer_ratings(
                     p["goal_contribution_percentile"] = None
                     p["presence_percentile"] = None
                     p["volume_passing_percentile"] = None
+                    p["control_percentile"] = None
                     p["role_archetype"] = cam_archetype(p)
                 elif is_cm:
                     # CM dimension percentiles
                     p["volume_passing_percentile"] = percentile_of(
                         p["_dim_volume_passing"], dim_vals_map["volume_passing"]
+                    )
+                    p["control_percentile"] = percentile_of(
+                        p["_dim_control"], dim_vals_map["control"]
                     )
                     p["carrying_percentile"] = percentile_of(
                         p["_dim_carrying"], dim_vals_map["carrying"]
@@ -1466,6 +1476,7 @@ def compute_peer_ratings(
                     p["productive_dribbling_percentile"] = None
                     p["goal_contribution_percentile"] = None
                     p["presence_percentile"] = None
+                    p["control_percentile"] = None
                     p["role_archetype"] = def_archetype(p)
                 else:
                     # ST dimension percentiles
@@ -1506,6 +1517,7 @@ def compute_peer_ratings(
                     p["presence_percentile"] = None
                     p["goal_threat_percentile"] = None
                     p["volume_passing_percentile"] = None
+                    p["control_percentile"] = None
                     p["role_archetype"] = st_archetype(p)
 
         for p in group:
@@ -1588,6 +1600,8 @@ def compute_peer_ratings(
                 goal_threat_stddev, goal_threat_p90,
                 volume_passing_percentile,
                 volume_passing_stddev, volume_passing_p90,
+                control_percentile,
+                control_stddev, control_p90,
                 progressive_carries_distance_per90_percentile,
                 progressive_carries_distance_raw_percentile,
                 pass_value_normalized_percentile,
@@ -1669,6 +1683,8 @@ def compute_peer_ratings(
                 %(goal_threat_stddev)s, %(goal_threat_p90)s,
                 %(volume_passing_percentile)s,
                 %(volume_passing_stddev)s, %(volume_passing_p90)s,
+                %(control_percentile)s,
+                %(control_stddev)s, %(control_p90)s,
                 %(progressive_carries_distance_per90_percentile)s,
                 %(progressive_carries_distance_raw_percentile)s,
                 %(pass_value_normalized_percentile)s,
@@ -1825,6 +1841,9 @@ def compute_peer_ratings(
                 volume_passing_percentile     = EXCLUDED.volume_passing_percentile,
                 volume_passing_stddev         = EXCLUDED.volume_passing_stddev,
                 volume_passing_p90            = EXCLUDED.volume_passing_p90,
+                control_percentile            = EXCLUDED.control_percentile,
+                control_stddev                = EXCLUDED.control_stddev,
+                control_p90                   = EXCLUDED.control_p90,
                 progressive_carries_distance_per90_percentile = EXCLUDED.progressive_carries_distance_per90_percentile,
                 progressive_carries_distance_raw_percentile   = EXCLUDED.progressive_carries_distance_raw_percentile,
                 pass_value_normalized_percentile              = EXCLUDED.pass_value_normalized_percentile,

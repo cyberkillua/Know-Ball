@@ -31,6 +31,25 @@ function ratingBarsFor(r: MatchRating) {
     }
   }
 
+  if (r.position === 'CM') {
+    return {
+      values: {
+        finishing: Number(r.volume_passing_norm ?? 0),
+        involvement: Number(r.control_norm ?? 0),
+        carrying: Number(r.carrying_norm ?? 0),
+        physical: Number(r.chance_creation_norm ?? 0),
+        pressing: Number(r.defensive_norm ?? 0),
+      },
+      labels: {
+        finishing: 'Passing',
+        involvement: 'Control',
+        carrying: 'Carrying',
+        physical: 'Creation',
+        pressing: 'Defense',
+      },
+    }
+  }
+
   return {
     values: {
       finishing: Number(r.finishing_norm ?? 0),

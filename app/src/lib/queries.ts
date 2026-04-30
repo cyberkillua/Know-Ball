@@ -189,6 +189,7 @@ const SCOUTING_RANK_METRICS = [
   'goal_threat_percentile',
   'team_function_percentile',
   'volume_passing_percentile',
+  'control_percentile',
   'duels_percentile',
   'finishing_percentile',
   'involvement_percentile',

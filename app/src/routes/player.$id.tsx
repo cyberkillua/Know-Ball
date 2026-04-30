@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, useRef } from "react";
 import { domToPng } from "modern-screenshot";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Download } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -37,6 +37,10 @@ import type {
 } from "../lib/types";
 import ShotProfile from "../components/ShotProfile";
 import RatingMethodNote from "../components/RatingMethodNote";
+import SocialScoutingReportCard, {
+  type SocialMetric,
+  type SocialScoutingReportCardProps,
+} from "../components/SocialScoutingReportCard";
 
 type PlayerTab = "overview" | "stats" | "scouting" | "matches";
 
@@ -182,6 +186,7 @@ function getPeerDimensionRows(
     return [
       { label: "Overall Season Value", sublabel: "Know Ball Score rank", value: pr.overall_percentile, metricKey: "overall_percentile" },
       { label: "Forward Passing Value", sublabel: "pass impact and progression", value: pr.volume_passing_percentile, metricKey: "volume_passing_percentile" },
+      { label: "Control", sublabel: "pass security and low losses", value: pr.control_percentile, metricKey: "control_percentile" },
       { label: "Pre-Assists", sublabel: "pass before assist", value: preAssistPercentile, metricKey: "pass_to_assist_per90_percentile" },
       { label: "Ball Carrying", sublabel: "progressive carries", value: pr.carrying_percentile, metricKey: "carrying_percentile" },
       { label: "Chance Creation", sublabel: "xA, key passes, big chances", value: pr.chance_creation_percentile, metricKey: "chance_creation_percentile" },
@@ -259,6 +264,380 @@ function scoutingSummaryCopy(
   return { strengthText, cautionText, roleText };
 }
 
+function rowByMetric(rows: PeerDimensionRow[], metricKey: string) {
+  return rows.find((row) => row.metricKey === metricKey);
+}
+
+function rowRankText(row: PeerDimensionRow | undefined, ranks: Record<string, PeerMetricRank>) {
+  if (!row) return "—";
+  const rank = ranks[row.metricKey];
+  if (!rank) return row.value == null ? "—" : `${Math.round(Number(row.value))}th pct`;
+  return `${ordinal(rank.rank)} / ${rank.poolSize}`;
+}
+
+function percentileText(value: number | null | undefined) {
+  return value == null ? "—" : `${Math.round(Number(value))}th pct`;
+}
+
+function socialMetricRows(
+  rows: PeerDimensionRow[],
+  ranks: Record<string, PeerMetricRank>,
+): SocialMetric[] {
+  return rows.map((row) => ({
+    label: row.label,
+    value: row.value,
+    rank: rowRankText(row, ranks),
+  }));
+}
+
+function cmScoutReport(
+  rows: PeerDimensionRow[],
+  ranks: Record<string, PeerMetricRank>,
+  pr: PeerRating,
+) {
+  const signalRows = rows.filter((row) => row.label !== "Overall Season Value" && row.value != null);
+  const ordered = [...signalRows].sort((a, b) => Number(b.value) - Number(a.value));
+  const top = ordered.slice(0, 3);
+
+  const control = rowByMetric(rows, "control_percentile");
+  const passing = rowByMetric(rows, "volume_passing_percentile");
+  const carrying = rowByMetric(rows, "carrying_percentile");
+  const creation = rowByMetric(rows, "chance_creation_percentile");
+  const defending = rowByMetric(rows, "defensive_percentile");
+  const boxThreat = rowByMetric(rows, "goal_threat_percentile");
+  const preAssist = rowByMetric(rows, "pass_to_assist_per90_percentile");
+
+  const topLabels = top.map((row) => row.label.toLowerCase());
+  const headline = top.length > 0
+    ? `Main value signals: ${sentenceList(topLabels)}.`
+    : "Not enough CM value signals yet to form a clear read.";
+
+  const concernItems: string[] = [];
+  const usageItems: string[] = [];
+  const notExpectItems: string[] = [];
+
+  if (Number(control?.value ?? 50) >= 70) {
+    usageItems.push("Use him to stabilize possession and keep midfield possessions alive.");
+  }
+  if (Number(passing?.value ?? 50) >= 70) {
+    usageItems.push("Let him take responsibility for moving the ball forward by pass.");
+  }
+  if (Number(carrying?.value ?? 50) >= 70) {
+    usageItems.push("Give him space to advance play by carrying through midfield.");
+  }
+  if (Number(defending?.value ?? 50) >= 70) {
+    usageItems.push("He can cover ground defensively and support ball-winning phases.");
+  }
+  if (Number(creation?.value ?? 50) >= 70 || Number(preAssist?.value ?? 50) >= 70) {
+    usageItems.push("He has enough creative signal to support final-third access.");
+  }
+  if (usageItems.length === 0 && top.length > 0) {
+    usageItems.push(`Build the role around ${sentenceList(top.slice(0, 2).map((row) => row.label.toLowerCase()))}.`);
+  }
+
+  if (Number(control?.value ?? 100) < 40) {
+    concernItems.push("Ball security is a real watch area for a central midfielder.");
+  }
+  if (Number(passing?.value ?? 100) < 40) {
+    concernItems.push("Forward passing value is below the peer pool.");
+  }
+  if (Number(defending?.value ?? 100) < 40) {
+    concernItems.push("Defensive coverage is light relative to other central midfielders.");
+  }
+  if (Number(carrying?.value ?? 100) < 40) {
+    concernItems.push("Carrying progression is not a major part of the profile.");
+  }
+  if (Number(creation?.value ?? 100) < 40 && Number(preAssist?.value ?? 100) < 55) {
+    concernItems.push("Direct chance creation is limited.");
+  }
+
+  if (Number(boxThreat?.value ?? 100) < 40) {
+    notExpectItems.push("Do not project him primarily as a box-arriving scorer.");
+  }
+  if (Number(creation?.value ?? 100) < 40 && Number(preAssist?.value ?? 100) < 55) {
+    notExpectItems.push("Do not make him the only final-ball creator.");
+  }
+  if (Number(defending?.value ?? 100) < 40) {
+    notExpectItems.push("Do not leave him as the sole defensive screen.");
+  }
+
+  const evidenceRows = [control, passing, carrying, creation, defending, boxThreat, preAssist]
+    .filter(Boolean) as PeerDimensionRow[];
+
+  const seasonOnlyRows = [
+    {
+      label: "Pre-Assists",
+      value: preAssist?.value,
+      rank: rowRankText(preAssist, ranks),
+    },
+    {
+      label: "xGChain",
+      value: pr.xg_chain_per90_percentile,
+      rank: pr.xg_chain_per90_percentile == null ? "—" : `${Math.round(Number(pr.xg_chain_per90_percentile))}th pct`,
+    },
+    {
+      label: "xGBuildup",
+      value: pr.xg_buildup_per90_percentile,
+      rank: pr.xg_buildup_per90_percentile == null ? "—" : `${Math.round(Number(pr.xg_buildup_per90_percentile))}th pct`,
+    },
+    {
+      label: "Final-third passes",
+      value: pr.accurate_final_third_passes_per90_percentile,
+      rank: pr.accurate_final_third_passes_per90_percentile == null ? "—" : `${Math.round(Number(pr.accurate_final_third_passes_per90_percentile))}th pct`,
+    },
+  ];
+
+  return {
+    headline,
+    top,
+    concernItems,
+    usageItems,
+    notExpectItems,
+    evidenceRows,
+    seasonOnlyRows,
+  };
+}
+
+function stScoutReport(
+  rows: PeerDimensionRow[],
+  ranks: Record<string, PeerMetricRank>,
+  pr: PeerRating,
+) {
+  const signalRows = rows.filter((row) => row.label !== "Overall Season Value" && row.value != null);
+  const ordered = [...signalRows].sort((a, b) => Number(b.value) - Number(a.value));
+  const top = ordered.slice(0, 3);
+
+  const finishing = rowByMetric(rows, "finishing_percentile");
+  const shotGeneration = rowByMetric(rows, "shot_generation_percentile");
+  const creation = rowByMetric(rows, "chance_creation_percentile");
+  const linkPlay = rowByMetric(rows, "team_function_percentile");
+  const carrying = rowByMetric(rows, "carrying_percentile");
+  const duels = rowByMetric(rows, "duels_percentile");
+  const defensive = rowByMetric(rows, "defensive_percentile");
+  const clinicality = rowByMetric(rows, "xg_overperformance_percentile");
+
+  const goalThreatScore = [
+    pr.goals_per90_percentile,
+    pr.np_goals_per90_percentile,
+    pr.xg_per90_percentile,
+    pr.np_xg_per90_percentile,
+    pr.shots_per90_percentile,
+  ].filter((value) => value != null).reduce((sum, value, _idx, arr) => sum + Number(value) / arr.length, 0);
+
+  const shotQualityScore = [
+    pr.xg_per_shot_percentile,
+    pr.np_xg_per_shot_percentile,
+    pr.shot_on_target_percentile,
+    pr.xgot_per90_percentile,
+  ].filter((value) => value != null).reduce((sum, value, _idx, arr) => sum + Number(value) / arr.length, 0);
+
+  const topLabels = top.map((row) => row.label.toLowerCase());
+  const headline = top.length > 0
+    ? `Main value signals: ${sentenceList(topLabels)}.`
+    : "Not enough striker value signals yet to form a clear read.";
+
+  const concernItems: string[] = [];
+  const usageItems: string[] = [];
+  const notExpectItems: string[] = [];
+
+  if (goalThreatScore >= 70 || Number(shotGeneration?.value ?? 50) >= 70) {
+    usageItems.push("Use him as a primary box threat and shot-volume outlet.");
+  }
+  if (Number(finishing?.value ?? 50) >= 70 || Number(clinicality?.value ?? 50) >= 70) {
+    usageItems.push("He adds value when chances fall to him inside scoring zones.");
+  }
+  if (Number(linkPlay?.value ?? 50) >= 70 || Number(creation?.value ?? 50) >= 70) {
+    usageItems.push("He can connect attacks instead of only finishing them.");
+  }
+  if (Number(duels?.value ?? 50) >= 70) {
+    usageItems.push("He can function as an outlet when the team needs direct access upfield.");
+  }
+  if (Number(carrying?.value ?? 50) >= 70) {
+    usageItems.push("He can attack space by carrying or receiving into transition lanes.");
+  }
+  if (Number(defensive?.value ?? 50) >= 70) {
+    usageItems.push("He gives useful front-line defensive work.");
+  }
+  if (usageItems.length === 0 && top.length > 0) {
+    usageItems.push(`Build the striker role around ${sentenceList(top.slice(0, 2).map((row) => row.label.toLowerCase()))}.`);
+  }
+
+  if (Number(shotGeneration?.value ?? 100) < 40 || Number(pr.shots_per90_percentile ?? 100) < 40) {
+    concernItems.push("Shot volume is a watch area for a striker.");
+  }
+  if (Number(pr.xg_per90_percentile ?? 100) < 40 && Number(pr.np_xg_per90_percentile ?? 100) < 40) {
+    concernItems.push("Chance volume is below the striker peer pool.");
+  }
+  if (shotQualityScore < 40) {
+    concernItems.push("Shot quality and execution indicators are soft.");
+  }
+  if (Number(linkPlay?.value ?? 100) < 40 && Number(duels?.value ?? 100) < 40) {
+    concernItems.push("If he is not scoring, the outlet/link-play floor is limited.");
+  }
+  if (Number(pr.big_chances_missed_percentile ?? 100) < 40) {
+    concernItems.push("Big-chance waste is a concern in the current sample.");
+  }
+
+  if (Number(creation?.value ?? 100) < 40) {
+    notExpectItems.push("Do not project him as the main chance creator.");
+  }
+  if (Number(duels?.value ?? 100) < 40) {
+    notExpectItems.push("Do not build the attack around him as a target/outlet striker.");
+  }
+  if (Number(defensive?.value ?? 100) < 40) {
+    notExpectItems.push("Do not expect standout pressing or recovery value.");
+  }
+
+  const evidenceRows = [
+    finishing,
+    shotGeneration,
+    clinicality,
+    creation,
+    linkPlay,
+    carrying,
+    duels,
+    defensive,
+  ].filter(Boolean) as PeerDimensionRow[];
+
+  const seasonRows = [
+    { label: "Goals", value: pr.goals_per90_percentile, rank: percentileText(pr.goals_per90_percentile) },
+    { label: "np Goals", value: pr.np_goals_per90_percentile, rank: percentileText(pr.np_goals_per90_percentile) },
+    { label: "xG", value: pr.xg_per90_percentile, rank: percentileText(pr.xg_per90_percentile) },
+    { label: "np xG", value: pr.np_xg_per90_percentile, rank: percentileText(pr.np_xg_per90_percentile) },
+    { label: "Shots", value: pr.shots_per90_percentile, rank: percentileText(pr.shots_per90_percentile) },
+    { label: "xG / shot", value: pr.xg_per_shot_percentile, rank: percentileText(pr.xg_per_shot_percentile) },
+    { label: "xGOT", value: pr.xgot_per90_percentile, rank: percentileText(pr.xgot_per90_percentile) },
+    { label: "Big chances missed", value: pr.big_chances_missed_percentile, rank: percentileText(pr.big_chances_missed_percentile) },
+  ];
+
+  return {
+    headline,
+    top,
+    concernItems,
+    usageItems,
+    notExpectItems,
+    evidenceRows,
+    seasonRows,
+  };
+}
+
+function wingerScoutReport(
+  rows: PeerDimensionRow[],
+  pr: PeerRating,
+) {
+  const signalRows = rows.filter((row) => row.label !== "Overall Season Value" && row.value != null);
+  const ordered = [...signalRows].sort((a, b) => Number(b.value) - Number(a.value));
+  const top = ordered.slice(0, 3);
+
+  const oneVOne = rowByMetric(rows, "productive_dribbling_percentile");
+  const creation = rowByMetric(rows, "chance_creation_percentile");
+  const endProduct = rowByMetric(rows, "goal_contribution_percentile");
+  const carrying = rowByMetric(rows, "carrying_percentile");
+  const shotThreat = rowByMetric(rows, "shot_generation_percentile");
+  const defensive = rowByMetric(rows, "defensive_percentile");
+  const involvement = rowByMetric(rows, "presence_percentile");
+
+  const crossingScore = [
+    pr.accurate_cross_per90_percentile,
+    pr.key_passes_per90_percentile,
+    pr.big_chances_created_percentile,
+  ].filter((value) => value != null).reduce((sum, value, _idx, arr) => sum + Number(value) / arr.length, 0);
+
+  const outputScore = [
+    pr.goals_per90_percentile,
+    pr.assists_per90_percentile,
+    pr.xg_per90_percentile,
+    pr.xa_per90_percentile,
+  ].filter((value) => value != null).reduce((sum, value, _idx, arr) => sum + Number(value) / arr.length, 0);
+
+  const topLabels = top.map((row) => row.label.toLowerCase());
+  const headline = top.length > 0
+    ? `Main value signals: ${sentenceList(topLabels)}.`
+    : "Not enough winger value signals yet to form a clear read.";
+
+  const concernItems: string[] = [];
+  const usageItems: string[] = [];
+  const notExpectItems: string[] = [];
+
+  if (Number(oneVOne?.value ?? 50) >= 70 || Number(carrying?.value ?? 50) >= 70) {
+    usageItems.push("Use him in isolation and transition lanes where he can attack defenders.");
+  }
+  if (Number(creation?.value ?? 50) >= 70 || crossingScore >= 70) {
+    usageItems.push("He can be a service winger through crosses, cutbacks, and final-third passes.");
+  }
+  if (Number(endProduct?.value ?? 50) >= 70 || Number(shotThreat?.value ?? 50) >= 70 || outputScore >= 70) {
+    usageItems.push("He has enough output signal to project as an inside-forward threat.");
+  }
+  if (Number(defensive?.value ?? 50) >= 70) {
+    usageItems.push("He gives useful two-way work without the ball.");
+  }
+  if (Number(involvement?.value ?? 50) >= 70) {
+    usageItems.push("He can stay involved across phases rather than only appearing in final actions.");
+  }
+  if (usageItems.length === 0 && top.length > 0) {
+    usageItems.push(`Build the wide role around ${sentenceList(top.slice(0, 2).map((row) => row.label.toLowerCase()))}.`);
+  }
+
+  if (Number(oneVOne?.value ?? 100) < 40 && Number(carrying?.value ?? 100) < 40) {
+    concernItems.push("1v1 and carrying threat are not strong winger signals in this sample.");
+  }
+  if (Number(creation?.value ?? 100) < 40 && crossingScore < 45) {
+    concernItems.push("Chance creation and service value are light relative to wide peers.");
+  }
+  if (Number(endProduct?.value ?? 100) < 40 && Number(shotThreat?.value ?? 100) < 40) {
+    concernItems.push("End-product and shot threat are below the winger peer pool.");
+  }
+  if (Number(defensive?.value ?? 100) < 40) {
+    concernItems.push("Defensive contribution is a watch area for a two-way wide role.");
+  }
+  if (Number(involvement?.value ?? 100) < 40) {
+    concernItems.push("Overall involvement is low, so impact may come in bursts.");
+  }
+
+  if (Number(creation?.value ?? 100) < 40) {
+    notExpectItems.push("Do not project him as the main final-ball creator.");
+  }
+  if (Number(endProduct?.value ?? 100) < 40 && Number(shotThreat?.value ?? 100) < 40) {
+    notExpectItems.push("Do not build the attack around him as a primary scorer yet.");
+  }
+  if (Number(oneVOne?.value ?? 100) < 40) {
+    notExpectItems.push("Do not rely on him as the sole isolation outlet.");
+  }
+
+  const evidenceRows = [
+    oneVOne,
+    creation,
+    endProduct,
+    carrying,
+    shotThreat,
+    defensive,
+    involvement,
+  ].filter(Boolean) as PeerDimensionRow[];
+
+  const seasonRows = [
+    { label: "Goals", value: pr.goals_per90_percentile, rank: percentileText(pr.goals_per90_percentile) },
+    { label: "Assists", value: pr.assists_per90_percentile, rank: percentileText(pr.assists_per90_percentile) },
+    { label: "xG", value: pr.xg_per90_percentile, rank: percentileText(pr.xg_per90_percentile) },
+    { label: "xA", value: pr.xa_per90_percentile, rank: percentileText(pr.xa_per90_percentile) },
+    { label: "Shots", value: pr.shots_per90_percentile, rank: percentileText(pr.shots_per90_percentile) },
+    { label: "Key Passes", value: pr.key_passes_per90_percentile, rank: percentileText(pr.key_passes_per90_percentile) },
+    { label: "Big Chances Created", value: pr.big_chances_created_percentile, rank: percentileText(pr.big_chances_created_percentile) },
+    { label: "Accurate Crosses", value: pr.accurate_cross_per90_percentile, rank: percentileText(pr.accurate_cross_per90_percentile) },
+    { label: "Dribbles", value: pr.dribbles_per90_percentile, rank: percentileText(pr.dribbles_per90_percentile) },
+    { label: "xGOT", value: pr.xgot_per90_percentile, rank: percentileText(pr.xgot_per90_percentile) },
+  ];
+
+  return {
+    headline,
+    top,
+    concernItems,
+    usageItems,
+    notExpectItems,
+    evidenceRows,
+    seasonRows,
+  };
+}
+
 function methodVariantForPosition(position: string | null | undefined): React.ComponentProps<typeof RatingMethodNote>["variant"] {
   const pos = (position ?? "").toUpperCase();
   if (["CB", "LB", "RB", "LWB", "RWB", "DEF", "DEFENDER"].includes(pos)) return "defender";
@@ -331,7 +710,10 @@ function PlayerProfilePage() {
   const [activeTab, setActiveTab] = useState<PlayerTab>("overview");
   const percentileCardRef = useRef<HTMLDivElement>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
+  const scoutingSocialCardRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
+  const [scoutDownloading, setScoutDownloading] = useState(false);
+  const [scoutExportLayerVisible, setScoutExportLayerVisible] = useState(false);
 
   const handleDownloadPercentiles = async () => {
     if (!percentileCardRef.current || !player) return;
@@ -357,6 +739,49 @@ function PlayerProfilePage() {
     } finally {
       if (controls) controls.style.visibility = "";
       setDownloading(false);
+    }
+  };
+
+  const handleExportScoutReport = async () => {
+    if (!player) return;
+    setScoutDownloading(true);
+    setScoutExportLayerVisible(true);
+
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await document.fonts?.ready;
+
+    try {
+      if (!scoutingSocialCardRef.current) return;
+      const dataUrl = await domToPng(scoutingSocialCardRef.current, {
+        scale: 1,
+        backgroundColor: "#0a0a0a",
+      });
+      const seasonLabel = currentSeason?.season ?? season.split("|")[1] ?? "season";
+      const filename = `${player.name.replace(/\s+/g, "_")}_scouting_report_${seasonLabel}.png`;
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+      const file = new File([blob], filename, { type: "image/png" });
+      const shareData = {
+        title: `${player.name} scouting report`,
+        text: `${player.name} scouting report`,
+        files: [file],
+      };
+
+      if (navigator.canShare?.(shareData) && navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        const link = document.createElement("a");
+        link.download = filename;
+        link.href = dataUrl;
+        link.click();
+      }
+    } catch (err) {
+      if ((err as DOMException).name !== "AbortError") {
+        console.error("Failed to export scouting report:", err);
+      }
+    } finally {
+      setScoutExportLayerVisible(false);
+      setScoutDownloading(false);
     }
   };
 
@@ -557,6 +982,69 @@ function PlayerProfilePage() {
   const bestSignals = strongestSignals(peerDimensionRows);
   const weakSignals = strongestSignals(peerDimensionRows, true);
   const scoutSummary = scoutingSummaryCopy(peerDimensionRows, activePeerMetricRanks, roleArchetype);
+  const cmReport = isCM && activePeerRating
+    ? cmScoutReport(peerDimensionRows, activePeerMetricRanks, activePeerRating)
+    : null;
+  const stReport = isST && activePeerRating
+    ? stScoutReport(peerDimensionRows, activePeerMetricRanks, activePeerRating)
+    : null;
+  const wingerReport = isWinger && activePeerRating
+    ? wingerScoutReport(peerDimensionRows, activePeerRating)
+    : null;
+  const attackingScoutReport = stReport
+    ? {
+        report: stReport,
+        title: "ST Scout Report",
+        emptyWarning: "No major ST-specific statistical warning in this peer pool.",
+        seasonTitle: "Season Finishing Context",
+      }
+    : wingerReport
+      ? {
+          report: wingerReport,
+          title: "Winger Scout Report",
+          emptyWarning: "No major winger-specific statistical warning in this peer pool.",
+          seasonTitle: "Season Wide-Play Context",
+        }
+      : null;
+  const socialScoutingReport: SocialScoutingReportCardProps | null =
+    activePeerRating && attackingScoutReport
+      ? {
+          playerName: player.name,
+          teamName: player.team?.name,
+          positionLabel: activePeerRating.position ?? player.position,
+          seasonLabel: currentSeason?.season ?? season.split("|")[1],
+          comparisonPool,
+          headline: attackingScoutReport.report.headline,
+          topSignals: socialMetricRows(attackingScoutReport.report.top, activePeerMetricRanks),
+          usageItems: attackingScoutReport.report.usageItems,
+          concernItems: [
+            ...attackingScoutReport.report.concernItems,
+            ...attackingScoutReport.report.notExpectItems,
+          ],
+          evidenceRows: socialMetricRows(attackingScoutReport.report.evidenceRows, activePeerMetricRanks),
+          seasonRows: attackingScoutReport.report.seasonRows,
+          modelScore: activePeerRating.model_score,
+          confidence: activePeerRating.model_score_confidence,
+          ratedMinutes: activePeerRating.rated_minutes,
+        }
+      : activePeerRating && cmReport
+        ? {
+            playerName: player.name,
+            teamName: player.team?.name,
+            positionLabel: activePeerRating.position ?? player.position,
+            seasonLabel: currentSeason?.season ?? season.split("|")[1],
+            comparisonPool,
+            headline: cmReport.headline,
+            topSignals: socialMetricRows(cmReport.top, activePeerMetricRanks),
+            usageItems: cmReport.usageItems,
+            concernItems: [...cmReport.concernItems, ...cmReport.notExpectItems],
+            evidenceRows: socialMetricRows(cmReport.evidenceRows, activePeerMetricRanks),
+            seasonRows: cmReport.seasonOnlyRows,
+            modelScore: activePeerRating.model_score,
+            confidence: activePeerRating.model_score_confidence,
+            ratedMinutes: activePeerRating.rated_minutes,
+          }
+        : null;
   const confidenceMessage = confidenceCopy(
     activePeerRating?.model_score_confidence,
     activePeerRating?.rated_minutes,
@@ -8029,6 +8517,26 @@ function PlayerProfilePage() {
             {activeTab === "scouting" && (
             <>
             <RatingMethodNote variant={ratingMethodVariant} />
+            {socialScoutingReport && scoutExportLayerVisible && (
+              <div
+                aria-hidden="true"
+                style={{
+                  position: "fixed",
+                  left: 0,
+                  top: 0,
+                  zIndex: 9999,
+                  width: "100vw",
+                  height: "100vh",
+                  background: "#0a0a0a",
+                  overflow: "hidden",
+                  pointerEvents: "none",
+                }}
+              >
+                <div ref={scoutingSocialCardRef} style={{ width: 1080, height: 1350 }}>
+                  <SocialScoutingReportCard {...socialScoutingReport} />
+                </div>
+              </div>
+            )}
             <Card className="mt-4">
               <CardContent className="p-5">
                 <div
@@ -8051,6 +8559,20 @@ function PlayerProfilePage() {
                     Peer comparison
                   </span>
                   <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={handleExportScoutReport}
+                      disabled={
+                        scoutDownloading ||
+                        socialScoutingReport == null ||
+                        activePeerRating == null ||
+                        (activePeerRating.rated_minutes ?? 0) < activePeerMinMinutes
+                      }
+                      className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50"
+                      title="Export scouting report"
+                    >
+                      <Download size={14} />
+                      <span>{scoutDownloading ? "Exporting..." : "Export"}</span>
+                    </button>
                     <div className="flex rounded-lg border border-border bg-card p-0.5 text-xs font-medium">
                       <button
                         onClick={() => setPeerScope("league")}
@@ -8221,7 +8743,291 @@ function PlayerProfilePage() {
                         </div>
                       </div>
                     )}
-                    {peerDimensionRows.length > 0 && (
+                    {attackingScoutReport && (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 12,
+                          padding: "12px 14px",
+                          background: "var(--muted)",
+                          borderRadius: 8,
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 12,
+                            alignItems: "flex-start",
+                          }}
+                        >
+                          <div>
+                            <div
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 700,
+                                color: "var(--muted-foreground)",
+                                textTransform: "uppercase",
+                                letterSpacing: "0.08em",
+                              }}
+                            >
+                              {attackingScoutReport.title}
+                            </div>
+                            <div
+                              style={{
+                                marginTop: 4,
+                                fontSize: 15,
+                                fontWeight: 700,
+                                color: "var(--foreground)",
+                                lineHeight: 1.35,
+                              }}
+                            >
+                              {attackingScoutReport.report.headline}
+                            </div>
+                          </div>
+                          <div
+                            style={{
+                              textAlign: "right",
+                              fontSize: 11,
+                              color: "var(--muted-foreground)",
+                              flexShrink: 0,
+                            }}
+                          >
+                            {activePeerRating.rated_minutes ?? 0} rated mins
+                            <br />
+                            {comparisonPool}
+                          </div>
+                        </div>
+
+                        <div className="grid gap-3 md:grid-cols-3">
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--foreground)", marginBottom: 6 }}>
+                              Main Value
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                              {attackingScoutReport.report.top.length > 0 ? attackingScoutReport.report.top.map((row) => (
+                                <div key={row.metricKey} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12 }}>
+                                  <span style={{ color: "var(--muted-foreground)" }}>{row.label}</span>
+                                  <span style={{ color: "var(--foreground)", fontWeight: 700 }}>{rowRankText(row, activePeerMetricRanks)}</span>
+                                </div>
+                              )) : (
+                                <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>No strong signal yet.</span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--foreground)", marginBottom: 6 }}>
+                              Best Usage
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                              {attackingScoutReport.report.usageItems.slice(0, 3).map((item) => (
+                                <div key={item} style={{ fontSize: 12, color: "var(--muted-foreground)", lineHeight: 1.45 }}>
+                                  {item}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--foreground)", marginBottom: 6 }}>
+                              Limits
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                              {(attackingScoutReport.report.concernItems.length > 0 || attackingScoutReport.report.notExpectItems.length > 0)
+                                ? [...attackingScoutReport.report.concernItems, ...attackingScoutReport.report.notExpectItems].slice(0, 3).map((item) => (
+                                    <div key={item} style={{ fontSize: 12, color: "var(--muted-foreground)", lineHeight: 1.45 }}>
+                                      {item}
+                                    </div>
+                                  ))
+                                : (
+                                  <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>
+                                    {attackingScoutReport.emptyWarning}
+                                  </span>
+                                )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>
+                              Core Evidence
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              {attackingScoutReport.report.evidenceRows.map((row) => (
+                                <div key={row.metricKey} style={{ border: "1px solid var(--border)", borderRadius: 6, padding: "8px 9px", background: "var(--card)" }}>
+                                  <div style={{ fontSize: 11, color: "var(--muted-foreground)" }}>{row.label}</div>
+                                  <div style={{ marginTop: 2, fontSize: 14, fontWeight: 800, color: Number(row.value ?? 0) >= 70 ? "#1d9e75" : Number(row.value ?? 0) >= 40 ? "#ef9f27" : "#e24b4a" }}>
+                                    {rowRankText(row, activePeerMetricRanks)}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>
+                              {attackingScoutReport.seasonTitle}
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              {attackingScoutReport.report.seasonRows.map((row) => (
+                                <div key={row.label} style={{ border: "1px solid var(--border)", borderRadius: 6, padding: "8px 9px", background: "var(--card)" }}>
+                                  <div style={{ fontSize: 11, color: "var(--muted-foreground)" }}>{row.label}</div>
+                                  <div style={{ marginTop: 2, fontSize: 14, fontWeight: 800, color: row.value == null ? "var(--muted-foreground)" : Number(row.value) >= 70 ? "#1d9e75" : Number(row.value) >= 40 ? "#ef9f27" : "#e24b4a" }}>
+                                    {row.rank}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {cmReport && (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 12,
+                          padding: "12px 14px",
+                          background: "var(--muted)",
+                          borderRadius: 8,
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 12,
+                            alignItems: "flex-start",
+                          }}
+                        >
+                          <div>
+                            <div
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 700,
+                                color: "var(--muted-foreground)",
+                                textTransform: "uppercase",
+                                letterSpacing: "0.08em",
+                              }}
+                            >
+                              CM Scout Report
+                            </div>
+                            <div
+                              style={{
+                                marginTop: 4,
+                                fontSize: 15,
+                                fontWeight: 700,
+                                color: "var(--foreground)",
+                                lineHeight: 1.35,
+                              }}
+                            >
+                              {cmReport.headline}
+                            </div>
+                          </div>
+                          <div
+                            style={{
+                              textAlign: "right",
+                              fontSize: 11,
+                              color: "var(--muted-foreground)",
+                              flexShrink: 0,
+                            }}
+                          >
+                            {activePeerRating.rated_minutes ?? 0} rated mins
+                            <br />
+                            {comparisonPool}
+                          </div>
+                        </div>
+
+                        <div className="grid gap-3 md:grid-cols-3">
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--foreground)", marginBottom: 6 }}>
+                              Main Value
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                              {cmReport.top.length > 0 ? cmReport.top.map((row) => (
+                                <div key={row.metricKey} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12 }}>
+                                  <span style={{ color: "var(--muted-foreground)" }}>{row.label}</span>
+                                  <span style={{ color: "var(--foreground)", fontWeight: 700 }}>{rowRankText(row, activePeerMetricRanks)}</span>
+                                </div>
+                              )) : (
+                                <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>No strong signal yet.</span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--foreground)", marginBottom: 6 }}>
+                              Best Usage
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                              {cmReport.usageItems.slice(0, 3).map((item) => (
+                                <div key={item} style={{ fontSize: 12, color: "var(--muted-foreground)", lineHeight: 1.45 }}>
+                                  {item}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--foreground)", marginBottom: 6 }}>
+                              Limits
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                              {(cmReport.concernItems.length > 0 || cmReport.notExpectItems.length > 0)
+                                ? [...cmReport.concernItems, ...cmReport.notExpectItems].slice(0, 3).map((item) => (
+                                    <div key={item} style={{ fontSize: 12, color: "var(--muted-foreground)", lineHeight: 1.45 }}>
+                                      {item}
+                                    </div>
+                                  ))
+                                : (
+                                  <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>
+                                    No major CM-specific statistical warning in this peer pool.
+                                  </span>
+                                )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>
+                              Core Evidence
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              {cmReport.evidenceRows.map((row) => (
+                                <div key={row.metricKey} style={{ border: "1px solid var(--border)", borderRadius: 6, padding: "8px 9px", background: "var(--card)" }}>
+                                  <div style={{ fontSize: 11, color: "var(--muted-foreground)" }}>{row.label}</div>
+                                  <div style={{ marginTop: 2, fontSize: 14, fontWeight: 800, color: Number(row.value ?? 0) >= 70 ? "#1d9e75" : Number(row.value ?? 0) >= 40 ? "#ef9f27" : "#e24b4a" }}>
+                                    {rowRankText(row, activePeerMetricRanks)}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>
+                              Season Context
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              {cmReport.seasonOnlyRows.map((row) => (
+                                <div key={row.label} style={{ border: "1px solid var(--border)", borderRadius: 6, padding: "8px 9px", background: "var(--card)" }}>
+                                  <div style={{ fontSize: 11, color: "var(--muted-foreground)" }}>{row.label}</div>
+                                  <div style={{ marginTop: 2, fontSize: 14, fontWeight: 800, color: row.value == null ? "var(--muted-foreground)" : Number(row.value) >= 70 ? "#1d9e75" : Number(row.value) >= 40 ? "#ef9f27" : "#e24b4a" }}>
+                                    {row.rank}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {!attackingScoutReport && !cmReport && peerDimensionRows.length > 0 && (
                       <div
                         style={{
                           display: "flex",
@@ -8465,99 +9271,101 @@ function PlayerProfilePage() {
                       Match Rating = individual games. Know Ball Score = season-level performance.
                       Rank = standing among rated players in this peer pool. Confidence = how much the sample is trusted.
                     </p>
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 8,
-                      }}
-                    >
-                      {peerDimensionRows.map((row) => {
-                        const { label, sublabel, value } = row;
-                        const pct = value ?? 0;
-                        const barColor =
-                          pct >= 70
-                            ? "#1d9e75"
-                            : pct >= 40
-                              ? "#ef9f27"
-                              : "#e24b4a";
-                        return (
-                          <div
-                            key={label}
-                            className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3"
-                          >
-                            <div className="flex items-baseline justify-between gap-3 sm:contents">
-                              <span
-                                className="sm:w-[150px] sm:flex-shrink-0"
-                                style={{
-                                  fontSize: 12,
-                                  color: "var(--foreground)",
-                                  minWidth: 0,
-                                }}
-                              >
-                                {label}
-                                {sublabel && (
-                                  <span
-                                    style={{
-                                      display: "block",
-                                      fontSize: 10,
-                                      color: "var(--muted-foreground)",
-                                      marginTop: 1,
-                                    }}
-                                  >
-                                    {sublabel}
-                                  </span>
-                                )}
-                              </span>
-                              <span
-                                className="sm:order-3 sm:min-w-[28px] sm:text-right"
-                                style={{
-                                  fontSize: 13,
-                                  fontWeight: 700,
-                                  color: barColor,
-                                  flexShrink: 0,
-                                }}
-                              >
-                                {rankCopy(row, activePeerMetricRanks)}
-                              </span>
-                            </div>
+                    {!attackingScoutReport && !cmReport && (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 8,
+                        }}
+                      >
+                        {peerDimensionRows.map((row) => {
+                          const { label, sublabel, value } = row;
+                          const pct = value ?? 0;
+                          const barColor =
+                            pct >= 70
+                              ? "#1d9e75"
+                              : pct >= 40
+                                ? "#ef9f27"
+                                : "#e24b4a";
+                          return (
                             <div
-                              className="sm:order-2 sm:flex-1"
-                              style={{
-                                position: "relative",
-                                height: 10,
-                                background: "var(--muted)",
-                                borderRadius: 5,
-                                overflow: "hidden",
-                              }}
+                              key={label}
+                              className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3"
                             >
-                              <div
-                                style={{
-                                  height: "100%",
-                                  width: `${pct}%`,
-                                  background: barColor,
-                                  borderRadius: 5,
-                                }}
-                              />
-                              {[25, 50, 75].map((tick) => (
-                                <div
-                                  key={tick}
+                              <div className="flex items-baseline justify-between gap-3 sm:contents">
+                                <span
+                                  className="sm:w-[150px] sm:flex-shrink-0"
                                   style={{
-                                    position: "absolute",
-                                    top: 0,
-                                    bottom: 0,
-                                    left: `${tick}%`,
-                                    width: 1,
-                                    background: "var(--background)",
-                                    opacity: 0.6,
+                                    fontSize: 12,
+                                    color: "var(--foreground)",
+                                    minWidth: 0,
+                                  }}
+                                >
+                                  {label}
+                                  {sublabel && (
+                                    <span
+                                      style={{
+                                        display: "block",
+                                        fontSize: 10,
+                                        color: "var(--muted-foreground)",
+                                        marginTop: 1,
+                                      }}
+                                    >
+                                      {sublabel}
+                                    </span>
+                                  )}
+                                </span>
+                                <span
+                                  className="sm:order-3 sm:min-w-[28px] sm:text-right"
+                                  style={{
+                                    fontSize: 13,
+                                    fontWeight: 700,
+                                    color: barColor,
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  {rankCopy(row, activePeerMetricRanks)}
+                                </span>
+                              </div>
+                              <div
+                                className="sm:order-2 sm:flex-1"
+                                style={{
+                                  position: "relative",
+                                  height: 10,
+                                  background: "var(--muted)",
+                                  borderRadius: 5,
+                                  overflow: "hidden",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    height: "100%",
+                                    width: `${pct}%`,
+                                    background: barColor,
+                                    borderRadius: 5,
                                   }}
                                 />
-                              ))}
+                                {[25, 50, 75].map((tick) => (
+                                  <div
+                                    key={tick}
+                                    style={{
+                                      position: "absolute",
+                                      top: 0,
+                                      bottom: 0,
+                                      left: `${tick}%`,
+                                      width: 1,
+                                      background: "var(--background)",
+                                      opacity: 0.6,
+                                    }}
+                                  />
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>
