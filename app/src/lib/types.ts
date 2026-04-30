@@ -321,6 +321,13 @@ export interface PlayerPeerRatingResponse {
   availablePositionScopes: PeerRatingOption[]
 }
 
+export interface PeerMetricRank {
+  metric: string
+  rank: number
+  poolSize: number
+  percentile: number | null
+}
+
 export interface PlayerUnderstat {
   xg_chain: number | null
   xg_buildup: number | null

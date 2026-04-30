@@ -18,6 +18,7 @@ import {
   getPlayerSeasons,
   getPlayerRatings,
   getPlayerPeerRating,
+  getPlayerPeerMetricRanks,
   getPlayerStats,
   getPlayerShots,
   getPlayerXgotDelta,
@@ -28,6 +29,7 @@ import type {
   Player,
   MatchRating,
   PeerRating,
+  PeerMetricRank,
   PlayerPeerRatingResponse,
   PlayerStats,
   PlayerUnderstat,
@@ -119,6 +121,7 @@ type PeerDimensionRow = {
   label: string;
   sublabel?: string;
   value: number | null | undefined;
+  metricKey: string;
 };
 
 function percentileBand(value: number | null | undefined, roleLabel = "role") {
@@ -154,59 +157,59 @@ function getPeerDimensionRows(
 ): PeerDimensionRow[] {
   if (flags.isWinger) {
     return [
-      { label: "Overall Season Value", sublabel: "Know Ball Score percentile", value: pr.overall_percentile },
-      { label: "1v1 Threat", sublabel: "productive dribbling", value: pr.productive_dribbling_percentile },
-      { label: "Chance Creation", sublabel: "xA, key passes, big chances", value: pr.chance_creation_percentile },
-      { label: "End Product", sublabel: "goals and assists contribution", value: pr.goal_contribution_percentile },
-      { label: "Ball Carrying", sublabel: "dribbles, touches, retention", value: pr.carrying_percentile },
-      { label: "Shot Threat", sublabel: "shot generation", value: pr.shot_generation_percentile },
-      { label: "Defensive Work", sublabel: "recoveries and duels", value: pr.defensive_percentile },
-      { label: "Involvement", sublabel: "presence", value: pr.presence_percentile },
+      { label: "Overall Season Value", sublabel: "Know Ball Score rank", value: pr.overall_percentile, metricKey: "overall_percentile" },
+      { label: "1v1 Threat", sublabel: "productive dribbling", value: pr.productive_dribbling_percentile, metricKey: "productive_dribbling_percentile" },
+      { label: "Chance Creation", sublabel: "xA, key passes, big chances", value: pr.chance_creation_percentile, metricKey: "chance_creation_percentile" },
+      { label: "End Product", sublabel: "goals and assists contribution", value: pr.goal_contribution_percentile, metricKey: "goal_contribution_percentile" },
+      { label: "Ball Carrying", sublabel: "dribbles, touches, retention", value: pr.carrying_percentile, metricKey: "carrying_percentile" },
+      { label: "Shot Threat", sublabel: "shot generation", value: pr.shot_generation_percentile, metricKey: "shot_generation_percentile" },
+      { label: "Defensive Work", sublabel: "recoveries and duels", value: pr.defensive_percentile, metricKey: "defensive_percentile" },
+      { label: "Involvement", sublabel: "presence", value: pr.presence_percentile, metricKey: "presence_percentile" },
     ];
   }
   if (flags.isCAM) {
     return [
-      { label: "Overall Season Value", sublabel: "Know Ball Score percentile", value: pr.overall_percentile },
-      { label: "Chance Creation", sublabel: "xA, key passes, big chances", value: pr.chance_creation_percentile },
-      { label: "Pre-Assists", sublabel: "pass before assist", value: preAssistPercentile },
-      { label: "Goal Threat", sublabel: "shots, xG, goals", value: pr.goal_threat_percentile },
-      { label: "Connective Play", sublabel: "team function", value: pr.team_function_percentile },
-      { label: "Ball Carrying", sublabel: "progression and retention", value: pr.carrying_percentile },
-      { label: "Defensive Work", sublabel: "recoveries and pressure events", value: pr.defensive_percentile },
+      { label: "Overall Season Value", sublabel: "Know Ball Score rank", value: pr.overall_percentile, metricKey: "overall_percentile" },
+      { label: "Chance Creation", sublabel: "xA, key passes, big chances", value: pr.chance_creation_percentile, metricKey: "chance_creation_percentile" },
+      { label: "Pre-Assists", sublabel: "pass before assist", value: preAssistPercentile, metricKey: "pass_to_assist_per90_percentile" },
+      { label: "Goal Threat", sublabel: "shots, xG, goals", value: pr.goal_threat_percentile, metricKey: "goal_threat_percentile" },
+      { label: "Connective Play", sublabel: "team function", value: pr.team_function_percentile, metricKey: "team_function_percentile" },
+      { label: "Ball Carrying", sublabel: "progression and retention", value: pr.carrying_percentile, metricKey: "carrying_percentile" },
+      { label: "Defensive Work", sublabel: "recoveries and pressure events", value: pr.defensive_percentile, metricKey: "defensive_percentile" },
     ];
   }
   if (flags.isCM) {
     return [
-      { label: "Overall Season Value", sublabel: "Know Ball Score percentile", value: pr.overall_percentile },
-      { label: "Forward Passing Value", sublabel: "pass impact and progression", value: pr.volume_passing_percentile },
-      { label: "Pre-Assists", sublabel: "pass before assist", value: preAssistPercentile },
-      { label: "Ball Carrying", sublabel: "progressive carries", value: pr.carrying_percentile },
-      { label: "Chance Creation", sublabel: "xA, key passes, big chances", value: pr.chance_creation_percentile },
-      { label: "Defensive Coverage", sublabel: "recoveries, tackles, interceptions", value: pr.defensive_percentile },
-      { label: "Box Threat", sublabel: "shots, xG, goals", value: pr.goal_threat_percentile },
+      { label: "Overall Season Value", sublabel: "Know Ball Score rank", value: pr.overall_percentile, metricKey: "overall_percentile" },
+      { label: "Forward Passing Value", sublabel: "pass impact and progression", value: pr.volume_passing_percentile, metricKey: "volume_passing_percentile" },
+      { label: "Pre-Assists", sublabel: "pass before assist", value: preAssistPercentile, metricKey: "pass_to_assist_per90_percentile" },
+      { label: "Ball Carrying", sublabel: "progressive carries", value: pr.carrying_percentile, metricKey: "carrying_percentile" },
+      { label: "Chance Creation", sublabel: "xA, key passes, big chances", value: pr.chance_creation_percentile, metricKey: "chance_creation_percentile" },
+      { label: "Defensive Coverage", sublabel: "recoveries, tackles, interceptions", value: pr.defensive_percentile, metricKey: "defensive_percentile" },
+      { label: "Box Threat", sublabel: "shots, xG, goals", value: pr.goal_threat_percentile, metricKey: "goal_threat_percentile" },
     ];
   }
   if (flags.isDefender) {
     return [
-      { label: "Overall Season Value", sublabel: "Know Ball Score percentile", value: pr.overall_percentile },
-      { label: "Box Defending", sublabel: "clearances, blocks, interceptions", value: pr.defensive_percentile },
-      { label: "Duels", sublabel: "aerial and ground contests", value: pr.duels_percentile },
-      { label: "Composure", sublabel: "pass security and mistake control", value: pr.team_function_percentile },
-      { label: "Recovery & Carrying", sublabel: "mobility, recoveries, retention", value: pr.carrying_percentile },
-      { label: "Ball Playing", sublabel: "passing value and progression", value: pr.volume_passing_percentile },
-      { label: "Set-Piece Threat", sublabel: "shots and xG threat", value: pr.goal_threat_percentile },
+      { label: "Overall Season Value", sublabel: "Know Ball Score rank", value: pr.overall_percentile, metricKey: "overall_percentile" },
+      { label: "Box Defending", sublabel: "clearances, blocks, interceptions", value: pr.defensive_percentile, metricKey: "defensive_percentile" },
+      { label: "Duels", sublabel: "aerial and ground contests", value: pr.duels_percentile, metricKey: "duels_percentile" },
+      { label: "Composure", sublabel: "pass security and mistake control", value: pr.team_function_percentile, metricKey: "team_function_percentile" },
+      { label: "Recovery & Carrying", sublabel: "mobility, recoveries, retention", value: pr.carrying_percentile, metricKey: "carrying_percentile" },
+      { label: "Ball Playing", sublabel: "passing value and progression", value: pr.volume_passing_percentile, metricKey: "volume_passing_percentile" },
+      { label: "Set-Piece Threat", sublabel: "shots and xG threat", value: pr.goal_threat_percentile, metricKey: "goal_threat_percentile" },
     ];
   }
   return [
-    { label: "Overall Season Value", sublabel: "Know Ball Score percentile", value: pr.overall_percentile },
-    { label: "Finishing", sublabel: "goals versus chance quality", value: pr.finishing_percentile },
-    { label: "Shot Generation", sublabel: "shots and xG volume", value: pr.shot_generation_percentile },
-    { label: "Chance Creation", sublabel: "xA and key passes", value: pr.chance_creation_percentile },
-    { label: "Link Play", sublabel: "team function", value: pr.team_function_percentile },
-    { label: "Ball Carrying", sublabel: "dribbles and retention", value: pr.carrying_percentile },
-    { label: "Duels", sublabel: "aerial and ground contests", value: pr.duels_percentile },
-    { label: "Defensive Work", sublabel: "pressing and recoveries", value: pr.defensive_percentile },
-    { label: "Clinicality", sublabel: "finishing versus xG", value: pr.xg_overperformance_percentile },
+    { label: "Overall Season Value", sublabel: "Know Ball Score rank", value: pr.overall_percentile, metricKey: "overall_percentile" },
+    { label: "Finishing", sublabel: "goals versus chance quality", value: pr.finishing_percentile, metricKey: "finishing_percentile" },
+    { label: "Shot Generation", sublabel: "shots and xG volume", value: pr.shot_generation_percentile, metricKey: "shot_generation_percentile" },
+    { label: "Chance Creation", sublabel: "xA and key passes", value: pr.chance_creation_percentile, metricKey: "chance_creation_percentile" },
+    { label: "Link Play", sublabel: "team function", value: pr.team_function_percentile, metricKey: "team_function_percentile" },
+    { label: "Ball Carrying", sublabel: "dribbles and retention", value: pr.carrying_percentile, metricKey: "carrying_percentile" },
+    { label: "Duels", sublabel: "aerial and ground contests", value: pr.duels_percentile, metricKey: "duels_percentile" },
+    { label: "Defensive Work", sublabel: "pressing and recoveries", value: pr.defensive_percentile, metricKey: "defensive_percentile" },
+    { label: "Clinicality", sublabel: "finishing versus xG", value: pr.xg_overperformance_percentile, metricKey: "xg_overperformance_percentile" },
   ];
 }
 
@@ -215,6 +218,45 @@ function strongestSignals(rows: PeerDimensionRow[], takeWeak = false) {
     .filter((row) => row.value != null && row.label !== "Overall Season Value")
     .sort((a, b) => takeWeak ? Number(a.value) - Number(b.value) : Number(b.value) - Number(a.value))
     .slice(0, 3);
+}
+
+function rankCopy(row: PeerDimensionRow, ranks: Record<string, PeerMetricRank>) {
+  const rank = ranks[row.metricKey];
+  if (!rank) return "—";
+  return `${ordinal(rank.rank)} / ${rank.poolSize}`;
+}
+
+function sentenceList(items: string[]) {
+  if (items.length === 0) return "";
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+}
+
+function scoutingSummaryCopy(
+  rows: PeerDimensionRow[],
+  ranks: Record<string, PeerMetricRank>,
+  roleLabel: string | null,
+) {
+  const rankedRows = rows.filter((row) => row.label !== "Overall Season Value" && row.value != null);
+  const strengths = rankedRows.filter((row) => Number(row.value) >= 70).slice(0, 3);
+  const cautions = rankedRows.filter((row) => Number(row.value) < 40).slice(0, 3);
+  const topRows = strengths.length > 0 ? strengths : rankedRows.slice(0, 2);
+  const role = roleLabel ? roleLabel.toLowerCase() : "this role";
+
+  const strengthText = topRows.length > 0
+    ? `Strongest signals are ${sentenceList(topRows.map((row) => `${row.label} (${rankCopy(row, ranks)})`))}.`
+    : "Not enough peer-ranked data yet to call out clear strengths.";
+
+  const cautionText = cautions.length > 0
+    ? `Watch ${sentenceList(cautions.map((row) => `${row.label} (${rankCopy(row, ranks)})`))}; those are the softer parts of the profile against this peer pool.`
+    : "No major statistical red flag in the core dimensions.";
+
+  const roleText = topRows.length > 0
+    ? `Profiles best as ${role} with value led by ${sentenceList(topRows.slice(0, 2).map((row) => row.label.toLowerCase()))}.`
+    : `Profiles as ${role}, but the sample needs more ranked signals before the fit is clear.`;
+
+  return { strengthText, cautionText, roleText };
 }
 
 function methodVariantForPosition(position: string | null | undefined): React.ComponentProps<typeof RatingMethodNote>["variant"] {
@@ -275,6 +317,8 @@ function PlayerProfilePage() {
   const [ratings, setRatings] = useState<MatchRating[]>([]);
   const [peerRating, setPeerRating] = useState<PeerRating | null>(null);
   const [allPeerRating, setAllPeerRating] = useState<PeerRating | null>(null);
+  const [peerMetricRanks, setPeerMetricRanks] = useState<Record<string, PeerMetricRank>>({});
+  const [allPeerMetricRanks, setAllPeerMetricRanks] = useState<Record<string, PeerMetricRank>>({});
   const [stats, setStats] = useState<PlayerStats | null>(null);
   const [shots, setShots] = useState<Shot[]>([]);
   const [xgotDelta, setXgotDelta] = useState<number | null>(null);
@@ -367,6 +411,22 @@ function PlayerProfilePage() {
           scope: "all",
         },
       }),
+      getPlayerPeerMetricRanks({
+        data: {
+          playerId,
+          season: seasonStr,
+          leagueId: leagueIdNum,
+          scope: "league",
+        },
+      }),
+      getPlayerPeerMetricRanks({
+        data: {
+          playerId,
+          season: seasonStr,
+          leagueId: leagueIdNum,
+          scope: "all",
+        },
+      }),
       getPlayerStats({
         data: { playerId, season: seasonStr, leagueId: leagueIdNum },
       }),
@@ -377,13 +437,15 @@ function PlayerProfilePage() {
         data: { playerId, season: seasonStr, leagueId: leagueIdNum },
       }),
       getPlayerUnderstat({ data: { playerId, season: seasonStr } }),
-    ]).then(([r, pr, apr, st, sh, xgd, ustat]) => {
+    ]).then(([r, pr, apr, prRanks, aprRanks, st, sh, xgd, ustat]) => {
       if (!isCurrent) return;
       const leaguePeerResponse = pr as PlayerPeerRatingResponse;
       const allPeerResponse = apr as PlayerPeerRatingResponse;
       setRatings(r);
       setPeerRating(leaguePeerResponse.peerRating);
       setAllPeerRating(allPeerResponse.peerRating);
+      setPeerMetricRanks(prRanks as Record<string, PeerMetricRank>);
+      setAllPeerMetricRanks(aprRanks as Record<string, PeerMetricRank>);
       setStats(st as PlayerStats | null);
       setShots(sh as Shot[]);
       const rawDelta = (xgd as any)?.delta;
@@ -465,6 +527,7 @@ function PlayerProfilePage() {
       : null;
 
   const activePeerRating = peerScope === "league" ? peerRating : allPeerRating;
+  const activePeerMetricRanks = peerScope === "league" ? peerMetricRanks : allPeerMetricRanks;
   const roleArchetype = formatRoleArchetype(
     activePeerRating?.role_archetype ?? activePeerRating?.cm_archetype,
   );
@@ -493,6 +556,7 @@ function PlayerProfilePage() {
     : [];
   const bestSignals = strongestSignals(peerDimensionRows);
   const weakSignals = strongestSignals(peerDimensionRows, true);
+  const scoutSummary = scoutingSummaryCopy(peerDimensionRows, activePeerMetricRanks, roleArchetype);
   const confidenceMessage = confidenceCopy(
     activePeerRating?.model_score_confidence,
     activePeerRating?.rated_minutes,
@@ -8157,88 +8221,40 @@ function PlayerProfilePage() {
                         </div>
                       </div>
                     )}
-                    {(bestSignals.length > 0 || weakSignals.length > 0) && (
+                    {peerDimensionRows.length > 0 && (
                       <div
                         style={{
-                          display: "grid",
-                          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                          gap: 8,
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 10,
+                          padding: "12px 14px",
+                          background: "var(--muted)",
+                          borderRadius: 8,
                         }}
                       >
+                        <div
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: "var(--muted-foreground)",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.08em",
+                          }}
+                        >
+                          Scout Summary
+                        </div>
                         {[
-                          { title: "Best Signals", rows: bestSignals },
-                          { title: "Watch Areas", rows: weakSignals },
-                        ].map(({ title, rows }) => (
-                          <div
-                            key={title}
-                            style={{
-                              padding: "10px 12px",
-                              background: "var(--muted)",
-                              borderRadius: 8,
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: 6,
-                            }}
-                          >
-                            <div
-                              style={{
-                                fontSize: 11,
-                                fontWeight: 700,
-                                color: "var(--muted-foreground)",
-                                textTransform: "uppercase",
-                                letterSpacing: "0.08em",
-                              }}
-                            >
-                              {title}
+                          ["Strengths", scoutSummary.strengthText],
+                          ["Caution", scoutSummary.cautionText],
+                          ["Role Fit", scoutSummary.roleText],
+                        ].map(([label, copy]) => (
+                          <div key={label} style={{ display: "grid", gridTemplateColumns: "86px 1fr", gap: 10 }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--foreground)" }}>
+                              {label}
                             </div>
-                            {rows.map((row) => (
-                              <div
-                                key={`${title}-${row.label}`}
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  gap: 12,
-                                  alignItems: "baseline",
-                                }}
-                              >
-                                <div style={{ minWidth: 0 }}>
-                                  <div
-                                    style={{
-                                      fontSize: 12,
-                                      fontWeight: 600,
-                                      color: "var(--foreground)",
-                                    }}
-                                  >
-                                    {row.label}
-                                  </div>
-                                  {row.sublabel && (
-                                    <div
-                                      style={{
-                                        fontSize: 11,
-                                        color: "var(--muted-foreground)",
-                                      }}
-                                    >
-                                      {row.sublabel}
-                                    </div>
-                                  )}
-                                </div>
-                                <div
-                                  style={{
-                                    fontSize: 13,
-                                    fontWeight: 700,
-                                    color:
-                                      Number(row.value) >= 70
-                                        ? "#1d9e75"
-                                        : Number(row.value) >= 40
-                                          ? "#ef9f27"
-                                          : "#e24b4a",
-                                    flexShrink: 0,
-                                  }}
-                                >
-                                  {Math.round(Number(row.value))}
-                                </div>
-                              </div>
-                            ))}
+                            <div style={{ fontSize: 12, color: "var(--muted-foreground)", lineHeight: 1.55 }}>
+                              {copy}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -8447,7 +8463,7 @@ function PlayerProfilePage() {
                       }}
                     >
                       Match Rating = individual games. Know Ball Score = season-level performance.
-                      Percentile = rank versus this peer pool. Confidence = how much the sample is trusted.
+                      Rank = standing among rated players in this peer pool. Confidence = how much the sample is trusted.
                     </p>
                     <div
                       style={{
@@ -8456,7 +8472,8 @@ function PlayerProfilePage() {
                         gap: 8,
                       }}
                     >
-                      {peerDimensionRows.map(({ label, sublabel, value }) => {
+                      {peerDimensionRows.map((row) => {
+                        const { label, sublabel, value } = row;
                         const pct = value ?? 0;
                         const barColor =
                           pct >= 70
@@ -8501,7 +8518,7 @@ function PlayerProfilePage() {
                                   flexShrink: 0,
                                 }}
                               >
-                                {value != null ? Math.round(value) : "—"}
+                                {rankCopy(row, activePeerMetricRanks)}
                               </span>
                             </div>
                             <div

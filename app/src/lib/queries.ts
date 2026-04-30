@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { query, queryOne } from './db.server'
 import { POSITION_GROUPS, positionGroupSql, type PositionGroup } from './positions'
-import type { League, Match, MatchRating, Player, PeerRating, PlayerPeerRatingResponse, PlayerUnderstat, Shot } from './types'
+import type { League, Match, MatchRating, PeerMetricRank, Player, PeerRating, PlayerPeerRatingResponse, PlayerUnderstat, Shot } from './types'
 
 export const getLeagues = createServerFn({ method: 'GET' }).handler(async () => {
   return query<League>('SELECT * FROM leagues ORDER BY tier, name')
@@ -174,6 +174,87 @@ export const getPlayerPeerRating = createServerFn({ method: 'GET' })
         )
 
     return { peerRating, positionBreakdown: [], availablePositionScopes: [] } satisfies PlayerPeerRatingResponse
+  })
+
+const SCOUTING_RANK_METRICS = [
+  'overall_percentile',
+  'productive_dribbling_percentile',
+  'chance_creation_percentile',
+  'goal_contribution_percentile',
+  'carrying_percentile',
+  'shot_generation_percentile',
+  'defensive_percentile',
+  'presence_percentile',
+  'pass_to_assist_per90_percentile',
+  'goal_threat_percentile',
+  'team_function_percentile',
+  'volume_passing_percentile',
+  'duels_percentile',
+  'finishing_percentile',
+  'involvement_percentile',
+  'physical_percentile',
+  'pressing_percentile',
+  'xg_overperformance_percentile',
+] as const
+
+export const getPlayerPeerMetricRanks = createServerFn({ method: 'GET' })
+  .inputValidator((d: { playerId: number; season: string; leagueId: number; scope?: 'league' | 'all' }) => d)
+  .handler(async ({ data }) => {
+    const scope = data.scope ?? 'league'
+    const target = scope === 'all'
+      ? await queryOne<PeerRating>(
+          `SELECT * FROM peer_ratings
+           WHERE player_id = $1 AND season = $2 AND league_id IS NULL
+             AND peer_mode = 'dominant' AND position_scope = ''`,
+          [data.playerId, data.season],
+        )
+      : await queryOne<PeerRating>(
+          `SELECT * FROM peer_ratings
+           WHERE player_id = $1 AND season = $2 AND league_id = $3
+             AND peer_mode = 'dominant' AND position_scope = ''`,
+          [data.playerId, data.season, data.leagueId],
+        )
+
+    if (!target) return {} as Record<string, PeerMetricRank>
+
+    const pool = scope === 'all'
+      ? await query<PeerRating>(
+          `SELECT * FROM peer_ratings
+           WHERE season = $1 AND league_id IS NULL
+             AND position = $2
+             AND peer_mode = 'dominant' AND position_scope = ''
+             AND COALESCE(rated_minutes, 0) >= 300`,
+          [data.season, target.position],
+        )
+      : await query<PeerRating>(
+          `SELECT * FROM peer_ratings
+           WHERE season = $1 AND league_id = $2
+             AND position = $3
+             AND peer_mode = 'dominant' AND position_scope = ''
+             AND COALESCE(rated_minutes, 0) >= 300`,
+          [data.season, data.leagueId, target.position],
+        )
+
+    const result: Record<string, PeerMetricRank> = {}
+    for (const metric of SCOUTING_RANK_METRICS) {
+      const targetValue = Number((target as any)[metric])
+      if (!Number.isFinite(targetValue)) continue
+
+      const values = pool
+        .map((row) => Number((row as any)[metric]))
+        .filter((value) => Number.isFinite(value))
+
+      if (values.length === 0) continue
+
+      result[metric] = {
+        metric,
+        rank: values.filter((value) => value > targetValue).length + 1,
+        poolSize: values.length,
+        percentile: targetValue,
+      }
+    }
+
+    return result
   })
 
 export const getPlayerShots = createServerFn({ method: 'GET' })
