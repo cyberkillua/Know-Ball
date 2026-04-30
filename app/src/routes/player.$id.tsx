@@ -638,6 +638,134 @@ function wingerScoutReport(
   };
 }
 
+function camScoutReport(
+  rows: PeerDimensionRow[],
+  ranks: Record<string, PeerMetricRank>,
+  pr: PeerRating,
+) {
+  const signalRows = rows.filter((row) => row.label !== "Overall Season Value" && row.value != null);
+  const ordered = [...signalRows].sort((a, b) => Number(b.value) - Number(a.value));
+  const top = ordered.slice(0, 3);
+
+  const creation = rowByMetric(rows, "chance_creation_percentile");
+  const preAssist = rowByMetric(rows, "pass_to_assist_per90_percentile");
+  const goalThreat = rowByMetric(rows, "goal_threat_percentile");
+  const connective = rowByMetric(rows, "team_function_percentile");
+  const carrying = rowByMetric(rows, "carrying_percentile");
+  const defensive = rowByMetric(rows, "defensive_percentile");
+
+  const finalBallScore = [
+    creation?.value,
+    preAssist?.value,
+    pr.xa_per90_percentile,
+    pr.key_passes_per90_percentile,
+    pr.big_chances_created_percentile,
+  ].filter((value) => value != null).reduce((sum, value, _idx, arr) => sum + Number(value) / arr.length, 0);
+
+  const boxThreatScore = [
+    goalThreat?.value,
+    pr.goals_per90_percentile,
+    pr.xg_per90_percentile,
+    pr.shots_per90_percentile,
+    pr.xgot_per90_percentile,
+  ].filter((value) => value != null).reduce((sum, value, _idx, arr) => sum + Number(value) / arr.length, 0);
+
+  const linkScore = [
+    connective?.value,
+    pr.xg_chain_per90_percentile,
+    pr.xg_buildup_per90_percentile,
+    pr.accurate_final_third_passes_per90_percentile,
+  ].filter((value) => value != null).reduce((sum, value, _idx, arr) => sum + Number(value) / arr.length, 0);
+
+  const topLabels = top.map((row) => row.label.toLowerCase());
+  const headline = top.length > 0
+    ? `Main value signals: ${sentenceList(topLabels)}.`
+    : "Not enough AM value signals yet to form a clear read.";
+
+  const concernItems: string[] = [];
+  const usageItems: string[] = [];
+  const notExpectItems: string[] = [];
+
+  if (finalBallScore >= 70 || Number(creation?.value ?? 50) >= 70 || Number(preAssist?.value ?? 50) >= 70) {
+    usageItems.push("Use him as a final-ball connector between midfield and the forwards.");
+  }
+  if (boxThreatScore >= 70 || Number(goalThreat?.value ?? 50) >= 70) {
+    usageItems.push("He can play close to the striker as a box-arriving or second-striker threat.");
+  }
+  if (linkScore >= 70 || Number(connective?.value ?? 50) >= 70) {
+    usageItems.push("He can link phases and keep attacks connected through central zones.");
+  }
+  if (Number(carrying?.value ?? 50) >= 70) {
+    usageItems.push("Give him room to receive between lines and carry at the back line.");
+  }
+  if (Number(defensive?.value ?? 50) >= 70) {
+    usageItems.push("He can support a pressing 10 role without being a passenger out of possession.");
+  }
+  if (usageItems.length === 0 && top.length > 0) {
+    usageItems.push(`Build the AM role around ${sentenceList(top.slice(0, 2).map((row) => row.label.toLowerCase()))}.`);
+  }
+
+  if (finalBallScore < 40 && Number(creation?.value ?? 100) < 40) {
+    concernItems.push("Final-ball creation is below the attacking-midfield peer pool.");
+  }
+  if (boxThreatScore < 40 && Number(goalThreat?.value ?? 100) < 40) {
+    concernItems.push("Goal threat is light for a high attacking-midfield role.");
+  }
+  if (linkScore < 40 && Number(connective?.value ?? 100) < 40) {
+    concernItems.push("Connective play is not a major strength in this sample.");
+  }
+  if (Number(carrying?.value ?? 100) < 40) {
+    concernItems.push("Ball carrying and line-breaking by dribble are limited.");
+  }
+  if (Number(defensive?.value ?? 100) < 40) {
+    concernItems.push("Defensive work rate is a watch area for pressing-heavy usage.");
+  }
+
+  if (Number(creation?.value ?? 100) < 40 && Number(preAssist?.value ?? 100) < 45) {
+    notExpectItems.push("Do not make him the only final-ball hub.");
+  }
+  if (Number(goalThreat?.value ?? 100) < 40) {
+    notExpectItems.push("Do not project him primarily as a second striker.");
+  }
+  if (Number(connective?.value ?? 100) < 40) {
+    notExpectItems.push("Do not rely on him as the main tempo/link player.");
+  }
+
+  const evidenceRows = [
+    creation,
+    preAssist,
+    goalThreat,
+    connective,
+    carrying,
+    defensive,
+  ].filter(Boolean) as PeerDimensionRow[];
+
+  const seasonRows = [
+    { label: "Pre-Assists", value: preAssist?.value, rank: rowRankText(preAssist, ranks) },
+    { label: "xA", value: pr.xa_per90_percentile, rank: percentileText(pr.xa_per90_percentile) },
+    { label: "Assists", value: pr.assists_per90_percentile, rank: percentileText(pr.assists_per90_percentile) },
+    { label: "Key Passes", value: pr.key_passes_per90_percentile, rank: percentileText(pr.key_passes_per90_percentile) },
+    { label: "Big Chances Created", value: pr.big_chances_created_percentile, rank: percentileText(pr.big_chances_created_percentile) },
+    { label: "Goals", value: pr.goals_per90_percentile, rank: percentileText(pr.goals_per90_percentile) },
+    { label: "xG", value: pr.xg_per90_percentile, rank: percentileText(pr.xg_per90_percentile) },
+    { label: "Shots", value: pr.shots_per90_percentile, rank: percentileText(pr.shots_per90_percentile) },
+    { label: "xGOT", value: pr.xgot_per90_percentile, rank: percentileText(pr.xgot_per90_percentile) },
+    { label: "xGChain", value: pr.xg_chain_per90_percentile, rank: percentileText(pr.xg_chain_per90_percentile) },
+    { label: "xGBuildup", value: pr.xg_buildup_per90_percentile, rank: percentileText(pr.xg_buildup_per90_percentile) },
+    { label: "Final-third passes", value: pr.accurate_final_third_passes_per90_percentile, rank: percentileText(pr.accurate_final_third_passes_per90_percentile) },
+  ];
+
+  return {
+    headline,
+    top,
+    concernItems,
+    usageItems,
+    notExpectItems,
+    evidenceRows,
+    seasonRows,
+  };
+}
+
 function methodVariantForPosition(position: string | null | undefined): React.ComponentProps<typeof RatingMethodNote>["variant"] {
   const pos = (position ?? "").toUpperCase();
   if (["CB", "LB", "RB", "LWB", "RWB", "DEF", "DEFENDER"].includes(pos)) return "defender";
@@ -991,6 +1119,9 @@ function PlayerProfilePage() {
   const wingerReport = isWinger && activePeerRating
     ? wingerScoutReport(peerDimensionRows, activePeerRating)
     : null;
+  const camReport = isCAM && activePeerRating
+    ? camScoutReport(peerDimensionRows, activePeerMetricRanks, activePeerRating)
+    : null;
   const attackingScoutReport = stReport
     ? {
         report: stReport,
@@ -1005,6 +1136,13 @@ function PlayerProfilePage() {
           emptyWarning: "No major winger-specific statistical warning in this peer pool.",
           seasonTitle: "Season Wide-Play Context",
         }
+      : camReport
+        ? {
+            report: camReport,
+            title: "AM Scout Report",
+            emptyWarning: "No major AM-specific statistical warning in this peer pool.",
+            seasonTitle: "Season Creation Context",
+          }
       : null;
   const socialScoutingReport: SocialScoutingReportCardProps | null =
     activePeerRating && attackingScoutReport
