@@ -47,6 +47,8 @@ const POSITION_LABELS: Record<string, string> = {
   CF: "Centre-Forwards",
   LW: "Wingers",
   RW: "Wingers",
+  LM: "Wingers",
+  RM: "Wingers",
   WINGER: "Wingers",
   CAM: "Attacking Midfielders",
   CM: "Central Midfielders",
@@ -54,12 +56,11 @@ const POSITION_LABELS: Record<string, string> = {
   DM: "Central Midfielders",
   MID: "Central Midfielders",
   MIDFIELDER: "Central Midfielders",
-  LM: "Left Midfielders",
-  RM: "Right Midfielders",
-  LB: "Left Backs",
-  RB: "Right Backs",
-  LWB: "Left Wing-Backs",
-  RWB: "Right Wing-Backs",
+  FB: "Fullbacks",
+  LB: "Fullbacks",
+  RB: "Fullbacks",
+  LWB: "Fullbacks",
+  RWB: "Fullbacks",
   CB: "Centre-Backs",
   DEF: "Defenders",
   GK: "Goalkeepers",
@@ -148,10 +149,10 @@ function scoreCopy(score: number | null | undefined, roleLabel: string | null) {
 
 function getPeerDimensionRows(
   pr: PeerRating,
-  flags: { isWinger: boolean; isDefensiveWinger: boolean; isCAM: boolean; isCM: boolean; isDefender: boolean },
+  flags: { isWinger: boolean; isCAM: boolean; isCM: boolean; isDefender: boolean },
   preAssistPercentile: number | undefined,
 ): PeerDimensionRow[] {
-  if (flags.isWinger || flags.isDefensiveWinger) {
+  if (flags.isWinger) {
     return [
       { label: "Overall Season Value", sublabel: "Know Ball Score percentile", value: pr.overall_percentile },
       { label: "1v1 Threat", sublabel: "productive dribbling", value: pr.productive_dribbling_percentile },
@@ -434,19 +435,18 @@ function PlayerProfilePage() {
 
   const isST = player.position === "ST" || player.position === "CF";
   const isCAM = player.position === "CAM";
-  const isWinger = player.position === "LW" || player.position === "RW";
-  const isDefensiveWinger =
-    player.position === "LM" || player.position === "RM";
   const playerPosition = (player.position ?? "").toUpperCase();
+  const isWinger = ["LW", "RW", "LM", "RM"].includes(playerPosition);
   const isCM = ["CM", "CDM", "DM", "MID", "MIDFIELDER"].includes(playerPosition);
   const isCDM = false;
+  const isDefensiveWinger = false;
   const isDefender =
     player.position === "CB" ||
     player.position === "LB" ||
     player.position === "RB" ||
     player.position === "LWB" ||
     player.position === "RWB";
-  const isSupported = isST || isCAM || isWinger || isDefensiveWinger || isCM || isDefender;
+  const isSupported = isST || isCAM || isWinger || isCM || isDefender;
 
   // Passing computed values
   const passesCompleted = stats ? (stats.passes_completed ?? 0) : 0;
@@ -487,7 +487,7 @@ function PlayerProfilePage() {
   const peerDimensionRows = activePeerRating
     ? getPeerDimensionRows(
         activePeerRating,
-        { isWinger, isDefensiveWinger, isCAM, isCM, isDefender },
+        { isWinger, isCAM, isCM, isDefender },
         activePreAssistPercentile ?? undefined,
       )
     : [];

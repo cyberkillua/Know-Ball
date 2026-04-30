@@ -319,8 +319,8 @@ function getStatSectionsForPosition(position: string | null, archetype?: string 
   const pos = (position ?? 'ST').toUpperCase()
   const isST = pos === 'ST' || pos === 'CF'
   const isCAM = pos === 'CAM'
-  const isWinger = pos === 'LW' || pos === 'RW'
-  const isDefWinger = pos === 'LM' || pos === 'RM'
+  const isWinger = pos === 'LW' || pos === 'RW' || pos === 'LM' || pos === 'RM'
+  const isDefWinger = false
   const isCM = ['CM', 'CDM', 'DM', 'MID', 'MIDFIELDER'].includes(pos)
   const isDefender = pos === 'CB' || pos === 'LB' || pos === 'RB' || pos === 'LWB' || pos === 'RWB'
 
@@ -541,10 +541,10 @@ function PercentileComparison({
 
 const POSITION_LABELS: Record<string, string> = {
   ST: 'Strikers', CF: 'Centre-Forwards', LW: 'Wingers', RW: 'Wingers',
-  WINGER: 'Wingers', LM: 'Left Midfielders', RM: 'Right Midfielders',
+  WINGER: 'Wingers', LM: 'Wingers', RM: 'Wingers',
   CAM: 'Attacking Midfielders', CM: 'Central Midfielders', CDM: 'Central Midfielders',
   DM: 'Central Midfielders', MID: 'Central Midfielders', MIDFIELDER: 'Central Midfielders',
-  LB: 'Left Backs', RB: 'Right Backs', LWB: 'Left Wing-Backs', RWB: 'Right Wing-Backs',
+  FB: 'Fullbacks', LB: 'Fullbacks', RB: 'Fullbacks', LWB: 'Fullbacks', RWB: 'Fullbacks',
   CB: 'Centre-Backs', DEF: 'Defenders', GK: 'Goalkeepers',
 }
 

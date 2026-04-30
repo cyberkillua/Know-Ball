@@ -31,6 +31,7 @@ POSITION_GROUPS: list[tuple[list[str], str, str]] = [
     (["LW", "RW", "LM", "RM"], "W", "WINGER"),
     (["CM", "CDM"], "CM", "CM"),
     (["CB"], "DEF", "CB"),
+    (["LB", "RB", "LWB", "RWB"], "DEF", "FB"),
 ]
 # Each tuple: (profile_positions, rating_position, label)
 # profile_positions — players.position values that belong to the peer group
@@ -44,7 +45,8 @@ CASE
     WHEN {alias}.position IN ('CAM', 'AM') THEN 'CAM'
     WHEN {alias}.position IN ('CM', 'CDM', 'DM', 'MID', 'MIDFIELDER') THEN 'CM'
     WHEN {alias}.position IN ('CB') THEN 'CB'
-    WHEN {alias}.position IN ('LB', 'RB', 'LWB', 'RWB', 'DEF', 'DEFENDER') THEN 'DEF'
+    WHEN {alias}.position IN ('LB', 'RB', 'LWB', 'RWB') THEN 'FB'
+    WHEN {alias}.position IN ('DEF', 'DEFENDER') THEN 'DEF'
     WHEN {alias}.position IN ('GK', 'GOALKEEPER') THEN 'GK'
     ELSE NULL
 END

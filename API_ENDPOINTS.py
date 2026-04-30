@@ -474,8 +474,10 @@ function Leaderboard() {
       
       <select onChange={e => setSelectedPosition(e.target.value)}>
         <option value="ST">Strikers</option>
+        <option value="WINGER">Wingers</option>
         <option value="CM">Midfielders</option>
-        <option value="CB">Defenders</option>
+        <option value="CB">Centre-Backs</option>
+        <option value="FB">Fullbacks</option>
       </select>
       
       <table>

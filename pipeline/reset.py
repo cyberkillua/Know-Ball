@@ -28,10 +28,12 @@ def _get_position_bucket(pos: str) -> tuple[list[str], list[str]]:
         return ["ST"], ["ST"]
     if pos in ("LW", "RW", "LM", "RM", "W", "WINGER"):
         return ["W"], ["WINGER"]
-    if pos in ("CB", "DEF"):
+    if pos == "DEF":
+        return ["DEF"], ["CB", "FB", "DEF"]
+    if pos == "CB":
         return ["DEF"], ["CB"]
-    if pos in ("LB", "RB", "LWB", "RWB"):
-        return ["DEF"], ["DEF"]
+    if pos in ("LB", "RB", "LWB", "RWB", "FB", "FULLBACK", "FULLBACKS"):
+        return ["DEF"], ["FB"]
     if pos == "GK":
         return ["GK"], ["GK"]
     return [pos], [pos]
