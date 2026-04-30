@@ -11,6 +11,38 @@ import type { Match, MatchRating } from '../lib/types'
 
 export const Route = createFileRoute('/match/$id')({ component: MatchDetailPage })
 
+function ratingBarsFor(r: MatchRating) {
+  if (r.position === 'DEF') {
+    return {
+      values: {
+        finishing: Number(r.defensive_norm ?? 0),
+        involvement: Number(r.duels_norm ?? 0),
+        carrying: Number(r.carrying_norm ?? 0),
+        physical: Number(r.team_function_norm ?? 0),
+        pressing: Number(r.volume_passing_norm ?? 0),
+      },
+      labels: {
+        finishing: 'Box Def.',
+        involvement: 'Duels',
+        carrying: 'Carrying',
+        physical: 'Composure',
+        pressing: 'Passing',
+      },
+    }
+  }
+
+  return {
+    values: {
+      finishing: Number(r.finishing_norm ?? 0),
+      involvement: Number(r.involvement_norm ?? r.chance_creation_norm ?? 0),
+      carrying: Number(r.carrying_norm ?? 0),
+      physical: Number(r.duels_norm ?? r.goal_threat_norm ?? 0),
+      pressing: Number(r.defensive_norm ?? 0),
+    },
+    labels: undefined,
+  }
+}
+
 function MatchDetailPage() {
   const { id } = Route.useParams()
   const [match, setMatch] = useState<Match | null>(null)
@@ -61,6 +93,7 @@ function MatchDetailPage() {
     { label: 'Aerials Won', homeVal: homeStats.aerials_won ?? 0, awayVal: awayStats.aerials_won ?? 0 },
     { label: 'Dribbles', homeVal: homeStats.dribbles ?? 0, awayVal: awayStats.dribbles ?? 0 },
   ] : []
+  const motmBars = motm ? ratingBarsFor(motm) : null
 
   return (
     <div className="space-y-6">
@@ -102,11 +135,11 @@ function MatchDetailPage() {
             playerName={(motm as any).player?.name ?? `Player ${motm.player_id}`}
             position={motm.position ?? undefined}
             rating={Number(motm.final_rating)}
-            finishing={Number(motm.finishing_norm)}
-            involvement={Number(motm.involvement_norm)}
-            carrying={Number(motm.carrying_norm)}
-            physical={Number(motm.physical_norm)}
-            pressing={Number(motm.pressing_norm)}
+            finishing={motmBars?.values.finishing ?? 0}
+            involvement={motmBars?.values.involvement ?? 0}
+            carrying={motmBars?.values.carrying ?? 0}
+            physical={motmBars?.values.physical ?? 0}
+            pressing={motmBars?.values.pressing ?? 0}
           />
         )}
 
@@ -133,33 +166,37 @@ function MatchDetailPage() {
         <CardContent>
           {ratings.length > 0 ? (
             <div className="space-y-3">
-              {ratings.map((r) => (
-                <div
-                  key={r.id}
-                  className="card-glow flex items-center gap-3 rounded-lg border border-border bg-card/50 p-3"
-                >
-                  <RatingBadge rating={Number(r.final_rating)} />
-                  <div className="flex-1 min-w-0">
-                    <Link
-                      to="/player/$id"
-                      params={{ id: String(r.player_id) }}
-                      className="text-sm font-semibold text-foreground no-underline hover:text-primary"
-                    >
-                      {(r as any).player?.name ?? `Player ${r.player_id}`}
-                    </Link>
-                    <div className="text-xs text-muted-foreground">{r.position}</div>
+              {ratings.map((r) => {
+                const bars = ratingBarsFor(r)
+                return (
+                  <div
+                    key={r.id}
+                    className="card-glow flex items-center gap-3 rounded-lg border border-border bg-card/50 p-3"
+                  >
+                    <RatingBadge rating={Number(r.final_rating)} />
+                    <div className="flex-1 min-w-0">
+                      <Link
+                        to="/player/$id"
+                        params={{ id: String(r.player_id) }}
+                        className="text-sm font-semibold text-foreground no-underline hover:text-primary"
+                      >
+                        {(r as any).player?.name ?? `Player ${r.player_id}`}
+                      </Link>
+                      <div className="text-xs text-muted-foreground">{r.position}</div>
+                    </div>
+                    <div className="hidden sm:block w-48">
+                      <MiniCategoryBarsLabeled
+                        finishing={bars.values.finishing}
+                        involvement={bars.values.involvement}
+                        carrying={bars.values.carrying}
+                        physical={bars.values.physical}
+                        pressing={bars.values.pressing}
+                        labels={bars.labels}
+                      />
+                    </div>
                   </div>
-                  <div className="hidden sm:block w-48">
-                    <MiniCategoryBarsLabeled
-                      finishing={Number(r.finishing_norm)}
-                      involvement={Number(r.involvement_norm)}
-                      carrying={Number(r.carrying_norm)}
-                      physical={Number(r.physical_norm)}
-                      pressing={Number(r.pressing_norm)}
-                    />
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">

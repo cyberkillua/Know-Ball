@@ -62,6 +62,8 @@ def get_unrated_records_batch(db: DB, last_id: int, batch_size: int) -> list[dic
                mps.error_lead_to_shot,
                mps.yellow_cards,
                mps.red_cards,
+               mps.penalty_conceded,
+               mps.own_goals,
                mps.total_ball_carries_distance,
                mps.total_progressive_ball_carries_distance,
                mps.pass_value_normalized,
@@ -75,6 +77,14 @@ def get_unrated_records_batch(db: DB, last_id: int, batch_size: int) -> list[dic
                    WHEN mps.team_id = m.away_team_id THEN m.home_score
                    ELSE NULL
                END AS team_goals_conceded,
+               CASE
+                   WHEN mps.team_id = m.home_team_id THEN m.home_score
+                   WHEN mps.team_id = m.away_team_id THEN m.away_score
+                   ELSE NULL
+               END AS team_goals_for,
+               opp_mts.expected_goals AS team_expected_goals_conceded,
+               opp_mts.big_chances    AS team_big_chances_conceded,
+               opp_mts.total_shots    AS team_shots_conceded,
                mts.possession_pct  AS team_possession_pct,
                mts.total_shots     AS team_total_shots,
                p.position AS player_position
@@ -82,6 +92,7 @@ def get_unrated_records_batch(db: DB, last_id: int, batch_size: int) -> list[dic
         JOIN matches m ON m.id = mps.match_id
         JOIN players p ON p.id = mps.player_id
         LEFT JOIN match_team_stats mts ON mts.match_id = mps.match_id AND mts.team_id = mps.team_id
+        LEFT JOIN match_team_stats opp_mts ON opp_mts.match_id = mps.match_id AND opp_mts.team_id <> mps.team_id
         WHERE mps.id > %s
           AND p.position IS NOT NULL
           AND mps.minutes_played >= %s
@@ -241,7 +252,17 @@ def rate_record(
         error_lead_to_shot=record.get("error_lead_to_shot") or 0,
         yellow_cards=record.get("yellow_cards") or 0,
         red_cards=record.get("red_cards") or 0,
+        penalty_conceded=record.get("penalty_conceded") or 0,
+        own_goals=record.get("own_goals") or 0,
         team_goals_conceded=record.get("team_goals_conceded"),
+        team_goals_for=record.get("team_goals_for"),
+        team_expected_goals_conceded=(
+            float(record.get("team_expected_goals_conceded"))
+            if record.get("team_expected_goals_conceded") is not None
+            else None
+        ),
+        team_big_chances_conceded=record.get("team_big_chances_conceded"),
+        team_shots_conceded=record.get("team_shots_conceded"),
         total_ball_carries_distance=float(record.get("total_ball_carries_distance") or 0),
         total_progressive_ball_carries_distance=float(
             record.get("total_progressive_ball_carries_distance") or 0

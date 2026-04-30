@@ -14,6 +14,7 @@ interface Props {
   pressing: number
   /** 'norm' = normalized scores [-3, +3], 'pct' = percentile values [0, 10] */
   mode?: 'norm' | 'pct'
+  labels?: Partial<Record<(typeof CATEGORIES)[number]['key'], string>>
 }
 
 function toPct(value: number, mode: 'norm' | 'pct'): number {
@@ -54,7 +55,7 @@ export default function MiniCategoryBars({ finishing, involvement, carrying, phy
   )
 }
 
-export function MiniCategoryBarsLabeled({ finishing, involvement, carrying, physical, pressing, mode = 'norm' }: Props) {
+export function MiniCategoryBarsLabeled({ finishing, involvement, carrying, physical, pressing, mode = 'norm', labels }: Props) {
   const values = { finishing, involvement, carrying, physical, pressing }
 
   const LABELS: Record<string, string> = {
@@ -69,7 +70,7 @@ export function MiniCategoryBarsLabeled({ finishing, involvement, carrying, phys
     <div className="space-y-1.5">
       {CATEGORIES.map(({ key, color }) => (
         <div key={key} className="flex items-center gap-2">
-          <span className="w-20 text-right text-xs text-muted-foreground">{LABELS[key]}</span>
+          <span className="w-20 text-right text-xs text-muted-foreground">{labels?.[key] ?? LABELS[key]}</span>
           <div className="relative h-2 flex-1 rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>
             <div
               className="absolute left-0 top-0 h-full rounded-full transition-all duration-700"

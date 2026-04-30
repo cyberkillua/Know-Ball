@@ -34,6 +34,9 @@ import type {
   Shot,
 } from "../lib/types";
 import ShotProfile from "../components/ShotProfile";
+import RatingMethodNote from "../components/RatingMethodNote";
+
+type PlayerTab = "overview" | "stats" | "scouting" | "matches";
 
 export const Route = createFileRoute("/player/$id")({
   component: PlayerProfilePage,
@@ -213,6 +216,15 @@ function strongestSignals(rows: PeerDimensionRow[], takeWeak = false) {
     .slice(0, 3);
 }
 
+function methodVariantForPosition(position: string | null | undefined): React.ComponentProps<typeof RatingMethodNote>["variant"] {
+  const pos = (position ?? "").toUpperCase();
+  if (["CB", "LB", "RB", "LWB", "RWB", "DEF", "DEFENDER"].includes(pos)) return "defender";
+  if (["CM", "CDM", "DM", "MID", "MIDFIELDER"].includes(pos)) return "midfielder";
+  if (["CAM", "AM"].includes(pos)) return "attacking-midfielder";
+  if (["LW", "RW", "LM", "RM", "W", "WINGER"].includes(pos)) return "winger";
+  return "forward";
+}
+
 // Select percentile based on mode (per90 vs raw)
 // Returns 0 if not qualified (under 300 mins) since percentiles require minimum playing time
 function pct(
@@ -271,6 +283,7 @@ function PlayerProfilePage() {
   const [peerScope, setPeerScope] = useState<"league" | "all">("league");
   const [statMode, setStatMode] = useState<"per90" | "raw">("per90");
   const [viewMode, setViewMode] = useState<"bars" | "pizza">("bars");
+  const [activeTab, setActiveTab] = useState<PlayerTab>("overview");
   const percentileCardRef = useRef<HTMLDivElement>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
@@ -454,6 +467,9 @@ function PlayerProfilePage() {
   const activePeerRating = peerScope === "league" ? peerRating : allPeerRating;
   const roleArchetype = formatRoleArchetype(
     activePeerRating?.role_archetype ?? activePeerRating?.cm_archetype,
+  );
+  const ratingMethodVariant = methodVariantForPosition(
+    activePeerRating?.position ?? player.position,
   );
   const activePeerMinMinutes = 300;
   const percentileHasEnoughTotalMinutes = (stats?.minutes ?? 0) >= PERCENTILE_MIN_MINUTES;
@@ -659,9 +675,105 @@ function PlayerProfilePage() {
 
       {/* Season-filtered content */}
       <div className={contentClass}>
+        <div className="mt-4 border-b border-border">
+          <div className="flex gap-1 overflow-x-auto">
+            {[
+              { id: "overview", label: "Overview" },
+              { id: "stats", label: "Stats" },
+              { id: "scouting", label: "Scouting Report" },
+              { id: "matches", label: "Matches" },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as PlayerTab)}
+                className={`border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+                  activeTab === tab.id
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
         {/* ── Detailed Stats — all outfield positions ───────────────── */}
         {stats ? (
           <>
+            {activeTab === "overview" && (
+              <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr]">
+                <Card>
+                  <CardContent className="p-5">
+                    <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Season Snapshot
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      <div>
+                        <div className="text-[11px] text-muted-foreground">Apps</div>
+                        <div className="text-lg font-bold">{stats.matches ?? 0}</div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-muted-foreground">Minutes</div>
+                        <div className="text-lg font-bold">{stats.minutes?.toLocaleString() ?? 0}</div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-muted-foreground">Avg Rating</div>
+                        <div className="text-lg font-bold">{avgRating > 0 ? avgRating.toFixed(2) : "—"}</div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-muted-foreground">Score</div>
+                        <div className="text-lg font-bold">{activePeerRating?.model_score != null ? Number(activePeerRating.model_score).toFixed(1) : "—"}</div>
+                      </div>
+                    </div>
+                    {roleArchetype && (
+                      <div className="mt-4 inline-flex border border-border bg-muted px-2.5 py-1 text-xs font-semibold text-foreground">
+                        {roleArchetype}
+                      </div>
+                    )}
+                    {confidenceMessage && (
+                      <div className="mt-3 text-xs text-muted-foreground">{confidenceMessage}</div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="p-5">
+                    <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Quick Read
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <div className="mb-2 text-xs font-semibold text-foreground">Best signals</div>
+                        <div className="space-y-2">
+                          {bestSignals.length > 0 ? bestSignals.map((row) => (
+                            <div key={`overview-best-${row.label}`} className="flex items-baseline justify-between gap-3 text-xs">
+                              <span className="text-muted-foreground">{row.label}</span>
+                              <span className="font-bold text-foreground">{Math.round(Number(row.value))}</span>
+                            </div>
+                          )) : (
+                            <div className="text-xs text-muted-foreground">No peer signal yet.</div>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="mb-2 text-xs font-semibold text-foreground">Watch areas</div>
+                        <div className="space-y-2">
+                          {weakSignals.length > 0 ? weakSignals.map((row) => (
+                            <div key={`overview-watch-${row.label}`} className="flex items-baseline justify-between gap-3 text-xs">
+                              <span className="text-muted-foreground">{row.label}</span>
+                              <span className="font-bold text-foreground">{Math.round(Number(row.value))}</span>
+                            </div>
+                          )) : (
+                            <div className="text-xs text-muted-foreground">No peer signal yet.</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+            {activeTab === "stats" && (
             <Card className="mt-4" ref={percentileCardRef}>
               <CardContent className="p-6">
                 {/* ── Header with toggles ───────────────────────────── */}
@@ -7847,8 +7959,12 @@ function PlayerProfilePage() {
                 </div>
               </CardContent>
             </Card>
+            )}
 
             {/* ── Peer Comparison ──────────────────────────────────────────── */}
+            {activeTab === "scouting" && (
+            <>
+            <RatingMethodNote variant={ratingMethodVariant} />
             <Card className="mt-4">
               <CardContent className="p-5">
                 <div
@@ -8429,6 +8545,8 @@ function PlayerProfilePage() {
                 )}
               </CardContent>
             </Card>
+            </>
+            )}
           </>
         ) : (
           !isSupported && (
@@ -8445,6 +8563,7 @@ function PlayerProfilePage() {
         )}
 
         {/* ── Shot Profile ─────────────────────────────────────────────────── */}
+        {activeTab === "stats" && (
         <Card className="mt-4">
           <CardHeader>
             <CardTitle>Shot Profile</CardTitle>
@@ -8457,8 +8576,10 @@ function PlayerProfilePage() {
             />
           </CardContent>
         </Card>
+        )}
 
         {/* ── Rating History ───────────────────────────────────────────────── */}
+        {activeTab === "matches" && (
         <Card className="mt-4">
           <CardHeader>
             <CardTitle>Rating History</CardTitle>
@@ -8473,6 +8594,7 @@ function PlayerProfilePage() {
             )}
           </CardContent>
         </Card>
+        )}
       </div>
     </div>
   );

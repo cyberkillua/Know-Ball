@@ -135,6 +135,63 @@ _CALC_MAP = {
 }
 
 
+def _is_centre_back(stats: PlayerMatchStats) -> bool:
+    pos = (stats.profile_position or "").upper().strip()
+    return pos in {"CB", "D", "DEF", "DEFENDER"}
+
+
+def _calculate_result_lift(stats: PlayerMatchStats, constants: dict) -> float:
+    if stats.team_goals_for is None or stats.team_goals_conceded is None:
+        return 0.0
+    if stats.minutes_played < constants.get("result_context_min_minutes", 45):
+        return 0.0
+    if stats.team_goals_for > stats.team_goals_conceded:
+        return constants.get("win_bonus", 0.04)
+    if stats.team_goals_for < stats.team_goals_conceded:
+        return -constants.get("loss_penalty", 0.03)
+    return constants.get("draw_bonus", 0.0)
+
+
+def _calculate_cb_context_lift(stats: PlayerMatchStats, constants: dict) -> float:
+    """Small team-defense context for CBs; never enough to dominate actions."""
+    if not _is_centre_back(stats):
+        return 0.0
+    if stats.minutes_played < constants.get("cb_context_min_minutes", 60):
+        return 0.0
+
+    lift = 0.0
+    conceded = stats.team_goals_conceded
+    if conceded is not None:
+        goals_after_first = max(0, int(conceded) - 1)
+        lift -= min(
+            goals_after_first * constants.get("goal_conceded_after_first_penalty", 0.04),
+            constants.get("goal_conceded_penalty_cap", 0.12),
+        )
+
+    xg_against = stats.team_expected_goals_conceded
+    if xg_against is not None:
+        low_bar = constants.get("low_xg_against_bonus_threshold", 0.7)
+        high_bar = constants.get("high_xg_against_penalty_threshold", 1.8)
+        if xg_against <= low_bar:
+            lift += constants.get("low_xg_against_bonus", 0.04)
+        elif xg_against >= high_bar:
+            excess = xg_against - high_bar
+            lift -= min(
+                excess * constants.get("high_xg_against_penalty_weight", 0.04),
+                constants.get("high_xg_against_penalty_cap", 0.08),
+            )
+
+    big_chances = stats.team_big_chances_conceded
+    if big_chances is not None:
+        excess_big_chances = max(0, int(big_chances) - 2)
+        lift -= min(
+            excess_big_chances * constants.get("big_chance_conceded_penalty", 0.025),
+            constants.get("big_chance_conceded_penalty_cap", 0.06),
+        )
+
+    return lift
+
+
 def calculate_def_rating(
     stats: PlayerMatchStats,
     config: dict,
@@ -173,7 +230,11 @@ def calculate_def_rating(
     final += goal_lift
     final += assist_lift
     final += clean_sheet_lift
+    final += _calculate_result_lift(stats, constants)
+    final += _calculate_cb_context_lift(stats, constants)
     final -= stats.error_lead_to_goal * constants.get("error_lead_to_goal_penalty", 0.65)
+    final -= stats.penalty_conceded * constants.get("penalty_conceded_penalty", 0.35)
+    final -= stats.own_goals * constants.get("own_goal_penalty", 0.45)
     final += stats.red_cards * constants.get("red_card_penalty", -1.0)
     final += stats.yellow_cards * constants.get("yellow_card_penalty", -0.05)
 

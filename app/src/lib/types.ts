@@ -115,6 +115,8 @@ export interface MatchRating {
   position: string
   finishing_raw: number
   finishing_norm: number
+  involvement_raw: number | null
+  involvement_norm: number | null
   shot_generation_raw: number
   shot_generation_norm: number
   chance_creation_raw: number
@@ -123,10 +125,18 @@ export interface MatchRating {
   team_function_norm: number
   carrying_raw: number
   carrying_norm: number
+  physical_raw: number | null
+  physical_norm: number | null
+  pressing_raw: number | null
+  pressing_norm: number | null
   duels_raw: number
   duels_norm: number
   defensive_raw: number
   defensive_norm: number
+  volume_passing_raw: number | null
+  volume_passing_norm: number | null
+  goal_threat_raw: number | null
+  goal_threat_norm: number | null
   final_rating: number
   fotmob_rating: number | null
   player?: Player
@@ -247,6 +257,7 @@ export interface PeerRating {
   team_function_percentile: number | null
   duels_percentile: number | null
   defensive_percentile: number | null
+  volume_passing_percentile: number | null
   // Winger dimension percentiles
   productive_dribbling_percentile: number | null
   goal_contribution_percentile: number | null

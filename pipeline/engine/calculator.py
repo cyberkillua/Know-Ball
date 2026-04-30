@@ -60,6 +60,12 @@ class PlayerMatchStats:
     red_cards: int = 0
     yellow_cards: int = 0
     team_goals_conceded: int | None = None
+    team_goals_for: int | None = None
+    team_expected_goals_conceded: float | None = None
+    team_big_chances_conceded: int | None = None
+    team_shots_conceded: int | None = None
+    penalty_conceded: int = 0
+    own_goals: int = 0
     # Ball carry distance (from Sofascore, per-match)
     total_ball_carries_distance: float = 0.0
     total_progressive_ball_carries_distance: float = 0.0

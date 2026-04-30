@@ -25,6 +25,16 @@ export default function MotmCard({
   physical,
   pressing,
 }: Props) {
+  const labels = position === 'DEF'
+    ? {
+        finishing: 'Box Def.',
+        involvement: 'Duels',
+        carrying: 'Carrying',
+        physical: 'Composure',
+        pressing: 'Passing',
+      }
+    : undefined
+
   return (
     <div className="card-glow-gold rounded-none border border-amber-500/20 bg-gradient-to-br from-amber-500/5 to-card p-5">
       <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-amber-400">
@@ -47,6 +57,7 @@ export default function MotmCard({
               carrying={carrying}
               physical={physical}
               pressing={pressing}
+              labels={labels}
             />
           </div>
         </div>
