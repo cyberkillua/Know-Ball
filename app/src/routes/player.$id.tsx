@@ -766,6 +766,131 @@ function camScoutReport(
   };
 }
 
+function defenderScoutReport(
+  rows: PeerDimensionRow[],
+  pr: PeerRating,
+  stats: PlayerStats | null,
+) {
+  const signalRows = rows.filter((row) => row.label !== "Overall Season Value" && row.value != null);
+  const ordered = [...signalRows].sort((a, b) => Number(b.value) - Number(a.value));
+  const top = ordered.slice(0, 3);
+
+  const boxDefending = rowByMetric(rows, "defensive_percentile");
+  const duels = rowByMetric(rows, "duels_percentile");
+  const composure = rowByMetric(rows, "team_function_percentile");
+  const recovery = rowByMetric(rows, "carrying_percentile");
+  const ballPlaying = rowByMetric(rows, "volume_passing_percentile");
+  const setPieceThreat = rowByMetric(rows, "goal_threat_percentile");
+
+  const duelScore = [
+    duels?.value,
+    pr.aerials_per90_percentile,
+    pr.aerial_win_rate_percentile,
+    pr.ground_duels_won_per90_percentile,
+  ].filter((value) => value != null).reduce((sum, value, _idx, arr) => sum + Number(value) / arr.length, 0);
+
+  const ballPlayingScore = [
+    ballPlaying?.value,
+    pr.pass_value_normalized_percentile,
+    pr.accurate_long_balls_per90_percentile,
+    pr.long_ball_accuracy_percentile,
+    pr.passing_accuracy_percentile,
+  ].filter((value) => value != null).reduce((sum, value, _idx, arr) => sum + Number(value) / arr.length, 0);
+
+  const riskEvents = (stats?.errors_led_to_goal ?? 0) + (stats?.errors_led_to_shot ?? 0);
+
+  const topLabels = top.map((row) => row.label.toLowerCase());
+  const headline = top.length > 0
+    ? `Main value signals: ${sentenceList(topLabels)}.`
+    : "Not enough defender value signals yet to form a clear read.";
+
+  const concernItems: string[] = [];
+  const usageItems: string[] = [];
+  const notExpectItems: string[] = [];
+
+  if (Number(boxDefending?.value ?? 50) >= 70) {
+    usageItems.push("Use him as a penalty-box defender who can absorb direct pressure.");
+  }
+  if (duelScore >= 70 || Number(duels?.value ?? 50) >= 70) {
+    usageItems.push("He can handle aerial and physical duel responsibility.");
+  }
+  if (ballPlayingScore >= 70 || Number(ballPlaying?.value ?? 50) >= 70) {
+    usageItems.push("He can be trusted as a build-up outlet from the back line.");
+  }
+  if (Number(composure?.value ?? 50) >= 70) {
+    usageItems.push("He profiles as a secure possession defender under pressure.");
+  }
+  if (Number(recovery?.value ?? 50) >= 70) {
+    usageItems.push("He can cover space and recover actions outside the box.");
+  }
+  if (Number(setPieceThreat?.value ?? 50) >= 70) {
+    usageItems.push("He adds useful set-piece threat in the opposition box.");
+  }
+  if (usageItems.length === 0 && top.length > 0) {
+    usageItems.push(`Build the defensive role around ${sentenceList(top.slice(0, 2).map((row) => row.label.toLowerCase()))}.`);
+  }
+
+  if (Number(boxDefending?.value ?? 100) < 40) {
+    concernItems.push("Observable box-defending output is light relative to defender peers.");
+  }
+  if (duelScore < 40 && Number(duels?.value ?? 100) < 40) {
+    concernItems.push("Duel profile is a watch area, especially in isolated defensive matchups.");
+  }
+  if (ballPlayingScore < 40 && Number(ballPlaying?.value ?? 100) < 40) {
+    concernItems.push("Ball-playing value is limited compared with this defender pool.");
+  }
+  if (Number(composure?.value ?? 100) < 40 || riskEvents > 0) {
+    concernItems.push("Composure and mistake control need checking under pressure.");
+  }
+  if (Number(recovery?.value ?? 100) < 40) {
+    concernItems.push("Recovery and mobility signals are not a major strength.");
+  }
+
+  if (Number(duels?.value ?? 100) < 40) {
+    notExpectItems.push("Do not isolate him as the main aerial or physical stopper.");
+  }
+  if (Number(ballPlaying?.value ?? 100) < 40) {
+    notExpectItems.push("Do not make him the main progression outlet in build-up.");
+  }
+  if (Number(composure?.value ?? 100) < 40) {
+    notExpectItems.push("Do not overexpose him to high-pressure possession sequences.");
+  }
+
+  const evidenceRows = [
+    boxDefending,
+    duels,
+    composure,
+    recovery,
+    ballPlaying,
+    setPieceThreat,
+  ].filter(Boolean) as PeerDimensionRow[];
+
+  const seasonRows = [
+    { label: "Tackles", value: pr.tackles_per90_percentile, rank: percentileText(pr.tackles_per90_percentile) },
+    { label: "Interceptions", value: pr.interceptions_per90_percentile, rank: percentileText(pr.interceptions_per90_percentile) },
+    { label: "Recoveries", value: pr.ball_recoveries_per90_percentile, rank: percentileText(pr.ball_recoveries_per90_percentile) },
+    { label: "Aerials", value: pr.aerials_per90_percentile, rank: percentileText(pr.aerials_per90_percentile) },
+    { label: "Aerial Win Rate", value: pr.aerial_win_rate_percentile, rank: percentileText(pr.aerial_win_rate_percentile) },
+    { label: "Ground Duels", value: pr.ground_duels_won_per90_percentile, rank: percentileText(pr.ground_duels_won_per90_percentile) },
+    { label: "Pass Value", value: pr.pass_value_normalized_percentile, rank: percentileText(pr.pass_value_normalized_percentile) },
+    { label: "Pass Accuracy", value: pr.passing_accuracy_percentile, rank: percentileText(pr.passing_accuracy_percentile) },
+    { label: "Long Balls", value: pr.accurate_long_balls_per90_percentile, rank: percentileText(pr.accurate_long_balls_per90_percentile) },
+    { label: "Long Ball Acc.", value: pr.long_ball_accuracy_percentile, rank: percentileText(pr.long_ball_accuracy_percentile) },
+    { label: "Set-Piece xG", value: pr.xg_per90_percentile, rank: percentileText(pr.xg_per90_percentile) },
+    { label: "Errors to Shot/Goal", value: null, rank: `${stats?.errors_led_to_shot ?? 0}/${stats?.errors_led_to_goal ?? 0}` },
+  ];
+
+  return {
+    headline,
+    top,
+    concernItems,
+    usageItems,
+    notExpectItems,
+    evidenceRows,
+    seasonRows,
+  };
+}
+
 function methodVariantForPosition(position: string | null | undefined): React.ComponentProps<typeof RatingMethodNote>["variant"] {
   const pos = (position ?? "").toUpperCase();
   if (["CB", "LB", "RB", "LWB", "RWB", "DEF", "DEFENDER"].includes(pos)) return "defender";
@@ -1060,7 +1185,9 @@ function PlayerProfilePage() {
     player.position === "LB" ||
     player.position === "RB" ||
     player.position === "LWB" ||
-    player.position === "RWB";
+    player.position === "RWB" ||
+    player.position === "DEF" ||
+    player.position === "DEFENDER";
   const isSupported = isST || isCAM || isWinger || isCM || isDefender;
 
   // Passing computed values
@@ -1122,6 +1249,9 @@ function PlayerProfilePage() {
   const camReport = isCAM && activePeerRating
     ? camScoutReport(peerDimensionRows, activePeerMetricRanks, activePeerRating)
     : null;
+  const defenderReport = isDefender && activePeerRating
+    ? defenderScoutReport(peerDimensionRows, activePeerRating, stats)
+    : null;
   const attackingScoutReport = stReport
     ? {
         report: stReport,
@@ -1143,6 +1273,13 @@ function PlayerProfilePage() {
             emptyWarning: "No major AM-specific statistical warning in this peer pool.",
             seasonTitle: "Season Creation Context",
           }
+        : defenderReport
+          ? {
+              report: defenderReport,
+              title: playerPosition === "CB" ? "CB Scout Report" : "Defender Scout Report",
+              emptyWarning: "No major defender-specific statistical warning in this peer pool.",
+              seasonTitle: "Season Defensive Context",
+            }
       : null;
   const socialScoutingReport: SocialScoutingReportCardProps | null =
     activePeerRating && attackingScoutReport
