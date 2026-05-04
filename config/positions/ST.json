@@ -62,9 +62,7 @@
     "availability_target_minutes": 1800,
     "availability_floor": 60
   },
-  "display_only_stats": [
-    "hitWoodwork"
-  ],
+  "display_only_stats": ["hitWoodwork"],
   "normalization": {
     "method": "median_iqr",
     "calibrated_at": "2026-04-12",

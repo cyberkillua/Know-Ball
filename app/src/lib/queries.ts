@@ -686,6 +686,73 @@ export const getLeagueSeasons = createServerFn({ method: 'GET' })
     )
   })
 
+export const getAllSeasons = createServerFn({ method: 'GET' }).handler(async () => {
+  return query<{ season: string }>(
+    `SELECT DISTINCT season FROM matches WHERE home_score IS NOT NULL ORDER BY season DESC`
+  )
+})
+
+export const getAllPlayers = createServerFn({ method: 'GET' })
+  .inputValidator((d: { leagueId?: number; season: string; search?: string; position?: PositionGroup; clubId?: number }) => d)
+  .handler(async ({ data }) => {
+    const params: any[] = [data.season]
+    let leagueParamIdx: number | null = null
+
+    let lateralLeagueFilter = ''
+    if (data.leagueId != null) {
+      params.push(data.leagueId)
+      leagueParamIdx = params.length
+      lateralLeagueFilter = ` AND lat_m.league_id = $${leagueParamIdx}`
+    }
+
+    const postWhere: string[] = []
+    if (data.position != null) {
+      params.push(data.position)
+      postWhere.push(`${positionGroupSql('p')} = $${params.length}`)
+    }
+    if (data.clubId != null) {
+      params.push(data.clubId)
+      postWhere.push(`season_team.team_id = $${params.length}`)
+    }
+    if (data.search) {
+      params.push(data.search)
+      const idx = params.length
+      postWhere.push(`(unaccent(p.name) ILIKE '%' || unaccent($${idx}) || '%' OR similarity(unaccent(lower(p.name)), unaccent(lower($${idx}))) > 0.3)`)
+    }
+
+    const prLeagueFilter = leagueParamIdx != null
+      ? `AND pr.league_id = $${leagueParamIdx}`
+      : `AND pr.league_id = season_team.league_id`
+
+    const whereClause = postWhere.length ? `WHERE ${postWhere.join(' AND ')}` : ''
+
+    return query<LeaguePlayer & { league_name: string | null }>(
+      `SELECT p.id, p.name, p.position, p.nationality, p.date_of_birth,
+              EXTRACT(YEAR FROM AGE(p.date_of_birth))::int as age,
+              st.name as club, season_team.team_id as club_id, p.photo_url,
+              pr.model_score, l.name as league_name
+       FROM players p
+       JOIN LATERAL (
+         SELECT mps2.team_id, lat_m.league_id, COUNT(*) as cnt
+         FROM match_player_stats mps2
+         JOIN matches lat_m ON lat_m.id = mps2.match_id
+         WHERE mps2.player_id = p.id AND lat_m.season = $1${lateralLeagueFilter}
+         GROUP BY mps2.team_id, lat_m.league_id
+         ORDER BY cnt DESC LIMIT 1
+       ) season_team ON true
+       LEFT JOIN teams st ON st.id = season_team.team_id
+       LEFT JOIN leagues l ON l.id = season_team.league_id
+       LEFT JOIN peer_ratings pr ON pr.player_id = p.id
+         ${prLeagueFilter}
+         AND pr.season = $1
+         AND pr.peer_mode = 'dominant' AND pr.position_scope = ''
+       ${whereClause}
+       ORDER BY pr.model_score DESC NULLS LAST, p.name ASC
+       LIMIT 500`,
+      params,
+    )
+  })
+
 export const getLeagueTeams = createServerFn({ method: 'GET' })
   .inputValidator((d: { leagueId: number }) => d)
   .handler(async ({ data }) => {

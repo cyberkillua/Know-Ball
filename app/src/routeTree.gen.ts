@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as PlayersRouteImport } from './routes/players'
 import { Route as CompareRouteImport } from './routes/compare'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PositionSlugRouteImport } from './routes/position.$slug'
@@ -16,6 +17,11 @@ import { Route as PlayerIdRouteImport } from './routes/player.$id'
 import { Route as MatchIdRouteImport } from './routes/match.$id'
 import { Route as LeagueIdRouteImport } from './routes/league.$id'
 
+const PlayersRoute = PlayersRouteImport.update({
+  id: '/players',
+  path: '/players',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CompareRoute = CompareRouteImport.update({
   id: '/compare',
   path: '/compare',
@@ -50,6 +56,7 @@ const LeagueIdRoute = LeagueIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/compare': typeof CompareRoute
+  '/players': typeof PlayersRoute
   '/league/$id': typeof LeagueIdRoute
   '/match/$id': typeof MatchIdRoute
   '/player/$id': typeof PlayerIdRoute
@@ -58,6 +65,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/compare': typeof CompareRoute
+  '/players': typeof PlayersRoute
   '/league/$id': typeof LeagueIdRoute
   '/match/$id': typeof MatchIdRoute
   '/player/$id': typeof PlayerIdRoute
@@ -67,6 +75,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/compare': typeof CompareRoute
+  '/players': typeof PlayersRoute
   '/league/$id': typeof LeagueIdRoute
   '/match/$id': typeof MatchIdRoute
   '/player/$id': typeof PlayerIdRoute
@@ -77,6 +86,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/compare'
+    | '/players'
     | '/league/$id'
     | '/match/$id'
     | '/player/$id'
@@ -85,6 +95,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/compare'
+    | '/players'
     | '/league/$id'
     | '/match/$id'
     | '/player/$id'
@@ -93,6 +104,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/compare'
+    | '/players'
     | '/league/$id'
     | '/match/$id'
     | '/player/$id'
@@ -102,6 +114,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CompareRoute: typeof CompareRoute
+  PlayersRoute: typeof PlayersRoute
   LeagueIdRoute: typeof LeagueIdRoute
   MatchIdRoute: typeof MatchIdRoute
   PlayerIdRoute: typeof PlayerIdRoute
@@ -110,6 +123,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/players': {
+      id: '/players'
+      path: '/players'
+      fullPath: '/players'
+      preLoaderRoute: typeof PlayersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/compare': {
       id: '/compare'
       path: '/compare'
@@ -158,6 +178,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CompareRoute: CompareRoute,
+  PlayersRoute: PlayersRoute,
   LeagueIdRoute: LeagueIdRoute,
   MatchIdRoute: MatchIdRoute,
   PlayerIdRoute: PlayerIdRoute,
