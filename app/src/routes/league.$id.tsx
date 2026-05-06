@@ -14,6 +14,7 @@ import {
 } from '../lib/queries'
 import { getPositionGroupLabel, type PositionGroup } from '../lib/positions'
 import type { League } from '../lib/types'
+import { scoreConfidenceBand, scoreConfidenceLabel } from '../lib/utils'
 import { Search, ArrowLeft } from 'lucide-react'
 
 export const Route = createFileRoute('/league/$id')({ component: LeagueOverviewPage })
@@ -202,9 +203,23 @@ function LeagueOverviewPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       {player.model_score !== null ? (
-                        <span className="inline-flex items-center justify-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
-                          {Number(player.model_score).toFixed(1)}
-                        </span>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="inline-flex items-center justify-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
+                            {Number(player.model_score).toFixed(1)}
+                          </span>
+                          <span
+                            className={
+                              scoreConfidenceBand(player.model_score_confidence, player.rated_minutes) === 'limited'
+                                ? 'text-[10px] font-semibold uppercase tracking-wide text-amber-600'
+                                : scoreConfidenceBand(player.model_score_confidence, player.rated_minutes) === 'moderate'
+                                  ? 'text-[10px] font-semibold uppercase tracking-wide text-muted-foreground'
+                                  : 'text-[10px] font-semibold uppercase tracking-wide text-emerald-700'
+                            }
+                            title={`${Math.round(Number(player.model_score_confidence ?? 0))}% confidence · ${player.rated_minutes ?? 0} rated mins`}
+                          >
+                            {scoreConfidenceLabel(player.model_score_confidence, player.rated_minutes)}
+                          </span>
+                        </div>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}

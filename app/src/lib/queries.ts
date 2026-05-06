@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { query, queryOne } from './db.server'
 import { POSITION_GROUPS, positionGroupSql, type PositionGroup } from './positions'
-import type { League, Match, MatchRating, PeerMetricRank, Player, PeerRating, PlayerPeerRatingResponse, PlayerUnderstat, Shot } from './types'
+import type { League, Match, MatchRating, PeerMetricRank, Player, PlayerSeasonTrendPoint, PeerRating, PlayerPeerRatingResponse, PlayerUnderstat, Shot } from './types'
 
 export const getLeagues = createServerFn({ method: 'GET' }).handler(async () => {
   return query<League>('SELECT * FROM leagues ORDER BY tier, name')
@@ -151,6 +151,32 @@ export const getPlayerRatings = createServerFn({ method: 'GET' })
        WHERE mr.player_id = $1 AND mat.season = $2 AND mat.league_id = $3
        ORDER BY mat.date ASC`,
       [data.playerId, data.season, data.leagueId],
+    )
+  })
+
+export const getPlayerSeasonTrend = createServerFn({ method: 'GET' })
+  .inputValidator((d: { playerId: number }) => d)
+  .handler(async ({ data }) => {
+    return query<PlayerSeasonTrendPoint>(
+      `SELECT pr.season,
+              pr.league_id,
+              l.name as league_name,
+              pr.position,
+              pr.model_score,
+              pr.model_score_confidence,
+              pr.rated_minutes,
+              pr.matches_played,
+              pr.minutes_played,
+              pr.avg_match_rating
+       FROM peer_ratings pr
+       LEFT JOIN leagues l ON l.id = pr.league_id
+       WHERE pr.player_id = $1
+         AND pr.league_id IS NOT NULL
+         AND pr.peer_mode = 'dominant'
+         AND pr.position_scope = ''
+         AND pr.model_score IS NOT NULL
+       ORDER BY pr.season ASC, l.name ASC`,
+      [data.playerId],
     )
   })
 
@@ -623,6 +649,8 @@ export interface LeaguePlayer {
   club_id: number | null
   photo_url: string | null
   model_score: number | null
+  model_score_confidence: number | null
+  rated_minutes: number | null
 }
 
 export const getLeaguePlayers = createServerFn({ method: 'GET' })
@@ -651,7 +679,7 @@ export const getLeaguePlayers = createServerFn({ method: 'GET' })
       `SELECT p.id, p.name, p.position, p.nationality, p.date_of_birth,
               EXTRACT(YEAR FROM AGE(p.date_of_birth))::int as age,
               st.name as club, season_team.team_id as club_id, p.photo_url,
-              pr.model_score
+              pr.model_score, pr.model_score_confidence, pr.rated_minutes
        FROM players p
        JOIN LATERAL (
          SELECT mps.team_id, COUNT(*) as cnt
@@ -730,7 +758,7 @@ export const getAllPlayers = createServerFn({ method: 'GET' })
       `SELECT p.id, p.name, p.position, p.nationality, p.date_of_birth,
               EXTRACT(YEAR FROM AGE(p.date_of_birth))::int as age,
               st.name as club, season_team.team_id as club_id, p.photo_url,
-              pr.model_score, l.name as league_name
+              pr.model_score, pr.model_score_confidence, pr.rated_minutes, l.name as league_name
        FROM players p
        JOIN LATERAL (
          SELECT mps2.team_id, lat_m.league_id, COUNT(*) as cnt

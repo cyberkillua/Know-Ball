@@ -11,12 +11,14 @@ import {
 import { Skeleton } from "../components/ui/skeleton";
 import RatingBadge from "../components/RatingBadge";
 import RatingLineChart from "../components/charts/RatingLineChart";
+import SeasonTrendChart from "../components/charts/SeasonTrendChart";
 import StatRow from "../components/StatRow";
 import PizzaChart from "../components/charts/PizzaChart";
 import {
   getPlayer,
   getPlayerSeasons,
   getPlayerRatings,
+  getPlayerSeasonTrend,
   getPlayerPeerRating,
   getPlayerPeerMetricRanks,
   getPlayerStats,
@@ -24,13 +26,19 @@ import {
   getPlayerXgotDelta,
   getPlayerUnderstat,
 } from "../lib/queries";
-import { formatRoleArchetype } from "../lib/utils";
+import {
+  formatRoleArchetype,
+  scoreConfidenceBand,
+  scoreConfidenceDetail,
+  scoreConfidenceLabel,
+} from "../lib/utils";
 import type {
   Player,
   MatchRating,
   PeerRating,
   PeerMetricRank,
   PlayerPeerRatingResponse,
+  PlayerSeasonTrendPoint,
   PlayerStats,
   PlayerUnderstat,
   Shot,
@@ -945,6 +953,7 @@ function PlayerProfilePage() {
       matches: number;
     }[]
   >([]);
+  const [seasonTrend, setSeasonTrend] = useState<PlayerSeasonTrendPoint[]>([]);
   const [season, setSeason] = useState<string>("");
   const [ratings, setRatings] = useState<MatchRating[]>([]);
   const [peerRating, setPeerRating] = useState<PeerRating | null>(null);
@@ -1043,14 +1052,17 @@ function PlayerProfilePage() {
     let isCurrent = true;
     const playerId = Number(id);
     setSeason(""); // reset stale season from previous player before fetching
+    setSeasonTrend([]);
     setLoading(true);
     Promise.all([
       getPlayer({ data: { playerId } }),
       getPlayerSeasons({ data: { playerId } }),
-    ]).then(([p, s]) => {
+      getPlayerSeasonTrend({ data: { playerId } }),
+    ]).then(([p, s, trend]) => {
       if (!isCurrent) return;
       setPlayer(p);
       setSeasons(s);
+      setSeasonTrend(trend);
       if (s.length > 0) {
         const first = s[0];
         setSeason(`${first.league_id}|${first.season}`);
@@ -1598,6 +1610,17 @@ function PlayerProfilePage() {
                     </div>
                   </CardContent>
                 </Card>
+
+                {seasonTrend.length > 0 && (
+                  <Card className="lg:col-span-2">
+                    <CardHeader>
+                      <CardTitle>Know Ball Score by Season</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <SeasonTrendChart activeSeasonKey={season} points={seasonTrend} />
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             )}
             {activeTab === "stats" && (
@@ -9015,6 +9038,51 @@ function PlayerProfilePage() {
                               % confidence
                             </span>
                           )}
+                          <span
+                            title={scoreConfidenceDetail(
+                              activePeerRating.model_score_confidence,
+                              activePeerRating.rated_minutes,
+                            )}
+                            style={{
+                              marginTop: 2,
+                              padding: "3px 7px",
+                              borderRadius: 6,
+                              border: "1px solid var(--border)",
+                              background:
+                                scoreConfidenceBand(
+                                  activePeerRating.model_score_confidence,
+                                  activePeerRating.rated_minutes,
+                                ) === "limited"
+                                  ? "rgba(239, 159, 39, 0.12)"
+                                  : scoreConfidenceBand(
+                                        activePeerRating.model_score_confidence,
+                                        activePeerRating.rated_minutes,
+                                      ) === "trusted"
+                                    ? "rgba(29, 158, 117, 0.12)"
+                                    : "var(--card)",
+                              color:
+                                scoreConfidenceBand(
+                                  activePeerRating.model_score_confidence,
+                                  activePeerRating.rated_minutes,
+                                ) === "limited"
+                                  ? "#b7791f"
+                                  : scoreConfidenceBand(
+                                        activePeerRating.model_score_confidence,
+                                        activePeerRating.rated_minutes,
+                                      ) === "trusted"
+                                    ? "#1d9e75"
+                                    : "var(--muted-foreground)",
+                              fontSize: 10,
+                              fontWeight: 800,
+                              textTransform: "uppercase",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {scoreConfidenceLabel(
+                              activePeerRating.model_score_confidence,
+                              activePeerRating.rated_minutes,
+                            )}
+                          </span>
                         </div>
                       </div>
                     )}

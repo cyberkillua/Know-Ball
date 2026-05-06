@@ -1,4 +1,4 @@
-import { Info } from 'lucide-react'
+import { ChevronDown, Info } from 'lucide-react'
 
 interface Props {
   variant: 'forward' | 'winger' | 'attacking-midfielder' | 'midfielder' | 'defender'
@@ -86,12 +86,16 @@ export default function RatingMethodNote({ variant }: Props) {
   const note = NOTES[variant]
 
   return (
-    <div className="mt-4 border border-border bg-muted/30 p-4">
-      <div className="mb-3 flex items-center gap-2">
+    <details className="group mt-4 border border-border bg-muted/30">
+      <summary className="flex cursor-pointer list-none items-center gap-2 p-4 text-sm font-semibold text-foreground transition-colors hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none [&::-webkit-details-marker]:hidden">
         <Info className="h-4 w-4 text-primary" aria-hidden="true" />
-        <h4 className="text-sm font-semibold text-foreground">{note.title}</h4>
-      </div>
-      <div className="grid gap-4 text-xs leading-relaxed text-muted-foreground md:grid-cols-2">
+        <span>{note.title}</span>
+        <ChevronDown
+          className="ml-auto h-4 w-4 text-muted-foreground transition-transform duration-200 group-open:rotate-180"
+          aria-hidden="true"
+        />
+      </summary>
+      <div className="grid gap-4 border-t border-border px-4 pb-4 pt-3 text-xs leading-relaxed text-muted-foreground md:grid-cols-2">
         <div>
           <div className="mb-2 font-semibold uppercase tracking-wider text-foreground/80">Measured</div>
           <ul className="space-y-1.5">
@@ -109,6 +113,6 @@ export default function RatingMethodNote({ variant }: Props) {
           </ul>
         </div>
       </div>
-    </div>
+    </details>
   )
 }

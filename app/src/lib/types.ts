@@ -326,6 +326,19 @@ export interface PlayerPeerRatingResponse {
   availablePositionScopes: PeerRatingOption[]
 }
 
+export interface PlayerSeasonTrendPoint {
+  season: string
+  league_id: number | null
+  league_name: string | null
+  position: string | null
+  model_score: number | null
+  model_score_confidence: number | null
+  rated_minutes: number | null
+  matches_played: number | null
+  minutes_played: number | null
+  avg_match_rating: number | null
+}
+
 export interface PeerMetricRank {
   metric: string
   rank: number

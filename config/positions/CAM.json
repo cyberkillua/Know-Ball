@@ -41,15 +41,15 @@
   "season_score": {
     "version": 3,
     "weights": {
-      "quality": 0.4,
-      "peak": 0.12,
-      "consistency": 0.3,
-      "availability": 0.18
+      "quality": 0.39,
+      "peak": 0.17,
+      "consistency": 0.27,
+      "availability": 0.17
     },
     "consistency_threshold": 7.0,
     "impact_threshold": 8.0,
     "availability_target_minutes": 1800,
-    "availability_target_ratio": 0.6,
+    "availability_target_ratio": 0.5,
     "availability_floor": 0,
     "availability_ratio_curve": "linear",
     "replacement_level_score": 50,

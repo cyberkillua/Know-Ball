@@ -58,3 +58,34 @@ export function formatRoleArchetype(archetype: string | null | undefined) {
 }
 
 export const formatCmArchetype = formatRoleArchetype
+
+export type ScoreConfidenceBand = "limited" | "moderate" | "trusted"
+
+export function scoreConfidenceBand(
+  confidence: number | null | undefined,
+  ratedMinutes: number | null | undefined,
+): ScoreConfidenceBand {
+  const value = confidence == null ? (ratedMinutes ?? 0) / 600 * 45 : Number(confidence)
+  if (value < 45) return "limited"
+  if (value < 70) return "moderate"
+  return "trusted"
+}
+
+export function scoreConfidenceLabel(
+  confidence: number | null | undefined,
+  ratedMinutes: number | null | undefined,
+) {
+  const band = scoreConfidenceBand(confidence, ratedMinutes)
+  if (band === "limited") return "Limited confidence"
+  if (band === "moderate") return "Moderate confidence"
+  return "Trusted confidence"
+}
+
+export function scoreConfidenceDetail(
+  confidence: number | null | undefined,
+  ratedMinutes: number | null | undefined,
+) {
+  const mins = ratedMinutes ?? 0
+  if (confidence == null) return `${mins} rated minutes`
+  return `${Math.round(Number(confidence))}% confidence · ${mins} rated minutes`
+}

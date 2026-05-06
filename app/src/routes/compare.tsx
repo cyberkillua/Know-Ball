@@ -11,7 +11,7 @@ import {
   getPlayerStats,
   getPlayerSeasons,
 } from '../lib/queries'
-import { formatRoleArchetype } from '../lib/utils'
+import { formatRoleArchetype, scoreConfidenceBand, scoreConfidenceDetail, scoreConfidenceLabel } from '../lib/utils'
 import type { Player, MatchRating, PeerRating, PlayerPeerRatingResponse, PlayerStats } from '../lib/types'
 
 export const Route = createFileRoute('/compare')({ component: ComparePage })
@@ -605,6 +605,33 @@ function PeerCard({ data }: { data: PlayerData }) {
                 {Math.round(Number(pr.model_score_confidence))}% confidence
               </span>
             )}
+            <span
+              title={scoreConfidenceDetail(pr.model_score_confidence, pr.rated_minutes)}
+              style={{
+                marginTop: 2,
+                padding: '3px 7px',
+                borderRadius: 6,
+                border: '1px solid var(--border)',
+                background:
+                  scoreConfidenceBand(pr.model_score_confidence, pr.rated_minutes) === 'limited'
+                    ? 'rgba(239, 159, 39, 0.12)'
+                    : scoreConfidenceBand(pr.model_score_confidence, pr.rated_minutes) === 'trusted'
+                      ? 'rgba(29, 158, 117, 0.12)'
+                      : 'var(--card)',
+                color:
+                  scoreConfidenceBand(pr.model_score_confidence, pr.rated_minutes) === 'limited'
+                    ? '#b7791f'
+                    : scoreConfidenceBand(pr.model_score_confidence, pr.rated_minutes) === 'trusted'
+                      ? '#1d9e75'
+                      : 'var(--muted-foreground)',
+                fontSize: 10,
+                fontWeight: 800,
+                textTransform: 'uppercase',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {scoreConfidenceLabel(pr.model_score_confidence, pr.rated_minutes)}
+            </span>
           </div>
         </div>
       )}
