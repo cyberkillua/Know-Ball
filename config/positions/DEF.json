@@ -64,17 +64,21 @@
     "yellow_card_penalty": -0.05
   },
   "season_score": {
-    "version": 2,
+    "version": 3,
     "weights": {
-      "quality": 0.66,
-      "consistency": 0.16,
-      "peak": 0.08,
-      "availability": 0.1
+      "quality": 0.25,
+      "availability": 0.25,
+      "consistency": 0.35,
+      "peak": 0.15
     },
     "consistency_threshold": 7.0,
     "impact_threshold": 8.0,
     "availability_target_minutes": 1800,
-    "availability_floor": 60
+    "availability_target_ratio": 0.6,
+    "availability_floor": 0,
+    "availability_ratio_curve": "linear",
+    "replacement_level_score": 50,
+    "sample_size_shrinkage": true
   },
   "display_only_stats": [
     "clearances",

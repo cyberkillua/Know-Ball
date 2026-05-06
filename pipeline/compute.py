@@ -513,12 +513,54 @@ def compute_peer_ratings(
                 mps.*,
                 mat.league_id,
                 mat.season,
+                mat.home_team_id,
+                mat.away_team_id,
                 p.position AS player_position,
                 {position_group_case("p")} AS position_group
             FROM match_player_stats mps
             JOIN matches mat ON mat.id = mps.match_id
             JOIN players p ON p.id = mps.player_id
             WHERE p.position IS NOT NULL
+        ),
+        valid_player_teams AS (
+            SELECT
+                a.player_id,
+                a.league_id,
+                a.season,
+                a.team_id,
+                COUNT(DISTINCT a.match_id)::int AS appearances,
+                SUM(a.minutes_played)::int AS minutes_played
+            FROM annotated_stats a
+            WHERE a.team_id IS NOT NULL
+              AND a.team_id IN (a.home_team_id, a.away_team_id)
+            GROUP BY a.player_id, a.league_id, a.season, a.team_id
+        ),
+        player_primary_team AS (
+            SELECT player_id, league_id, season, team_id
+            FROM (
+                SELECT
+                    vpt.*,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY player_id, league_id, season
+                        ORDER BY appearances DESC, minutes_played DESC, team_id
+                    ) AS rn
+                FROM valid_player_teams vpt
+            ) ranked
+            WHERE rn = 1
+        ),
+        team_minutes_available AS (
+            SELECT
+                ppt.player_id,
+                ppt.league_id,
+                ppt.season,
+                COUNT(DISTINCT mat.id)::int * 90 AS available_minutes
+            FROM player_primary_team ppt
+            JOIN matches mat
+              ON mat.league_id = ppt.league_id
+             AND mat.season = ppt.season
+             AND mat.home_score IS NOT NULL
+             AND (mat.home_team_id = ppt.team_id OR mat.away_team_id = ppt.team_id)
+            GROUP BY ppt.player_id, ppt.league_id, ppt.season
         )
     """
     player_filter = "a.position_group = %(position_label)s"
@@ -536,6 +578,7 @@ def compute_peer_ratings(
             a.season,
             COUNT(DISTINCT a.match_id)::int                          AS matches_played,
             SUM(a.minutes_played)::int                               AS minutes_played,
+            MAX(tma.available_minutes)::int                          AS team_minutes_available,
             SUM(a.goals)::int                                        AS goals_total,
             ROUND(SUM(a.xg)::numeric, 3)                             AS xg_total,
             ROUND(SUM(a.xa)::numeric, 3)                             AS xa_total,
@@ -591,6 +634,10 @@ def compute_peer_ratings(
             ON pss.player_id = a.player_id
            AND pss.league_id = a.league_id
            AND pss.season    = a.season
+        LEFT JOIN team_minutes_available tma
+            ON tma.player_id = a.player_id
+           AND tma.league_id = a.league_id
+           AND tma.season    = a.season
         WHERE {player_filter}
         GROUP BY a.player_id, a.player_position, a.league_id, a.season
         """,
@@ -719,6 +766,7 @@ def compute_peer_ratings(
 
         norm = norm_lookup.get((r["player_id"], r["league_id"], r["season"]), {})
         rated_minutes = norm.get("rated_minutes") or 0
+        team_minutes_available = r["team_minutes_available"] or 0
 
         def _norm_float(key: str) -> float | None:
             v = norm.get(key)
@@ -737,6 +785,7 @@ def compute_peer_ratings(
             "matches_played": r["matches_played"],
             "minutes_played": minutes,
             "rated_minutes": rated_minutes,
+            "_team_minutes_available": team_minutes_available,
             "avg_match_rating": float(norm.get("avg_match_rating") or 0),
             # ST dimension stddev/p90
             "finishing_stddev": _norm_float("finishing_stddev") if not is_winger and not is_cam and not is_cm and not is_def else None,
@@ -1322,6 +1371,7 @@ def compute_peer_ratings(
                     rated_minutes=p.get("rated_minutes"),
                     min_minutes=min_minutes,
                     config=season_score_config,
+                    available_minutes=p.get("_team_minutes_available"),
                 )
                 final_score = season_breakdown.final_score
                 if is_cm:

@@ -55,23 +55,23 @@
     "yellow_card_penalty": -0.05
   },
   "season_score": {
-    "version": 2,
+    "version": 3,
     "weights": {
-      "quality": 0.66,
-      "consistency": 0.12,
-      "peak": 0.14,
-      "availability": 0.08
+      "quality": 0.4,
+      "consistency": 0.25,
+      "peak": 0.15,
+      "availability": 0.2
     },
     "consistency_threshold": 7.0,
     "impact_threshold": 8.0,
     "availability_target_minutes": 1800,
-    "availability_floor": 60
+    "availability_target_ratio": 0.6,
+    "availability_floor": 0,
+    "availability_ratio_curve": "linear",
+    "replacement_level_score": 50,
+    "sample_size_shrinkage": true
   },
-  "display_only_stats": [
-    "hitWoodwork",
-    "totalCross",
-    "accurateCross"
-  ],
+  "display_only_stats": ["hitWoodwork", "totalCross", "accurateCross"],
   "normalization": {
     "method": "median_iqr",
     "calibrated_at": "2026-04-12",
