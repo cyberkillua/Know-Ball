@@ -141,6 +141,7 @@ export interface MatchRating {
   goal_threat_norm: number | null
   final_rating: number
   fotmob_rating: number | null
+  player_team_id?: number | null
   player?: Player
   match?: Match
 }

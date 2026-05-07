@@ -2,7 +2,7 @@ import { Shield } from 'lucide-react'
 
 export default function Footer() {
   return (
-    <footer className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/95 backdrop-blur-sm">
+    <footer className="border-t border-border bg-background/95 backdrop-blur-sm">
       <div className="mx-auto max-w-6xl px-4 py-4 md:px-8">
         <div className="flex items-center justify-center gap-2">
           <div className="flex h-5 w-5 items-center justify-center rounded bg-primary/15">

@@ -140,14 +140,17 @@ export const getPlayerRatings = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     return query<MatchRating>(
       `SELECT mr.*,
+              mps.team_id as player_team_id,
               json_build_object('id', mat.id, 'date', mat.date, 'matchday', mat.matchday,
+                'home_team_id', mat.home_team_id, 'away_team_id', mat.away_team_id,
                 'home_score', mat.home_score, 'away_score', mat.away_score,
-                'home_team', json_build_object('name', ht.name),
-                'away_team', json_build_object('name', at.name)) as match
+                'home_team', json_build_object('id', ht.id, 'name', ht.name),
+                'away_team', json_build_object('id', at.id, 'name', at.name)) as match
        FROM match_ratings mr
        JOIN matches mat ON mat.id = mr.match_id
        JOIN teams ht ON ht.id = mat.home_team_id
        JOIN teams at ON at.id = mat.away_team_id
+       LEFT JOIN match_player_stats mps ON mps.match_id = mr.match_id AND mps.player_id = mr.player_id
        WHERE mr.player_id = $1 AND mat.season = $2 AND mat.league_id = $3
        ORDER BY mat.date ASC`,
       [data.playerId, data.season, data.leagueId],

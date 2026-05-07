@@ -10,7 +10,7 @@ import {
 } from "../components/ui/card";
 import { Skeleton } from "../components/ui/skeleton";
 import RatingBadge from "../components/RatingBadge";
-import RatingLineChart from "../components/charts/RatingLineChart";
+import MatchesTab from "../components/MatchesTab";
 import SeasonTrendChart from "../components/charts/SeasonTrendChart";
 import StatRow from "../components/StatRow";
 import PizzaChart from "../components/charts/PizzaChart";
@@ -49,6 +49,7 @@ import type {
 import ShotProfile from "../components/ShotProfile";
 import RatingMethodNote from "../components/RatingMethodNote";
 import RoleFitCard from "../components/RoleFitCard";
+import ScoutReportCard, { type ScoutMetric } from "../components/ScoutReportCard";
 import SocialScoutingReportCard, {
   type SocialMetric,
   type SocialScoutingReportCardProps,
@@ -927,13 +928,12 @@ function pct(
 
 // Interpolates between red→amber→green based on a 0–100 value and per-metric thresholds.
 // low: value below which it's fully red. high: value above which it's fully green.
-// Returns a Tailwind text color class for percentile-band tones (≥70 good, ≥40 warn, else bad).
-function bandToneClass(value: number | null | undefined): string {
-  if (value == null) return "text-muted-foreground";
+function bandTone(value: number | null | undefined): "good" | "warn" | "bad" | "muted" {
+  if (value == null) return "muted";
   const v = Number(value);
-  if (v >= 70) return "text-band-good";
-  if (v >= 40) return "text-band-warn";
-  return "text-band-bad";
+  if (v >= 70) return "good";
+  if (v >= 40) return "warn";
+  return "bad";
 }
 
 function rateColor(val: number, low: number, high: number): string {
@@ -6120,15 +6120,24 @@ function PlayerProfilePage() {
                   </div>
                 ) : (
                   <div className="flex flex-col gap-3">
-                    {/* Model score */}
-                    {activePeerRating.model_score != null && (() => {
+                    {/* Top row: Score + Match Profile side-by-side at lg+ */}
+                    <div className="grid items-stretch gap-3 lg:grid-cols-2">
+                      {/* Model score */}
+                      {activePeerRating.model_score != null && (() => {
                         const score = Number(activePeerRating.model_score);
+                        const fillPct = Math.max(0, Math.min(100, score));
                         const scoreTone =
                           score >= 60
                             ? "text-rating-high"
                             : score >= 45
                               ? "text-rating-mid"
                               : "text-rating-low";
+                        const fillBg =
+                          score >= 60
+                            ? "bg-rating-high"
+                            : score >= 45
+                              ? "bg-rating-mid"
+                              : "bg-rating-low";
                         const band = scoreConfidenceBand(
                           activePeerRating.model_score_confidence,
                           activePeerRating.rated_minutes,
@@ -6142,61 +6151,33 @@ function PlayerProfilePage() {
                         const lowConfidence =
                           Number(activePeerRating.model_score_confidence ?? 0) < 45;
                         return (
-                          <div className="flex flex-col gap-3 rounded-lg bg-muted px-3.5 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                            <div className="flex flex-col gap-0.5 min-w-0">
-                              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                                Know Ball Score
-                              </span>
-                              <div className="flex items-baseline gap-2 sm:hidden">
-                                <span className={`text-2xl font-bold leading-none tabular-nums ${scoreTone}`}>
-                                  {score.toFixed(2)}
-                                </span>
-                                {activePeerRating.model_score_confidence != null && (
-                                  <span className="text-[11px] text-muted-foreground">
-                                    {Math.round(Number(activePeerRating.model_score_confidence))}% confidence
-                                  </span>
-                                )}
+                          <div className="flex h-full flex-col gap-2.5 rounded-lg bg-muted px-3.5 py-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                                  Know Ball Score
+                                </div>
+                                <div className="mt-1 text-sm font-semibold text-foreground">
+                                  {scoreCopy(activePeerRating.model_score, roleArchetype)}
+                                </div>
                               </div>
-                              <span className="text-[13px] font-semibold text-foreground">
-                                {scoreCopy(activePeerRating.model_score, roleArchetype)}
-                              </span>
-                              <span className="text-[11px] text-muted-foreground">
-                                Compared with {POSITION_LABELS[activePeerRating.position ?? "ST"] ?? activePeerRating.position ?? "players"} in {comparisonPool}.
-                              </span>
-                              <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                                {roleArchetype && (
-                                  <span className="rounded-md border border-border bg-card px-2 py-0.5 text-[11px] font-bold text-foreground">
-                                    {roleArchetype}
-                                  </span>
-                                )}
-                                <span
-                                  title={scoreConfidenceDetail(
-                                    activePeerRating.model_score_confidence,
-                                    activePeerRating.rated_minutes,
-                                  )}
-                                  className={`whitespace-nowrap rounded-md border px-1.5 py-0.5 text-[10px] font-extrabold uppercase sm:hidden ${bandClass}`}
-                                >
-                                  {scoreConfidenceLabel(
-                                    activePeerRating.model_score_confidence,
-                                    activePeerRating.rated_minutes,
-                                  )}
+                              <div className="flex shrink-0 items-baseline gap-1">
+                                <span className={`text-3xl font-bold leading-none tabular-nums ${scoreTone}`}>
+                                  {score.toFixed(1)}
                                 </span>
+                                <span className="text-xs text-muted-foreground">/100</span>
                               </div>
-                              {confidenceMessage && (
-                                <span
-                                  className={`mt-0.5 text-[11px] ${lowConfidence ? "text-rating-mid" : "text-muted-foreground"}`}
-                                >
-                                  {confidenceMessage}
-                                </span>
-                              )}
                             </div>
-                            <div className="hidden sm:flex shrink-0 flex-col items-end gap-0.5">
-                              <span className={`text-2xl font-bold leading-tight tabular-nums ${scoreTone}`}>
-                                {score.toFixed(2)}
-                              </span>
-                              {activePeerRating.model_score_confidence != null && (
-                                <span className="text-[11px] text-muted-foreground">
-                                  {Math.round(Number(activePeerRating.model_score_confidence))}% confidence
+                            <div className="h-1.5 overflow-hidden rounded-full bg-card">
+                              <div
+                                className={`h-full rounded-full transition-all ${fillBg}`}
+                                style={{ width: `${fillPct}%` }}
+                              />
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {roleArchetype && (
+                                <span className="rounded-md border border-border bg-card px-2 py-0.5 text-[11px] font-bold text-foreground">
+                                  {roleArchetype}
                                 </span>
                               )}
                               <span
@@ -6204,223 +6185,212 @@ function PlayerProfilePage() {
                                   activePeerRating.model_score_confidence,
                                   activePeerRating.rated_minutes,
                                 )}
-                                className={`mt-0.5 whitespace-nowrap rounded-md border px-1.5 py-0.5 text-[10px] font-extrabold uppercase ${bandClass}`}
+                                className={`whitespace-nowrap rounded-md border px-1.5 py-0.5 text-[10px] font-extrabold uppercase ${bandClass}`}
                               >
                                 {scoreConfidenceLabel(
                                   activePeerRating.model_score_confidence,
                                   activePeerRating.rated_minutes,
                                 )}
+                                {activePeerRating.model_score_confidence != null && (
+                                  <> · {Math.round(Number(activePeerRating.model_score_confidence))}%</>
+                                )}
                               </span>
                             </div>
+                            {confidenceMessage && (
+                              <p className={`m-0 text-[11px] ${lowConfidence ? "text-rating-mid" : "text-muted-foreground"}`}>
+                                {confidenceMessage}
+                              </p>
+                            )}
                           </div>
                         );
                       })()}
-                    {attackingScoutReport && (
-                      <div className="flex flex-col gap-3 rounded-lg bg-muted px-3.5 py-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                              {attackingScoutReport.title}
-                            </div>
-                            <div className="mt-1 text-[15px] font-bold leading-snug text-foreground">
-                              {attackingScoutReport.report.headline}
-                            </div>
-                          </div>
-                          <div className="shrink-0 text-right text-[11px] text-muted-foreground">
-                            {activePeerRating.rated_minutes ?? 0} rated mins
-                            <br />
-                            {comparisonPool}
-                          </div>
-                        </div>
 
-                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                          <div>
-                            <div className="mb-1.5 text-xs font-bold text-foreground">
-                              Main Value
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                              {attackingScoutReport.report.top.length > 0 ? attackingScoutReport.report.top.map((row) => (
-                                <div key={row.metricKey} className="flex justify-between gap-2 text-xs">
-                                  <span className="text-muted-foreground">{row.label}</span>
-                                  <span className="font-bold text-foreground">{rowRankText(row, activePeerMetricRanks)}</span>
-                                </div>
-                              )) : (
-                                <span className="text-xs text-muted-foreground">No strong signal yet.</span>
-                              )}
-                            </div>
+                      {/* Match Profile (moved up from below scout report) */}
+                      {(activePeerRating.consistency_score != null ||
+                        activePeerRating.impact_rate != null) && (
+                        <div className="flex h-full flex-col gap-2 rounded-lg bg-muted px-3.5 py-3">
+                          <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                            Match Profile
                           </div>
-
-                          <div>
-                            <div className="mb-1.5 text-xs font-bold text-foreground">
-                              Best Usage
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                              {attackingScoutReport.report.usageItems.slice(0, 3).map((item) => (
-                                <div key={item} className="text-xs leading-relaxed text-muted-foreground">
-                                  {item}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div>
-                            <div className="mb-1.5 text-xs font-bold text-foreground">
-                              Limits
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                              {(attackingScoutReport.report.concernItems.length > 0 || attackingScoutReport.report.notExpectItems.length > 0)
-                                ? [...attackingScoutReport.report.concernItems, ...attackingScoutReport.report.notExpectItems].slice(0, 3).map((item) => (
-                                    <div key={item} className="text-xs leading-relaxed text-muted-foreground">
-                                      {item}
-                                    </div>
-                                  ))
-                                : (
-                                  <span className="text-xs text-muted-foreground">
-                                    {attackingScoutReport.emptyWarning}
-                                  </span>
-                                )}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div>
-                            <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                              Core Evidence
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              {attackingScoutReport.report.evidenceRows.map((row) => (
-                                <div key={row.metricKey} className="rounded-md border border-border bg-card px-2.5 py-2">
-                                  <div className="text-[11px] text-muted-foreground">{row.label}</div>
-                                  <div className={`mt-0.5 text-sm font-extrabold ${bandToneClass(row.value)}`}>
-                                    {rowRankText(row, activePeerMetricRanks)}
+                          {activePeerRating.consistency_score != null &&
+                            (() => {
+                              const val = Number(activePeerRating.consistency_score);
+                              const filled = val / 10;
+                              const labelColor = rateColor(val, 20, 70);
+                              return (
+                                <div>
+                                  <div className="mb-1 flex items-baseline justify-between">
+                                    <span className="text-xs font-medium text-foreground">
+                                      Good Performance Rate
+                                    </span>
+                                    <span
+                                      className="text-[15px] font-bold tabular-nums"
+                                      style={{ color: labelColor }}
+                                    >
+                                      {val.toFixed(0)}%
+                                    </span>
+                                  </div>
+                                  <div className="flex gap-0.5">
+                                    {Array.from({ length: 10 }, (_, i) => {
+                                      const segMid = (i + 0.5) * 10;
+                                      const opacity =
+                                        filled >= i + 1
+                                          ? 1
+                                          : filled > i
+                                            ? filled - i
+                                            : 0;
+                                      return (
+                                        <div
+                                          key={i}
+                                          style={{
+                                            flex: 1,
+                                            height: 5,
+                                            borderRadius: 2,
+                                            background:
+                                              opacity > 0
+                                                ? rateColor(segMid, 20, 70)
+                                                : "var(--border)",
+                                            opacity:
+                                              opacity > 0 && opacity < 1
+                                                ? 0.5 + opacity * 0.5
+                                                : 1,
+                                          }}
+                                        />
+                                      );
+                                    })}
                                   </div>
                                 </div>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div>
-                            <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                              {attackingScoutReport.seasonTitle}
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              {attackingScoutReport.report.seasonRows.map((row) => (
-                                <div key={row.label} className="rounded-md border border-border bg-card px-2.5 py-2">
-                                  <div className="text-[11px] text-muted-foreground">{row.label}</div>
-                                  <div className={`mt-0.5 text-sm font-extrabold ${bandToneClass(row.value)}`}>
-                                    {row.rank}
+                              );
+                            })()}
+                          {activePeerRating.impact_rate != null &&
+                            (() => {
+                              const val = Number(activePeerRating.impact_rate);
+                              const filled = val / 10;
+                              const labelColor = rateColor(val, 5, 35);
+                              return (
+                                <div>
+                                  <div className="mb-1 flex items-baseline justify-between">
+                                    <span className="text-xs font-medium text-foreground">
+                                      Elite Performance Rate
+                                    </span>
+                                    <span
+                                      className="text-[15px] font-bold tabular-nums"
+                                      style={{ color: labelColor }}
+                                    >
+                                      {val.toFixed(0)}%
+                                    </span>
+                                  </div>
+                                  <div className="flex gap-0.5">
+                                    {Array.from({ length: 10 }, (_, i) => {
+                                      const segMid = (i + 0.5) * 10;
+                                      const opacity =
+                                        filled >= i + 1
+                                          ? 1
+                                          : filled > i
+                                            ? filled - i
+                                            : 0;
+                                      return (
+                                        <div
+                                          key={i}
+                                          style={{
+                                            flex: 1,
+                                            height: 5,
+                                            borderRadius: 2,
+                                            background:
+                                              opacity > 0
+                                                ? rateColor(segMid, 5, 35)
+                                                : "var(--border)",
+                                            opacity:
+                                              opacity > 0 && opacity < 1
+                                                ? 0.5 + opacity * 0.5
+                                                : 1,
+                                          }}
+                                        />
+                                      );
+                                    })}
                                   </div>
                                 </div>
-                              ))}
-                            </div>
-                          </div>
+                              );
+                            })()}
+                          <p className="mt-auto pt-1 text-[11px] leading-relaxed text-muted-foreground">
+                            Good = matches with a good performance. Elite = matches with an elite performance. Season rates, not peer rankings.
+                          </p>
                         </div>
-                      </div>
-                    )}
-                    {cmReport && (
-                      <div className="flex flex-col gap-3 rounded-lg bg-muted px-3.5 py-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                              CM Scout Report
-                            </div>
-                            <div className="mt-1 text-[15px] font-bold leading-snug text-foreground">
-                              {cmReport.headline}
-                            </div>
-                          </div>
-                          <div className="shrink-0 text-right text-[11px] text-muted-foreground">
-                            {activePeerRating.rated_minutes ?? 0} rated mins
-                            <br />
-                            {comparisonPool}
-                          </div>
-                        </div>
-
-                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                          <div>
-                            <div className="mb-1.5 text-xs font-bold text-foreground">
-                              Main Value
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                              {cmReport.top.length > 0 ? cmReport.top.map((row) => (
-                                <div key={row.metricKey} className="flex justify-between gap-2 text-xs">
-                                  <span className="text-muted-foreground">{row.label}</span>
-                                  <span className="font-bold text-foreground">{rowRankText(row, activePeerMetricRanks)}</span>
-                                </div>
-                              )) : (
-                                <span className="text-xs text-muted-foreground">No strong signal yet.</span>
-                              )}
-                            </div>
-                          </div>
-
-                          <div>
-                            <div className="mb-1.5 text-xs font-bold text-foreground">
-                              Best Usage
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                              {cmReport.usageItems.slice(0, 3).map((item) => (
-                                <div key={item} className="text-xs leading-relaxed text-muted-foreground">
-                                  {item}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div>
-                            <div className="mb-1.5 text-xs font-bold text-foreground">
-                              Limits
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                              {(cmReport.concernItems.length > 0 || cmReport.notExpectItems.length > 0)
-                                ? [...cmReport.concernItems, ...cmReport.notExpectItems].slice(0, 3).map((item) => (
-                                    <div key={item} className="text-xs leading-relaxed text-muted-foreground">
-                                      {item}
-                                    </div>
-                                  ))
-                                : (
-                                  <span className="text-xs text-muted-foreground">
-                                    No major CM-specific statistical warning in this peer pool.
-                                  </span>
-                                )}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div>
-                            <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                              Core Evidence
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              {cmReport.evidenceRows.map((row) => (
-                                <div key={row.metricKey} className="rounded-md border border-border bg-card px-2.5 py-2">
-                                  <div className="text-[11px] text-muted-foreground">{row.label}</div>
-                                  <div className={`mt-0.5 text-sm font-extrabold ${bandToneClass(row.value)}`}>
-                                    {rowRankText(row, activePeerMetricRanks)}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div>
-                            <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                              Season Context
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              {cmReport.seasonOnlyRows.map((row) => (
-                                <div key={row.label} className="rounded-md border border-border bg-card px-2.5 py-2">
-                                  <div className="text-[11px] text-muted-foreground">{row.label}</div>
-                                  <div className={`mt-0.5 text-sm font-extrabold ${bandToneClass(row.value)}`}>
-                                    {row.rank}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
+                    {(() => {
+                      const r = attackingScoutReport
+                        ? {
+                            title: attackingScoutReport.title,
+                            headline: attackingScoutReport.report.headline,
+                            mainValue: attackingScoutReport.report.top.map((row): ScoutMetric => ({
+                              key: row.metricKey,
+                              label: row.label,
+                              valueText: rowRankText(row, activePeerMetricRanks),
+                              tone: bandTone(row.value),
+                            })),
+                            useFor: attackingScoutReport.report.usageItems,
+                            caution: [...attackingScoutReport.report.concernItems, ...attackingScoutReport.report.notExpectItems],
+                            emptyCaution: attackingScoutReport.emptyWarning,
+                            evidence: attackingScoutReport.report.evidenceRows.map((row): ScoutMetric => ({
+                              key: row.metricKey,
+                              label: row.label,
+                              valueText: rowRankText(row, activePeerMetricRanks),
+                              tone: bandTone(row.value),
+                            })),
+                            seasonRows: attackingScoutReport.report.seasonRows.map((row): ScoutMetric => ({
+                              key: row.label,
+                              label: row.label,
+                              valueText: row.rank,
+                              tone: bandTone(row.value),
+                            })),
+                            seasonTitle: attackingScoutReport.seasonTitle,
+                          }
+                        : cmReport
+                          ? {
+                              title: "CM Scout Report",
+                              headline: cmReport.headline,
+                              mainValue: cmReport.top.map((row): ScoutMetric => ({
+                                key: row.metricKey,
+                                label: row.label,
+                                valueText: rowRankText(row, activePeerMetricRanks),
+                                tone: bandTone(row.value),
+                              })),
+                              useFor: cmReport.usageItems,
+                              caution: [...cmReport.concernItems, ...cmReport.notExpectItems],
+                              emptyCaution: "No major CM-specific statistical warning in this peer pool.",
+                              evidence: cmReport.evidenceRows.map((row): ScoutMetric => ({
+                                key: row.metricKey,
+                                label: row.label,
+                                valueText: rowRankText(row, activePeerMetricRanks),
+                                tone: bandTone(row.value),
+                              })),
+                              seasonRows: cmReport.seasonOnlyRows.map((row): ScoutMetric => ({
+                                key: row.label,
+                                label: row.label,
+                                valueText: row.rank,
+                                tone: bandTone(row.value),
+                              })),
+                              seasonTitle: "Season Context",
+                            }
+                          : null;
+                      if (!r) return null;
+                      return (
+                        <ScoutReportCard
+                          title={r.title}
+                          headline={r.headline}
+                          ratedMinutes={activePeerRating.rated_minutes ?? 0}
+                          comparisonPool={comparisonPool}
+                          mainValue={r.mainValue}
+                          useForItems={r.useFor}
+                          cautionItems={r.caution}
+                          emptyCautionText={r.emptyCaution}
+                          evidenceRows={r.evidence}
+                          seasonRows={r.seasonRows}
+                          seasonTitle={r.seasonTitle}
+                        />
+                      );
+                    })()}
                     {!attackingScoutReport && !cmReport && peerDimensionRows.length > 0 && (
                       <div className="flex flex-col gap-2.5 rounded-lg bg-muted px-3.5 py-3">
                         <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
@@ -6442,135 +6412,6 @@ function PlayerProfilePage() {
                         ))}
                       </div>
                     )}
-                    {/* Good match rate & high impact rate */}
-                    {(activePeerRating.consistency_score != null ||
-                      activePeerRating.impact_rate != null) && (
-                      <div className="flex flex-col gap-1.5 rounded-lg bg-muted px-3.5 py-2.5">
-                        <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                          Match Profile
-                        </div>
-
-                        {/* Good match rate row — low=20, high=70: below 20% is red, above 70% is green */}
-                        {activePeerRating.consistency_score != null &&
-                          (() => {
-                            const val = Number(
-                              activePeerRating.consistency_score,
-                            );
-                            const filled = val / 10; // continuous fill (0–10)
-                            const labelColor = rateColor(val, 20, 70);
-                            return (
-                              <div>
-                                <div className="mb-1 flex items-baseline justify-between">
-                                  <span className="text-xs font-medium text-foreground">
-                                    Good Performance Rate
-                                  </span>
-                                  <span
-                                    className="text-[15px] font-bold"
-                                    style={{ color: labelColor }}
-                                  >
-                                    {val.toFixed(0)}%
-                                  </span>
-                                </div>
-                                <div className="flex gap-0.5">
-                                  {Array.from({ length: 10 }, (_, i) => {
-                                    const segMid = (i + 0.5) * 10; // midpoint % of this segment
-                                    const opacity =
-                                      filled >= i + 1
-                                        ? 1
-                                        : filled > i
-                                          ? filled - i
-                                          : 0;
-                                    return (
-                                      <div
-                                        key={i}
-                                        style={{
-                                          flex: 1,
-                                          height: 5,
-                                          borderRadius: 2,
-                                          background:
-                                            opacity > 0
-                                              ? rateColor(segMid, 20, 70)
-                                              : "var(--border)",
-                                          opacity:
-                                            opacity > 0 && opacity < 1
-                                              ? 0.5 + opacity * 0.5
-                                              : 1,
-                                        }}
-                                      />
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            );
-                          })()}
-
-                        {/* High impact rate row — low=5, high=35: below 5% is red, above 35% is green */}
-                        {activePeerRating.impact_rate != null &&
-                          (() => {
-                            const val = Number(activePeerRating.impact_rate);
-                            const filled = val / 10;
-                            const labelColor = rateColor(val, 5, 35);
-                            return (
-                              <div>
-                                <div className="mb-1 flex items-baseline justify-between">
-                                  <span className="text-xs font-medium text-foreground">
-                                    Elite Performance Rate
-                                  </span>
-                                  <span
-                                    className="text-[15px] font-bold"
-                                    style={{ color: labelColor }}
-                                  >
-                                    {val.toFixed(0)}%
-                                  </span>
-                                </div>
-                                <div className="flex gap-0.5">
-                                  {Array.from({ length: 10 }, (_, i) => {
-                                    const segMid = (i + 0.5) * 10;
-                                    const opacity =
-                                      filled >= i + 1
-                                        ? 1
-                                        : filled > i
-                                          ? filled - i
-                                          : 0;
-                                    return (
-                                      <div
-                                        key={i}
-                                        style={{
-                                          flex: 1,
-                                          height: 5,
-                                          borderRadius: 2,
-                                          background:
-                                            opacity > 0
-                                              ? rateColor(segMid, 5, 35)
-                                              : "var(--border)",
-                                          opacity:
-                                            opacity > 0 && opacity < 1
-                                              ? 0.5 + opacity * 0.5
-                                              : 1,
-                                        }}
-                                      />
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            );
-                          })()}
-
-                        {/* Explanation */}
-                        <div className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                          <span className="font-semibold text-foreground">
-                            Good Performance Rate
-                          </span>{" "}
-                          = share of rated matches with a good performance.{" "}
-                          <span className="font-semibold text-foreground">
-                            Elite Performance Rate
-                          </span>{" "}
-                          = share of rated matches with an elite performance.
-                          These are season rates, not peer rankings.
-                        </div>
-                      </div>
-                    )}
-
                     {/* Description */}
                     <p className="m-0 text-[11px] text-muted-foreground">
                       Match Rating = individual games. Know Ball Score = season-level performance.
@@ -6660,22 +6501,18 @@ function PlayerProfilePage() {
         </Card>
         )}
 
-        {/* ── Rating History ───────────────────────────────────────────────── */}
+        {/* ── Matches ──────────────────────────────────────────────────────── */}
         {activeTab === "matches" && (
-        <Card className="mt-4">
-          <CardHeader>
-            <CardTitle>Rating History</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {ratings.length > 0 ? (
-              <RatingLineChart ratings={ratings} />
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No rating data for this season.
-              </p>
-            )}
-          </CardContent>
-        </Card>
+          <MatchesTab
+            ratings={ratings}
+            playerTeamId={player.current_team_id ?? player.team?.id ?? null}
+            competitionLabel={(() => {
+              const s = seasons.find((s) => `${s.league_id}|${s.season}` === season);
+              const league = s?.league_name ?? (player.team as any)?.league?.name ?? "League";
+              const seasonText = s?.season ?? season.split("|")[1] ?? "";
+              return seasonText ? `${league} ${seasonText}` : league;
+            })()}
+          />
         )}
       </div>
     </div>
