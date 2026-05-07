@@ -145,6 +145,39 @@ export interface MatchRating {
   match?: Match
 }
 
+export interface RoleSignal {
+  metric: string
+  label: string
+  value: number
+  threshold?: number
+}
+
+export interface RoleFitItem {
+  key: string
+  label: string
+  role: string
+  role_label: string
+  archetype: string
+  archetype_label: string
+  score: number
+  evidence: RoleSignal[]
+  concerns: RoleSignal[]
+}
+
+export interface RoleFitProfile {
+  version: number
+  primary: RoleFitItem
+  top: RoleFitItem[]
+  confidence: {
+    score: number
+    level: 'low' | 'moderate' | 'high'
+    gap: number
+    hybrid: boolean
+  }
+  evidence: RoleSignal[]
+  concerns: RoleSignal[]
+}
+
 export interface PeerRating {
   id: number
   player_id: number
@@ -155,6 +188,10 @@ export interface PeerRating {
   position_scope: string
   cm_archetype: string | null
   role_archetype: string | null
+  role_family: string | null
+  role_fit: RoleFitProfile | null
+  role_confidence: number | null
+  role_evidence: RoleSignal[] | null
   // Per-90 base metrics
   goals_per90: number
   xa_per90: number
@@ -337,6 +374,20 @@ export interface PlayerSeasonTrendPoint {
   matches_played: number | null
   minutes_played: number | null
   avg_match_rating: number | null
+}
+
+export interface SimilarRoleProfile {
+  player_id: number
+  player_name: string
+  season: string
+  league_name: string | null
+  position: string
+  role_archetype: string | null
+  role_label: string | null
+  role_score: number
+  role_confidence: number | null
+  model_score: number | null
+  similarity: number
 }
 
 export interface PeerMetricRank {

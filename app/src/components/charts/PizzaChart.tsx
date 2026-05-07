@@ -1,6 +1,5 @@
 interface PizzaChartProps {
   data: { label: string; percentile: number; inverted?: boolean }[]
-  size?: number
 }
 
 const getPercentileColor = (percentile: number): string => {
@@ -19,11 +18,14 @@ const COLOR_RANGES = [
   { min: 0, max: 20, color: '#e24b4a', label: '0-20' },
 ]
 
-export default function PizzaChart({ data, size = 540 }: PizzaChartProps) {
+// SVG drawn in a 540×540 viewBox; consumer scales via container width.
+const SIZE = 540
+
+export default function PizzaChart({ data }: PizzaChartProps) {
   const numSlices = data.length
   const anglePerSlice = 360 / numSlices
-  const center = size / 2
-  const maxRadius = (size / 2) - 55
+  const center = SIZE / 2
+  const maxRadius = (SIZE / 2) - 55
   const minRadius = 40
 
   const getRadius = (percentile: number) => {
@@ -63,7 +65,7 @@ export default function PizzaChart({ data, size = 540 }: PizzaChartProps) {
   const getLabelPosition = (index: number) => {
     const midAngle = 90 - (index * anglePerSlice) - (anglePerSlice / 2)
     const rad = (midAngle * Math.PI) / 180
-    const labelRadius = maxRadius + 25
+    const labelRadius = maxRadius + 28
     return {
       x: center + labelRadius * Math.cos(rad),
       y: center - labelRadius * Math.sin(rad),
@@ -80,129 +82,141 @@ export default function PizzaChart({ data, size = 540 }: PizzaChartProps) {
     }
   }
 
+  // Pad viewBox so labels rendered outside the slice ring aren't clipped.
+  const padding = 60
+  const viewBox = `${-padding} ${-padding} ${SIZE + padding * 2} ${SIZE + padding * 2}`
+
   return (
-    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-      <svg width={size} height={size} style={{ overflow: 'visible' }}>
-        {/* Background slices */}
-        {data.map((_, i) => {
-          const { bgPath } = generateSlicePath(i, 100)
-          return (
-            <path
-              key={`bg-${i}`}
-              d={bgPath}
-              fill="var(--muted)"
-              fillOpacity={0.08}
-              stroke="var(--border)"
-              strokeWidth={0.5}
-            />
-          )
-        })}
+    <div className="flex w-full flex-col items-center gap-3">
+      <div className="w-full max-w-[540px]">
+        <svg
+          viewBox={viewBox}
+          className="block h-auto w-full"
+          preserveAspectRatio="xMidYMid meet"
+        >
+          {/* Background slices */}
+          {data.map((_, i) => {
+            const { bgPath } = generateSlicePath(i, 100)
+            return (
+              <path
+                key={`bg-${i}`}
+                d={bgPath}
+                fill="var(--muted)"
+                fillOpacity={0.08}
+                stroke="var(--border)"
+                strokeWidth={0.5}
+              />
+            )
+          })}
 
-        {/* Filled slices */}
-        {data.map((d, i) => {
-          const displayPct = d.inverted ? 100 - d.percentile : d.percentile
-          const { fillPath } = generateSlicePath(i, displayPct)
-          return (
-            <path
-              key={`fill-${i}`}
-              d={fillPath}
-              fill={getPercentileColor(displayPct)}
-              fillOpacity={0.85}
-              stroke={getPercentileColor(displayPct)}
-              strokeWidth={1}
-            />
-          )
-        })}
+          {/* Filled slices */}
+          {data.map((d, i) => {
+            const displayPct = d.inverted ? 100 - d.percentile : d.percentile
+            const { fillPath } = generateSlicePath(i, displayPct)
+            return (
+              <path
+                key={`fill-${i}`}
+                d={fillPath}
+                fill={getPercentileColor(displayPct)}
+                fillOpacity={0.85}
+                stroke={getPercentileColor(displayPct)}
+                strokeWidth={1}
+              />
+            )
+          })}
 
-        {/* Grid circles */}
-        {[25, 50, 75].map((pct) => {
-          const r = minRadius + (maxRadius - minRadius) * (pct / 100)
-          return (
-            <circle
-              key={`grid-${pct}`}
-              cx={center}
-              cy={center}
-              r={r}
-              fill="none"
-              stroke="var(--border)"
-              strokeOpacity={0.12}
-              strokeDasharray="1 2"
-            />
-          )
-        })}
-        <circle cx={center} cy={center} r={minRadius} fill="none" stroke="var(--border)" strokeOpacity={0.15} />
-        <circle cx={center} cy={center} r={maxRadius} fill="none" stroke="var(--border)" strokeOpacity={0.15} />
+          {/* Grid circles */}
+          {[25, 50, 75].map((pct) => {
+            const r = minRadius + (maxRadius - minRadius) * (pct / 100)
+            return (
+              <circle
+                key={`grid-${pct}`}
+                cx={center}
+                cy={center}
+                r={r}
+                fill="none"
+                stroke="var(--border)"
+                strokeOpacity={0.12}
+                strokeDasharray="1 2"
+              />
+            )
+          })}
+          <circle cx={center} cy={center} r={minRadius} fill="none" stroke="var(--border)" strokeOpacity={0.15} />
+          <circle cx={center} cy={center} r={maxRadius} fill="none" stroke="var(--border)" strokeOpacity={0.15} />
 
-        {/* Radial lines */}
-        {data.map((_, i) => {
-          const angle = 90 - (i * anglePerSlice)
-          const rad = (angle * Math.PI) / 180
-          const x = center + maxRadius * Math.cos(rad)
-          const y = center - maxRadius * Math.sin(rad)
-          return (
-            <line
-              key={`radial-${i}`}
-              x1={center}
-              y1={center}
-              x2={x}
-              y2={y}
-              stroke="var(--border)"
-              strokeOpacity={0.15}
-              strokeWidth={0.5}
-            />
-          )
-        })}
+          {/* Radial lines */}
+          {data.map((_, i) => {
+            const angle = 90 - (i * anglePerSlice)
+            const rad = (angle * Math.PI) / 180
+            const x = center + maxRadius * Math.cos(rad)
+            const y = center - maxRadius * Math.sin(rad)
+            return (
+              <line
+                key={`radial-${i}`}
+                x1={center}
+                y1={center}
+                x2={x}
+                y2={y}
+                stroke="var(--border)"
+                strokeOpacity={0.15}
+                strokeWidth={0.5}
+              />
+            )
+          })}
 
-        {/* Center circle */}
-        <circle cx={center} cy={center} r={minRadius - 8} fill="var(--card)" stroke="var(--border)" strokeWidth={1} />
+          {/* Center circle */}
+          <circle cx={center} cy={center} r={minRadius - 8} fill="var(--card)" stroke="var(--border)" strokeWidth={1} />
 
-        {/* Percentile values on slices */}
-        {data.map((d, i) => {
-          const pos = getPctPosition(i)
-          return (
-            <text
-              key={`pct-${i}`}
-              x={pos.x}
-              y={pos.y}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              style={{ fontSize: 11, fill: 'white', fontWeight: 700 }}
-            >
-              {Math.round(d.percentile)}
-            </text>
-          )
-        })}
+          {/* Percentile values on slices */}
+          {data.map((d, i) => {
+            const pos = getPctPosition(i)
+            return (
+              <text
+                key={`pct-${i}`}
+                x={pos.x}
+                y={pos.y}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                style={{ fontSize: 14, fill: 'white', fontWeight: 700 }}
+              >
+                {Math.round(d.percentile)}
+              </text>
+            )
+          })}
 
-        {/* Labels outside the chart */}
-        {data.map((d, i) => {
-          const pos = getLabelPosition(i)
-          return (
-            <text
-              key={`label-${i}`}
-              x={pos.x}
-              y={pos.y}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              style={{
-                fontSize: 9,
-                fill: d.inverted ? 'var(--muted-foreground)' : 'var(--foreground)',
-                fontWeight: 500,
-              }}
-            >
-              {d.inverted ? `▼ ${d.label}` : d.label}
-            </text>
-          )
-        })}
-      </svg>
+          {/* Labels outside the chart */}
+          {data.map((d, i) => {
+            const pos = getLabelPosition(i)
+            return (
+              <text
+                key={`label-${i}`}
+                x={pos.x}
+                y={pos.y}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                style={{
+                  fontSize: 13,
+                  fill: d.inverted ? 'var(--muted-foreground)' : 'var(--foreground)',
+                  fontWeight: 500,
+                }}
+              >
+                {d.inverted ? `▼ ${d.label}` : d.label}
+              </text>
+            )
+          })}
+        </svg>
+      </div>
 
-      {/* Legend */}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap', fontSize: 11 }}>
-        {COLOR_RANGES.map((range) => (
-          <div key={range.label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <div style={{ width: 14, height: 14, borderRadius: 3, background: range.color }} />
-            <span style={{ color: 'var(--muted-foreground)' }}>{range.label}</span>
-          </div>
-        ))}
+      {/* Legend — gradient strip with min/max labels (compact) */}
+      <div className="flex w-full max-w-[420px] items-center gap-2 text-[11px] text-muted-foreground">
+        <span className="tabular-nums">0</span>
+        <div
+          className="h-2 flex-1 rounded-full"
+          style={{
+            background: `linear-gradient(to right, ${COLOR_RANGES[4].color} 0%, ${COLOR_RANGES[3].color} 25%, ${COLOR_RANGES[2].color} 50%, ${COLOR_RANGES[1].color} 75%, ${COLOR_RANGES[0].color} 100%)`,
+          }}
+        />
+        <span className="tabular-nums">100</span>
       </div>
     </div>
   )

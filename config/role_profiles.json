@@ -1,0 +1,1066 @@
+{
+  "version": 1,
+  "positions": {
+    "ST": [
+      {
+        "key": "poacher",
+        "label": "Poacher / Fox in the Box",
+        "role": "box_finisher",
+        "role_label": "Box Finisher",
+        "archetype": "poacher",
+        "archetype_label": "Poacher / Fox in the Box",
+        "signals": [
+          {
+            "metric": "finishing_percentile",
+            "label": "Finishing",
+            "weight": 0.35
+          },
+          {
+            "metric": "np_goals_per90_percentile",
+            "label": "Non-penalty goals",
+            "weight": 0.3
+          },
+          {
+            "metric": "shot_conversion_percentile",
+            "label": "Shot conversion",
+            "weight": 0.2
+          },
+          {
+            "metric": "xg_per_shot_percentile",
+            "label": "Shot quality",
+            "weight": 0.15
+          }
+        ],
+        "gates": [
+          {
+            "metric": "xg_per_shot_percentile",
+            "label": "Shot quality gate",
+            "min": 45,
+            "cap": 48
+          },
+          {
+            "metric": "np_goals_per90_percentile",
+            "label": "Scoring volume gate",
+            "min": 45,
+            "cap": 48
+          }
+        ],
+        "concerns": [
+          {
+            "metric": "chance_creation_percentile",
+            "label": "Limited chance creation",
+            "below": 35
+          },
+          {
+            "metric": "duels_percentile",
+            "label": "Limited outlet profile",
+            "below": 35
+          }
+        ]
+      },
+      {
+        "key": "advanced_forward",
+        "label": "Advanced Forward",
+        "role": "line_leader",
+        "role_label": "Line Leader",
+        "archetype": "advanced_forward",
+        "archetype_label": "Advanced Forward",
+        "signals": [
+          {
+            "metric": "shot_generation_percentile",
+            "label": "Shot generation",
+            "weight": 0.32
+          },
+          {
+            "metric": "shots_per90_percentile",
+            "label": "Shot volume",
+            "weight": 0.22
+          },
+          {
+            "metric": "xg_per90_percentile",
+            "label": "xG volume",
+            "weight": 0.24
+          },
+          {
+            "metric": "carrying_percentile",
+            "label": "Carrying threat",
+            "weight": 0.12
+          },
+          {
+            "metric": "np_goals_per90_percentile",
+            "label": "Non-penalty goals",
+            "weight": 0.1
+          }
+        ],
+        "concerns": [
+          {
+            "metric": "finishing_percentile",
+            "label": "Finishing not yet matching volume",
+            "below": 40
+          }
+        ]
+      },
+      {
+        "key": "second_striker",
+        "label": "Second Striker",
+        "role": "link_forward",
+        "role_label": "Link Forward",
+        "archetype": "second_striker",
+        "archetype_label": "Second Striker",
+        "signals": [
+          {
+            "metric": "chance_creation_percentile",
+            "label": "Chance creation",
+            "weight": 0.32
+          },
+          { "metric": "xa_per90_percentile", "label": "xA", "weight": 0.22 },
+          {
+            "metric": "key_passes_per90_percentile",
+            "label": "Key passes",
+            "weight": 0.18
+          },
+          {
+            "metric": "assists_per90_percentile",
+            "label": "Assists",
+            "weight": 0.14
+          },
+          {
+            "metric": "team_function_percentile",
+            "label": "Link play",
+            "weight": 0.14
+          }
+        ],
+        "concerns": [
+          {
+            "metric": "shot_generation_percentile",
+            "label": "Lower direct shot threat",
+            "below": 35
+          }
+        ]
+      },
+      {
+        "key": "target_man",
+        "label": "Target Man",
+        "role": "outlet_forward",
+        "role_label": "Outlet Forward",
+        "archetype": "target_man",
+        "archetype_label": "Target Man",
+        "signals": [
+          {
+            "metric": "duels_percentile",
+            "label": "Duel presence",
+            "weight": 0.34
+          },
+          {
+            "metric": "aerials_per90_percentile",
+            "label": "Aerial volume",
+            "weight": 0.26
+          },
+          {
+            "metric": "aerial_win_rate_percentile",
+            "label": "Aerial win rate",
+            "weight": 0.24
+          },
+          {
+            "metric": "ground_duels_won_per90_percentile",
+            "label": "Ground duels",
+            "weight": 0.16
+          }
+        ],
+        "gates": [
+          {
+            "metric": "aerials_per90_percentile",
+            "label": "Aerial volume gate",
+            "min": 45,
+            "cap": 46
+          },
+          {
+            "metric": "aerial_win_rate_percentile",
+            "label": "Aerial win-rate gate",
+            "min": 40,
+            "cap": 48
+          }
+        ],
+        "concerns": [
+          {
+            "metric": "carrying_percentile",
+            "label": "Limited carry threat",
+            "below": 35
+          }
+        ]
+      },
+      {
+        "key": "complete_forward",
+        "label": "Complete Forward",
+        "role": "complete_forward",
+        "role_label": "Complete Forward",
+        "archetype": "complete_forward",
+        "archetype_label": "Complete Forward",
+        "signals": [
+          {
+            "metric": "finishing_percentile",
+            "label": "Finishing",
+            "weight": 0.2
+          },
+          {
+            "metric": "shot_generation_percentile",
+            "label": "Shot generation",
+            "weight": 0.2
+          },
+          {
+            "metric": "chance_creation_percentile",
+            "label": "Creation",
+            "weight": 0.2
+          },
+          {
+            "metric": "carrying_percentile",
+            "label": "Carrying",
+            "weight": 0.2
+          },
+          { "metric": "duels_percentile", "label": "Duels", "weight": 0.2 }
+        ],
+        "concerns": []
+      }
+    ],
+    "WINGER": [
+      {
+        "key": "inverted_winger_inside_forward",
+        "label": "Inverted Winger / Inside Forward",
+        "role": "inside_scorer",
+        "role_label": "Inside Scorer",
+        "archetype": "inverted_winger_inside_forward",
+        "archetype_label": "Inverted Winger / Inside Forward",
+        "signals": [
+          {
+            "metric": "goal_contribution_percentile",
+            "label": "Goal contribution",
+            "weight": 0.3
+          },
+          {
+            "metric": "shot_generation_percentile",
+            "label": "Shot generation",
+            "weight": 0.25
+          },
+          {
+            "metric": "np_goals_per90_percentile",
+            "label": "Non-penalty goals",
+            "weight": 0.25
+          },
+          {
+            "metric": "xg_per90_percentile",
+            "label": "xG volume",
+            "weight": 0.2
+          }
+        ],
+        "gates": [
+          {
+            "metric": "goal_contribution_percentile",
+            "label": "Goal-threat gate",
+            "min": 42,
+            "cap": 48
+          },
+          {
+            "metric": "xg_per90_percentile",
+            "label": "xG volume gate",
+            "min": 38,
+            "cap": 50
+          }
+        ],
+        "concerns": [
+          {
+            "metric": "chance_creation_percentile",
+            "label": "Limited service profile",
+            "below": 35
+          }
+        ]
+      },
+      {
+        "key": "traditional_touchline_winger",
+        "label": "Traditional / Touchline Winger",
+        "role": "wide_creator",
+        "role_label": "Wide Creator",
+        "archetype": "traditional_touchline_winger",
+        "archetype_label": "Traditional / Touchline Winger",
+        "signals": [
+          {
+            "metric": "chance_creation_percentile",
+            "label": "Chance creation",
+            "weight": 0.32
+          },
+          { "metric": "xa_per90_percentile", "label": "xA", "weight": 0.22 },
+          {
+            "metric": "key_passes_per90_percentile",
+            "label": "Key passes",
+            "weight": 0.2
+          },
+          {
+            "metric": "accurate_cross_per90_percentile",
+            "label": "Accurate crosses",
+            "weight": 0.16
+          },
+          {
+            "metric": "big_chances_created_percentile",
+            "label": "Big chances",
+            "weight": 0.1
+          }
+        ],
+        "concerns": []
+      },
+      {
+        "key": "one_v_one_touchline_winger",
+        "label": "1v1 Touchline Winger",
+        "role": "isolation_winger",
+        "role_label": "Isolation Winger",
+        "archetype": "one_v_one_touchline_winger",
+        "archetype_label": "1v1 Touchline Winger",
+        "signals": [
+          {
+            "metric": "productive_dribbling_percentile",
+            "label": "Productive dribbling",
+            "weight": 0.34
+          },
+          {
+            "metric": "carrying_percentile",
+            "label": "Carrying",
+            "weight": 0.25
+          },
+          {
+            "metric": "dribbles_per90_percentile",
+            "label": "Dribble volume",
+            "weight": 0.2
+          },
+          {
+            "metric": "progressive_carries_distance_per90_percentile",
+            "label": "Progressive carry distance",
+            "weight": 0.21
+          }
+        ],
+        "concerns": [
+          {
+            "metric": "possession_loss_rate_percentile",
+            "label": "Possession security risk",
+            "below": 35
+          }
+        ]
+      },
+      {
+        "key": "wide_forward",
+        "label": "Wide Forward",
+        "role": "direct_wide_forward",
+        "role_label": "Direct Wide Forward",
+        "archetype": "wide_forward",
+        "archetype_label": "Wide Forward",
+        "signals": [
+          {
+            "metric": "shots_per90_percentile",
+            "label": "Shot volume",
+            "weight": 0.25
+          },
+          {
+            "metric": "xg_per90_percentile",
+            "label": "xG volume",
+            "weight": 0.25
+          },
+          {
+            "metric": "np_goals_per90_percentile",
+            "label": "Non-penalty goals",
+            "weight": 0.25
+          },
+          {
+            "metric": "progressive_carries_distance_per90_percentile",
+            "label": "Progressive carrying",
+            "weight": 0.25
+          }
+        ],
+        "concerns": []
+      },
+      {
+        "key": "two_way_winger",
+        "label": "Two-Way Winger",
+        "role": "two_way_wide_midfielder",
+        "role_label": "Two-Way Wide Midfielder",
+        "archetype": "two_way_winger",
+        "archetype_label": "Two-Way Winger",
+        "signals": [
+          {
+            "metric": "defensive_percentile",
+            "label": "Defensive work",
+            "weight": 0.36
+          },
+          {
+            "metric": "ball_recoveries_per90_percentile",
+            "label": "Recoveries",
+            "weight": 0.24
+          },
+          {
+            "metric": "tackles_per90_percentile",
+            "label": "Tackles",
+            "weight": 0.2
+          },
+          {
+            "metric": "presence_percentile",
+            "label": "Presence",
+            "weight": 0.2
+          }
+        ],
+        "concerns": []
+      }
+    ],
+    "CAM": [
+      {
+        "key": "classic_10_trequartista",
+        "label": "Classic #10 / Trequartista",
+        "role": "primary_creator",
+        "role_label": "Primary Creator",
+        "archetype": "classic_10_trequartista",
+        "archetype_label": "Classic #10 / Trequartista",
+        "signals": [
+          {
+            "metric": "chance_creation_percentile",
+            "label": "Chance creation",
+            "weight": 0.35
+          },
+          { "metric": "xa_per90_percentile", "label": "xA", "weight": 0.25 },
+          {
+            "metric": "key_passes_per90_percentile",
+            "label": "Key passes",
+            "weight": 0.2
+          },
+          {
+            "metric": "big_chances_created_percentile",
+            "label": "Big chances",
+            "weight": 0.2
+          }
+        ],
+        "concerns": []
+      },
+      {
+        "key": "shadow_striker",
+        "label": "Shadow Striker",
+        "role": "box_arriver",
+        "role_label": "Box Arriver",
+        "archetype": "shadow_striker",
+        "archetype_label": "Shadow Striker",
+        "signals": [
+          {
+            "metric": "goal_threat_percentile",
+            "label": "Goal threat",
+            "weight": 0.32
+          },
+          {
+            "metric": "np_goals_per90_percentile",
+            "label": "Non-penalty goals",
+            "weight": 0.24
+          },
+          {
+            "metric": "xg_per90_percentile",
+            "label": "xG volume",
+            "weight": 0.24
+          },
+          {
+            "metric": "shots_per90_percentile",
+            "label": "Shot volume",
+            "weight": 0.2
+          }
+        ],
+        "concerns": []
+      },
+      {
+        "key": "raumdeuter",
+        "label": "Raumdeuter",
+        "role": "space_attacker",
+        "role_label": "Space Attacker",
+        "archetype": "raumdeuter",
+        "archetype_label": "Raumdeuter",
+        "signals": [
+          { "metric": "goal_threat_percentile", "label": "Goal threat", "weight": 0.34 },
+          { "metric": "xg_per90_percentile", "label": "xG volume", "weight": 0.26 },
+          { "metric": "np_goals_per90_percentile", "label": "Non-penalty goals", "weight": 0.22 },
+          { "metric": "touches_per90_percentile", "label": "Involvement", "weight": 0.18 }
+        ],
+        "concerns": [
+          { "metric": "team_function_percentile", "label": "Lower connective involvement", "below": 35 }
+        ]
+      },
+      {
+        "key": "enganche",
+        "label": "Enganche",
+        "role": "connector",
+        "role_label": "Connector",
+        "archetype": "enganche",
+        "archetype_label": "Enganche",
+        "signals": [
+          {
+            "metric": "team_function_percentile",
+            "label": "Connective play",
+            "weight": 0.32
+          },
+          {
+            "metric": "passes_completed_per90_percentile",
+            "label": "Passing volume",
+            "weight": 0.18
+          },
+          {
+            "metric": "xg_chain_per90_percentile",
+            "label": "xG chain",
+            "weight": 0.25
+          },
+          {
+            "metric": "xg_buildup_per90_percentile",
+            "label": "xG buildup",
+            "weight": 0.25
+          }
+        ],
+        "concerns": []
+      },
+      {
+        "key": "ball_carrying_10",
+        "label": "Ball-Carrying 10",
+        "role": "central_carrier",
+        "role_label": "Central Carrier",
+        "archetype": "ball_carrying_10",
+        "archetype_label": "Ball-Carrying 10",
+        "signals": [
+          {
+            "metric": "carrying_percentile",
+            "label": "Carrying",
+            "weight": 0.36
+          },
+          {
+            "metric": "progressive_carries_distance_per90_percentile",
+            "label": "Progressive carry distance",
+            "weight": 0.28
+          },
+          {
+            "metric": "dribbles_per90_percentile",
+            "label": "Dribble volume",
+            "weight": 0.18
+          },
+          {
+            "metric": "fouls_won_per90_percentile",
+            "label": "Fouls won",
+            "weight": 0.18
+          }
+        ],
+        "concerns": []
+      },
+      {
+        "key": "two_way_10",
+        "label": "Two-Way 10",
+        "role": "pressing_10",
+        "role_label": "Pressing 10",
+        "archetype": "two_way_10",
+        "archetype_label": "Two-Way 10",
+        "signals": [
+          {
+            "metric": "defensive_percentile",
+            "label": "Defensive work",
+            "weight": 0.4
+          },
+          {
+            "metric": "ball_recoveries_per90_percentile",
+            "label": "Recoveries",
+            "weight": 0.25
+          },
+          {
+            "metric": "tackles_per90_percentile",
+            "label": "Tackles",
+            "weight": 0.2
+          },
+          {
+            "metric": "interceptions_per90_percentile",
+            "label": "Interceptions",
+            "weight": 0.15
+          }
+        ],
+        "concerns": []
+      }
+    ],
+    "CM": [
+      {
+        "key": "anchor_regista",
+        "label": "Anchor / Regista",
+        "role": "six",
+        "role_label": "6",
+        "archetype": "anchor_regista",
+        "archetype_label": "Anchor / Regista",
+        "signals": [
+          {
+            "metric": "volume_passing_percentile",
+            "label": "Passing volume",
+            "weight": 0.25
+          },
+          {
+            "metric": "pass_value_normalized_percentile",
+            "label": "Pass value",
+            "weight": 0.25
+          },
+          {
+            "metric": "accurate_final_third_passes_per90_percentile",
+            "label": "Final-third passing",
+            "weight": 0.18
+          },
+          {
+            "metric": "xg_buildup_per90_percentile",
+            "label": "Build-up involvement",
+            "weight": 0.18
+          },
+          { "metric": "control_percentile", "label": "Control", "weight": 0.14 }
+        ],
+        "concerns": []
+      },
+      {
+        "key": "destroyer",
+        "label": "Destroyer",
+        "role": "six",
+        "role_label": "6",
+        "archetype": "destroyer",
+        "archetype_label": "Destroyer",
+        "signals": [
+          {
+            "metric": "defensive_percentile",
+            "label": "Defensive coverage",
+            "weight": 0.36
+          },
+          {
+            "metric": "ball_recoveries_per90_percentile",
+            "label": "Recoveries",
+            "weight": 0.22
+          },
+          {
+            "metric": "tackles_per90_percentile",
+            "label": "Tackles",
+            "weight": 0.22
+          },
+          {
+            "metric": "interceptions_per90_percentile",
+            "label": "Interceptions",
+            "weight": 0.2
+          }
+        ],
+        "concerns": [
+          {
+            "metric": "passing_accuracy_percentile",
+            "label": "Possession security watch",
+            "below": 35
+          }
+        ]
+      },
+      {
+        "key": "shuttler_space_eater",
+        "label": "Shuttler / Space-Eater",
+        "role": "eight",
+        "role_label": "8",
+        "archetype": "shuttler_space_eater",
+        "archetype_label": "Shuttler / Space-Eater",
+        "signals": [
+          {
+            "metric": "carrying_percentile",
+            "label": "Carrying",
+            "weight": 0.32
+          },
+          {
+            "metric": "progressive_carries_distance_per90_percentile",
+            "label": "Progressive carry distance",
+            "weight": 0.26
+          },
+          {
+            "metric": "defensive_percentile",
+            "label": "Defensive coverage",
+            "weight": 0.22
+          },
+          {
+            "metric": "ground_duel_win_rate_percentile",
+            "label": "Ground duel security",
+            "weight": 0.2
+          }
+        ],
+        "concerns": []
+      },
+      {
+        "key": "creator",
+        "label": "Creator",
+        "role": "advanced_eight",
+        "role_label": "Advanced 8 / 10",
+        "archetype": "creator",
+        "archetype_label": "Creator",
+        "signals": [
+          {
+            "metric": "chance_creation_percentile",
+            "label": "Chance creation",
+            "weight": 0.32
+          },
+          { "metric": "xa_per90_percentile", "label": "xA", "weight": 0.22 },
+          {
+            "metric": "key_passes_per90_percentile",
+            "label": "Key passes",
+            "weight": 0.18
+          },
+          {
+            "metric": "big_chances_created_percentile",
+            "label": "Big chances",
+            "weight": 0.16
+          },
+          {
+            "metric": "pass_to_assist_per90_percentile",
+            "label": "Pre-assists",
+            "weight": 0.12
+          }
+        ],
+        "concerns": []
+      },
+      {
+        "key": "box_to_box",
+        "label": "Box-to-Box",
+        "role": "eight",
+        "role_label": "8",
+        "archetype": "box_to_box",
+        "archetype_label": "Box-to-Box",
+        "signals": [
+          {
+            "metric": "goal_threat_percentile",
+            "label": "Box threat",
+            "weight": 0.24
+          },
+          {
+            "metric": "chance_creation_percentile",
+            "label": "Chance creation",
+            "weight": 0.2
+          },
+          {
+            "metric": "carrying_percentile",
+            "label": "Carrying",
+            "weight": 0.2
+          },
+          {
+            "metric": "defensive_percentile",
+            "label": "Defensive coverage",
+            "weight": 0.2
+          },
+          {
+            "metric": "volume_passing_percentile",
+            "label": "Passing volume",
+            "weight": 0.16
+          }
+        ],
+        "concerns": []
+      }
+    ],
+    "CB": [
+      {
+        "key": "stopper_no_nonsense_cb",
+        "label": "Stopper / No-nonsense CB",
+        "role": "box_defender",
+        "role_label": "Box Defender",
+        "archetype": "stopper_no_nonsense_cb",
+        "archetype_label": "Stopper / No-nonsense CB",
+        "signals": [
+          {
+            "metric": "defensive_percentile",
+            "label": "Box defending",
+            "weight": 0.32
+          },
+          {
+            "metric": "duels_percentile",
+            "label": "Duel security",
+            "weight": 0.24
+          },
+          {
+            "metric": "aerials_per90_percentile",
+            "label": "Aerial volume",
+            "weight": 0.18
+          },
+          {
+            "metric": "tackles_per90_percentile",
+            "label": "Tackles",
+            "weight": 0.14
+          },
+          {
+            "metric": "interceptions_per90_percentile",
+            "label": "Interceptions",
+            "weight": 0.12
+          }
+        ],
+        "concerns": []
+      },
+      {
+        "key": "ball_playing_defender",
+        "label": "Ball-Playing Defender",
+        "role": "build_up_defender",
+        "role_label": "Build-Up Defender",
+        "archetype": "ball_playing_defender",
+        "archetype_label": "Ball-Playing Defender",
+        "signals": [
+          {
+            "metric": "volume_passing_percentile",
+            "label": "Passing volume",
+            "weight": 0.25
+          },
+          {
+            "metric": "team_function_percentile",
+            "label": "Build-up security",
+            "weight": 0.2
+          },
+          {
+            "metric": "passes_completed_per90_percentile",
+            "label": "Completed passes",
+            "weight": 0.18
+          },
+          {
+            "metric": "accurate_long_balls_per90_percentile",
+            "label": "Long passing",
+            "weight": 0.18
+          },
+          {
+            "metric": "pass_value_normalized_percentile",
+            "label": "Pass value",
+            "weight": 0.19
+          }
+        ],
+        "gates": [
+          {
+            "metric": "volume_passing_percentile",
+            "label": "Passing volume gate",
+            "min": 38,
+            "cap": 48
+          },
+          {
+            "metric": "pass_value_normalized_percentile",
+            "label": "Pass value gate",
+            "min": 35,
+            "cap": 50
+          }
+        ],
+        "concerns": [
+          {
+            "metric": "possession_loss_rate_percentile",
+            "label": "Possession security watch",
+            "below": 35
+          }
+        ]
+      },
+      {
+        "key": "sweeper_libero",
+        "label": "Sweeper / Libero",
+        "role": "cover_defender",
+        "role_label": "Cover Defender",
+        "archetype": "sweeper_libero",
+        "archetype_label": "Sweeper / Libero",
+        "signals": [
+          {
+            "metric": "carrying_percentile",
+            "label": "Carrying",
+            "weight": 0.24
+          },
+          {
+            "metric": "ball_recoveries_per90_percentile",
+            "label": "Recoveries",
+            "weight": 0.24
+          },
+          {
+            "metric": "ground_duel_win_rate_percentile",
+            "label": "Ground duel security",
+            "weight": 0.22
+          },
+          {
+            "metric": "team_function_percentile",
+            "label": "Composure",
+            "weight": 0.18
+          },
+          {
+            "metric": "progressive_carries_distance_per90_percentile",
+            "label": "Progressive carrying",
+            "weight": 0.12
+          }
+        ],
+        "concerns": []
+      },
+      {
+        "key": "wide_centre_back",
+        "label": "Wide Centre-Back",
+        "role": "wide_cover_defender",
+        "role_label": "Wide Cover Defender",
+        "archetype": "wide_centre_back",
+        "archetype_label": "Wide Centre-Back",
+        "signals": [
+          {
+            "metric": "carrying_percentile",
+            "label": "Carrying",
+            "weight": 0.25
+          },
+          {
+            "metric": "progressive_carries_distance_per90_percentile",
+            "label": "Progressive carrying",
+            "weight": 0.25
+          },
+          {
+            "metric": "volume_passing_percentile",
+            "label": "Passing volume",
+            "weight": 0.2
+          },
+          {
+            "metric": "tackles_per90_percentile",
+            "label": "Wide defending",
+            "weight": 0.16
+          },
+          {
+            "metric": "ground_duel_win_rate_percentile",
+            "label": "Ground duel security",
+            "weight": 0.14
+          }
+        ],
+        "concerns": []
+      }
+    ],
+    "FB": [
+      {
+        "key": "overlapping_fullback",
+        "label": "Overlapping Fullback",
+        "role": "wide_support_defender",
+        "role_label": "Wide Support Defender",
+        "archetype": "overlapping_fullback",
+        "archetype_label": "Overlapping Fullback",
+        "signals": [
+          {
+            "metric": "chance_creation_percentile",
+            "label": "Chance creation",
+            "weight": 0.24
+          },
+          {
+            "metric": "accurate_cross_per90_percentile",
+            "label": "Crossing",
+            "weight": 0.22
+          },
+          {
+            "metric": "progressive_carries_distance_per90_percentile",
+            "label": "Progressive carrying",
+            "weight": 0.22
+          },
+          {
+            "metric": "touches_per90_percentile",
+            "label": "Touch volume",
+            "weight": 0.16
+          },
+          {
+            "metric": "defensive_percentile",
+            "label": "Defensive work",
+            "weight": 0.16
+          }
+        ],
+        "concerns": []
+      },
+      {
+        "key": "inverted_fullback",
+        "label": "Inverted Fullback",
+        "role": "inside_support_defender",
+        "role_label": "Inside Support Defender",
+        "archetype": "inverted_fullback",
+        "archetype_label": "Inverted Fullback",
+        "signals": [
+          {
+            "metric": "volume_passing_percentile",
+            "label": "Passing volume",
+            "weight": 0.28
+          },
+          {
+            "metric": "team_function_percentile",
+            "label": "Build-up security",
+            "weight": 0.24
+          },
+          {
+            "metric": "pass_value_normalized_percentile",
+            "label": "Pass value",
+            "weight": 0.22
+          },
+          {
+            "metric": "carrying_percentile",
+            "label": "Carrying",
+            "weight": 0.14
+          },
+          {
+            "metric": "defensive_percentile",
+            "label": "Defensive coverage",
+            "weight": 0.12
+          }
+        ],
+        "gates": [
+          {
+            "metric": "volume_passing_percentile",
+            "label": "Passing volume gate",
+            "min": 38,
+            "cap": 48
+          },
+          {
+            "metric": "team_function_percentile",
+            "label": "Build-up security gate",
+            "min": 35,
+            "cap": 50
+          }
+        ],
+        "concerns": []
+      },
+      {
+        "key": "defensive_fullback",
+        "label": "Defensive Fullback",
+        "role": "lockdown_defender",
+        "role_label": "Lockdown Defender",
+        "archetype": "defensive_fullback",
+        "archetype_label": "Defensive Fullback",
+        "signals": [
+          {
+            "metric": "defensive_percentile",
+            "label": "Defensive work",
+            "weight": 0.34
+          },
+          {
+            "metric": "duels_percentile",
+            "label": "Duel security",
+            "weight": 0.24
+          },
+          {
+            "metric": "tackles_per90_percentile",
+            "label": "Tackles",
+            "weight": 0.22
+          },
+          {
+            "metric": "interceptions_per90_percentile",
+            "label": "Interceptions",
+            "weight": 0.2
+          }
+        ],
+        "concerns": []
+      },
+      {
+        "key": "progressive_fullback",
+        "label": "Progressive Fullback",
+        "role": "ball_progressor",
+        "role_label": "Ball Progressor",
+        "archetype": "progressive_fullback",
+        "archetype_label": "Progressive Fullback",
+        "signals": [
+          {
+            "metric": "carrying_percentile",
+            "label": "Carrying",
+            "weight": 0.32
+          },
+          {
+            "metric": "progressive_carries_distance_per90_percentile",
+            "label": "Progressive carry distance",
+            "weight": 0.28
+          },
+          {
+            "metric": "dribbles_per90_percentile",
+            "label": "Dribble volume",
+            "weight": 0.2
+          },
+          {
+            "metric": "pass_value_normalized_percentile",
+            "label": "Pass value",
+            "weight": 0.2
+          }
+        ],
+        "concerns": []
+      }
+    ]
+  }
+}

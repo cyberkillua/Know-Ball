@@ -53,6 +53,10 @@ export function formatRoleArchetype(archetype: string | null | undefined) {
     ball_playing_cb: "Ball-Playing Defender",
     composed_retainer: "Ball-Playing Defender",
     sweeper_recovery_cb: "Sweeper / Libero",
+    overlapping_fullback: "Overlapping Fullback",
+    inverted_fullback: "Inverted Fullback",
+    defensive_fullback: "Defensive Fullback",
+    progressive_fullback: "Progressive Fullback",
   }
   return archetype ? labels[archetype] ?? archetype : null
 }

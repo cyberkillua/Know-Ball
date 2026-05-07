@@ -19,6 +19,7 @@ from pipeline.engine.season_score import (
     build_season_score_config,
     calculate_season_score,
 )
+from pipeline.engine.roles import assign_role_fit
 from pipeline.logger import get_logger
 
 log = get_logger("compute")
@@ -782,6 +783,10 @@ def compute_peer_ratings(
             "position_scope": "",
             "cm_archetype": None,
             "role_archetype": None,
+            "role_family": None,
+            "role_fit": None,
+            "role_confidence": None,
+            "role_evidence": None,
             "matches_played": r["matches_played"],
             "minutes_played": minutes,
             "rated_minutes": rated_minutes,
@@ -1575,10 +1580,24 @@ def compute_peer_ratings(
                 for col in NULL_PERCENTILE_COLS:
                     p[col] = None
 
+        for p in group:
+            role_fit = assign_role_fit(p, position_label)
+            primary_role = role_fit.get("primary") if role_fit else None
+            p["role_fit"] = role_fit
+            p["role_family"] = primary_role.get("role") if primary_role else None
+            p["role_archetype"] = (
+                primary_role.get("archetype") if primary_role else None
+            )
+            p["cm_archetype"] = p["role_archetype"] if is_cm else p.get("cm_archetype")
+            p["role_confidence"] = (
+                role_fit.get("confidence", {}).get("score") if role_fit else None
+            )
+            p["role_evidence"] = role_fit.get("evidence") if role_fit else None
+
     upsert_sql = """
             INSERT INTO peer_ratings (
                 player_id, league_id, season, position, peer_mode, position_scope,
-                cm_archetype, role_archetype,
+                cm_archetype, role_archetype, role_family, role_fit, role_confidence, role_evidence,
                 matches_played, minutes_played, rated_minutes, avg_match_rating,
                 goals_per90, shots_per90, xg_per90, xgot_per90, xa_per90,
                 assists_per90, key_passes_per90, accurate_cross_per90,
@@ -1661,7 +1680,7 @@ def compute_peer_ratings(
                 pass_to_assist_raw_percentile
             ) VALUES (
                 %(player_id)s, %(league_id)s, %(season)s, %(position)s, %(peer_mode)s, %(position_scope)s,
-                %(cm_archetype)s, %(role_archetype)s,
+                %(cm_archetype)s, %(role_archetype)s, %(role_family)s, %(role_fit)s, %(role_confidence)s, %(role_evidence)s,
                 %(matches_played)s, %(minutes_played)s, %(rated_minutes)s, %(avg_match_rating)s,
                 %(goals_per90)s, %(shots_per90)s, %(xg_per90)s, %(xgot_per90)s, %(xa_per90)s,
                 %(assists_per90)s, %(key_passes_per90)s, %(accurate_cross_per90)s,
@@ -1749,6 +1768,10 @@ def compute_peer_ratings(
                 position_scope                    = EXCLUDED.position_scope,
                 cm_archetype                      = EXCLUDED.cm_archetype,
                 role_archetype                    = EXCLUDED.role_archetype,
+                role_family                       = EXCLUDED.role_family,
+                role_fit                          = EXCLUDED.role_fit,
+                role_confidence                   = EXCLUDED.role_confidence,
+                role_evidence                     = EXCLUDED.role_evidence,
                 matches_played                    = EXCLUDED.matches_played,
                 minutes_played                    = EXCLUDED.minutes_played,
                 rated_minutes                     = EXCLUDED.rated_minutes,
@@ -1903,8 +1926,23 @@ def compute_peer_ratings(
                 pass_to_assist_raw_percentile                 = EXCLUDED.pass_to_assist_raw_percentile
             """
 
+    for p in players:
+        for json_col in ("role_fit", "role_evidence"):
+            if isinstance(p.get(json_col), (dict, list)):
+                p[json_col] = psycopg2.extras.Json(p[json_col])
+
+    insert_prefix, values_and_suffix = upsert_sql.split(") VALUES (", 1)
+    values_template, conflict_suffix = values_and_suffix.split(")\n            ON CONFLICT", 1)
+    execute_values_sql = f"{insert_prefix}) VALUES %s\n            ON CONFLICT{conflict_suffix}"
+
     with db.conn.cursor() as cur:
-        psycopg2.extras.execute_batch(cur, upsert_sql, players, page_size=500)
+        psycopg2.extras.execute_values(
+            cur,
+            execute_values_sql,
+            players,
+            template=f"({values_template})",
+            page_size=500,
+        )
     upserted = len(players)
 
     log.info(f"[{position_label}][{peer_mode}] Upserted {upserted} peer_rating records")

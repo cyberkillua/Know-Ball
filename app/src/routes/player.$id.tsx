@@ -14,6 +14,7 @@ import RatingLineChart from "../components/charts/RatingLineChart";
 import SeasonTrendChart from "../components/charts/SeasonTrendChart";
 import StatRow from "../components/StatRow";
 import PizzaChart from "../components/charts/PizzaChart";
+import { getPizzaMetrics } from "../lib/playerMetrics";
 import {
   getPlayer,
   getPlayerSeasons,
@@ -21,6 +22,7 @@ import {
   getPlayerSeasonTrend,
   getPlayerPeerRating,
   getPlayerPeerMetricRanks,
+  getSimilarRoleProfiles,
   getPlayerStats,
   getPlayerShots,
   getPlayerXgotDelta,
@@ -41,10 +43,12 @@ import type {
   PlayerSeasonTrendPoint,
   PlayerStats,
   PlayerUnderstat,
+  SimilarRoleProfile,
   Shot,
 } from "../lib/types";
 import ShotProfile from "../components/ShotProfile";
 import RatingMethodNote from "../components/RatingMethodNote";
+import RoleFitCard from "../components/RoleFitCard";
 import SocialScoutingReportCard, {
   type SocialMetric,
   type SocialScoutingReportCardProps,
@@ -901,7 +905,7 @@ function defenderScoutReport(
 
 function methodVariantForPosition(position: string | null | undefined): React.ComponentProps<typeof RatingMethodNote>["variant"] {
   const pos = (position ?? "").toUpperCase();
-  if (["CB", "LB", "RB", "LWB", "RWB", "DEF", "DEFENDER"].includes(pos)) return "defender";
+  if (["CB", "FB", "LB", "RB", "LWB", "RWB", "DEF", "DEFENDER"].includes(pos)) return "defender";
   if (["CM", "CDM", "DM", "MID", "MIDFIELDER"].includes(pos)) return "midfielder";
   if (["CAM", "AM"].includes(pos)) return "attacking-midfielder";
   if (["LW", "RW", "LM", "RM", "W", "WINGER"].includes(pos)) return "winger";
@@ -923,6 +927,15 @@ function pct(
 
 // Interpolates between red→amber→green based on a 0–100 value and per-metric thresholds.
 // low: value below which it's fully red. high: value above which it's fully green.
+// Returns a Tailwind text color class for percentile-band tones (≥70 good, ≥40 warn, else bad).
+function bandToneClass(value: number | null | undefined): string {
+  if (value == null) return "text-muted-foreground";
+  const v = Number(value);
+  if (v >= 70) return "text-band-good";
+  if (v >= 40) return "text-band-warn";
+  return "text-band-bad";
+}
+
 function rateColor(val: number, low: number, high: number): string {
   const t = Math.max(0, Math.min(1, (val - low) / (high - low)));
   if (t < 0.5) {
@@ -960,6 +973,7 @@ function PlayerProfilePage() {
   const [allPeerRating, setAllPeerRating] = useState<PeerRating | null>(null);
   const [peerMetricRanks, setPeerMetricRanks] = useState<Record<string, PeerMetricRank>>({});
   const [allPeerMetricRanks, setAllPeerMetricRanks] = useState<Record<string, PeerMetricRank>>({});
+  const [similarRoleProfiles, setSimilarRoleProfiles] = useState<SimilarRoleProfile[]>([]);
   const [stats, setStats] = useState<PlayerStats | null>(null);
   const [shots, setShots] = useState<Shot[]>([]);
   const [xgotDelta, setXgotDelta] = useState<number | null>(null);
@@ -1081,6 +1095,7 @@ function PlayerProfilePage() {
     const [leagueId, seasonStr] = season.split("|");
     const leagueIdNum = Number(leagueId);
     setSeasonLoading(true);
+    setSimilarRoleProfiles([]);
     Promise.all([
       getPlayerRatings({
         data: { playerId, season: seasonStr, leagueId: leagueIdNum },
@@ -1127,7 +1142,10 @@ function PlayerProfilePage() {
         data: { playerId, season: seasonStr, leagueId: leagueIdNum },
       }),
       getPlayerUnderstat({ data: { playerId, season: seasonStr } }),
-    ]).then(([r, pr, apr, prRanks, aprRanks, st, sh, xgd, ustat]) => {
+      getSimilarRoleProfiles({
+        data: { playerId, season: seasonStr, leagueId: leagueIdNum, limit: 4 },
+      }),
+    ]).then(([r, pr, apr, prRanks, aprRanks, st, sh, xgd, ustat, similarProfiles]) => {
       if (!isCurrent) return;
       const leaguePeerResponse = pr as PlayerPeerRatingResponse;
       const allPeerResponse = apr as PlayerPeerRatingResponse;
@@ -1141,6 +1159,7 @@ function PlayerProfilePage() {
       const rawDelta = (xgd as any)?.delta;
       setXgotDelta(rawDelta != null ? Number(rawDelta) : null);
       setUnderstat(ustat as PlayerUnderstat | null);
+      setSimilarRoleProfiles(similarProfiles as SimilarRoleProfile[]);
       setLoading(false);
       setSeasonLoading(false);
     });
@@ -1150,16 +1169,13 @@ function PlayerProfilePage() {
   if (loading) {
     return (
       <div className="space-y-4">
-        <Skeleton className="h-36 rounded-xl" />
-        <div className="grid gap-3 sm:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-20 rounded-xl" />
-          ))}
+        <Skeleton className="h-32 rounded-xl" />
+        <Skeleton className="h-10 rounded-xl" />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Skeleton className="h-48 rounded-xl" />
+          <Skeleton className="h-48 rounded-xl" />
         </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          <Skeleton className="h-64 rounded-xl" />
-          <Skeleton className="h-64 rounded-xl" />
-        </div>
+        <Skeleton className="h-72 rounded-xl" />
       </div>
     );
   }
@@ -1173,13 +1189,6 @@ function PlayerProfilePage() {
       ? ratings.reduce((sum, r) => sum + Number(r.final_rating), 0) /
         ratings.length
       : 0;
-
-  const last5 = ratings.slice(-5);
-  const last5Avg =
-    last5.length > 0
-      ? last5.reduce((s, r) => s + Number(r.final_rating), 0) / last5.length
-      : 0;
-  const formDelta = avgRating > 0 ? last5Avg - avgRating : 0;
 
   const contentClass = seasonLoading
     ? "opacity-50 pointer-events-none transition-opacity"
@@ -1391,141 +1400,110 @@ function PlayerProfilePage() {
     ),
   };
 
+  const heroLeagueName =
+    seasons.find((s) => `${s.league_id}|${s.season}` === season)?.league_name ??
+    (player.team as any)?.league?.name;
+  const heroAge = calculateAge(player.date_of_birth);
+  const heroTeamName = stats?.team_name ?? (player.team as any)?.name;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-3 sm:space-y-6">
       {/* ── Layer 1: Hero Header ─────────────────────────────────────────── */}
       <button onClick={() => window.history.back()} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-1">
         <ArrowLeft size={14} /> Back
       </button>
       <Card>
-        <CardContent className="p-6">
-          <div className="flex items-start gap-4">
-            {/* Avatar */}
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-secondary text-xl font-bold text-primary">
-              {player.name.charAt(0)}
-            </div>
-
-            {/* Player identity + right section */}
-            <div className="flex-1 min-w-0">
-              <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-                {/* Name + meta */}
-                <div className="min-w-0">
-                  <h1 className="text-xl font-bold leading-tight">{player.name}</h1>
-                  <div className="flex items-center gap-1.5 mt-0.5">
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-6">
+            {/* Identity: avatar + name/meta + rating badge */}
+            <div className="flex flex-1 items-start gap-3 min-w-0">
+              <div className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-secondary text-lg sm:text-xl font-bold text-primary">
+                {player.name.charAt(0)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h1 className="text-lg sm:text-xl font-bold leading-tight truncate">{player.name}</h1>
+                {(player.position || heroTeamName) && (
+                  <div className="mt-0.5 flex items-center gap-1.5">
                     {player.position && (
                       <span className="text-xs font-semibold uppercase tracking-wide text-primary">
                         {player.position}
                       </span>
                     )}
-                    {(stats?.team_name || (player.team as any)?.name) && (
-                      <>
-                        <span className="text-muted-foreground text-xs">·</span>
-                        <span className="text-sm text-muted-foreground">
-                          {stats?.team_name ?? (player.team as any).name}
-                        </span>
-                      </>
+                    {player.position && heroTeamName && (
+                      <span className="text-xs text-muted-foreground">·</span>
+                    )}
+                    {heroTeamName && (
+                      <span className="text-sm text-muted-foreground truncate">
+                        {heroTeamName}
+                      </span>
                     )}
                   </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
-                    {calculateAge(player.date_of_birth) != null && (
-                      <span>{calculateAge(player.date_of_birth)} yrs</span>
-                    )}
-                    {player.nationality && (
-                      <>
-                        {calculateAge(player.date_of_birth) != null && (
-                          <span>·</span>
-                        )}
-                        <span>{player.nationality}</span>
-                      </>
-                    )}
-                    {(seasons.find((s) => `${s.league_id}|${s.season}` === season)?.league_name ?? (player.team as any)?.league?.name) && (
-                      <>
-                        {(calculateAge(player.date_of_birth) != null ||
-                          player.nationality) && <span>·</span>}
-                        <span>{seasons.find((s) => `${s.league_id}|${s.season}` === season)?.league_name ?? (player.team as any)?.league?.name}</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Season selector + rating stats */}
-                <div className="shrink-0 flex flex-col items-end gap-2">
-                  {seasons.length > 0 && (
-                    <select
-                      value={season}
-                      onChange={(e) => setSeason(e.target.value)}
-                      className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                    >
-                      {seasons.map((s) => (
-                        <option
-                          key={`${s.league_id}-${s.season}`}
-                          value={`${s.league_id}|${s.season}`}
-                        >
-                          {s.league_name} {s.season}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-
-                  {avgRating > 0 && (
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        {stats && (
-                          <div className="text-xs text-muted-foreground mb-1">
-                            {stats.matches} apps · {stats.minutes?.toLocaleString()}{" "}
-                            mins
-                          </div>
-                        )}
-                        {last5.length >= 3 && (
-                          <div
-                            className={`text-xs font-medium text-right ${
-                              formDelta > 0.2
-                                ? "text-emerald-400"
-                                : formDelta < -0.2
-                                  ? "text-red-400"
-                                  : "text-muted-foreground"
-                            }`}
-                          >
-                            {formDelta > 0.2
-                              ? "↑ In form"
-                              : formDelta < -0.2
-                                ? "↓ Out of form"
-                                : "→ Steady"}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex flex-col items-center">
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                          Rating
-                        </div>
-                        <RatingBadge
-                          rating={Number(avgRating.toFixed(2))}
-                          size="lg"
-                        />
-                      </div>
+                )}
+                {(() => {
+                  const meta = [
+                    heroAge != null ? `${heroAge} yrs` : null,
+                    player.nationality ?? null,
+                    heroLeagueName ?? null,
+                  ].filter(Boolean) as string[];
+                  if (meta.length === 0) return null;
+                  return (
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {meta.join(" · ")}
                     </div>
-                  )}
-                </div>
+                  );
+                })()}
+                {stats && avgRating > 0 && (
+                  <div className="mt-1.5 text-xs text-muted-foreground">
+                    {stats.matches ?? 0} apps · {stats.minutes?.toLocaleString() ?? 0} mins
+                  </div>
+                )}
               </div>
+
+              {avgRating > 0 && (
+                <div className="shrink-0 self-start">
+                  <RatingBadge
+                    rating={Number(avgRating.toFixed(2))}
+                    size="lg"
+                  />
+                </div>
+              )}
             </div>
+
+            {/* Season selector — full width on mobile, sits to the right on desktop */}
+            {seasons.length > 0 && (
+              <select
+                value={season}
+                onChange={(e) => setSeason(e.target.value)}
+                className="w-full md:w-auto md:shrink-0 md:self-start rounded-lg border border-border bg-card px-3 py-2 md:py-1.5 text-sm font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                {seasons.map((s) => (
+                  <option
+                    key={`${s.league_id}-${s.season}`}
+                    value={`${s.league_id}|${s.season}`}
+                  >
+                    {s.league_name} {s.season}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
         </CardContent>
       </Card>
 
       {/* Season-filtered content */}
       <div className={contentClass}>
-        <div className="mt-4 border-b border-border">
-          <div className="flex gap-1 overflow-x-auto">
+        <div className="sticky top-14 z-30 -mx-4 mt-2 border-b border-border bg-background/85 px-4 backdrop-blur-md sm:mx-0 sm:mt-4 sm:px-0">
+          <div className="flex gap-0.5 overflow-x-auto sm:gap-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {[
               { id: "overview", label: "Overview" },
               { id: "stats", label: "Stats" },
-              { id: "scouting", label: "Scouting Report" },
+              { id: "scouting", label: "Report" },
               { id: "matches", label: "Matches" },
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as PlayerTab)}
-                className={`border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+                className={`flex-1 shrink-0 sm:flex-none border-b-2 px-2 sm:px-3 py-2.5 text-sm font-medium transition-colors ${
                   activeTab === tab.id
                     ? "border-primary text-foreground"
                     : "border-transparent text-muted-foreground hover:text-foreground"
@@ -1540,69 +1518,62 @@ function PlayerProfilePage() {
         {stats ? (
           <>
             {activeTab === "overview" && (
-              <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr]">
-                <Card>
-                  <CardContent className="p-5">
-                    <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Season Snapshot
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                      <div>
-                        <div className="text-[11px] text-muted-foreground">Apps</div>
-                        <div className="text-lg font-bold">{stats.matches ?? 0}</div>
-                      </div>
-                      <div>
-                        <div className="text-[11px] text-muted-foreground">Minutes</div>
-                        <div className="text-lg font-bold">{stats.minutes?.toLocaleString() ?? 0}</div>
-                      </div>
-                      <div>
-                        <div className="text-[11px] text-muted-foreground">Avg Rating</div>
-                        <div className="text-lg font-bold">{avgRating > 0 ? avgRating.toFixed(2) : "—"}</div>
-                      </div>
-                      <div>
-                        <div className="text-[11px] text-muted-foreground">Score</div>
-                        <div className="text-lg font-bold">{activePeerRating?.model_score != null ? Number(activePeerRating.model_score).toFixed(1) : "—"}</div>
-                      </div>
-                    </div>
-                    {roleArchetype && (
-                      <div className="mt-4 inline-flex border border-border bg-muted px-2.5 py-1 text-xs font-semibold text-foreground">
-                        {roleArchetype}
-                      </div>
-                    )}
-                    {confidenceMessage && (
-                      <div className="mt-3 text-xs text-muted-foreground">{confidenceMessage}</div>
-                    )}
-                  </CardContent>
-                </Card>
+              <div className="mt-4 grid gap-3 sm:gap-4 lg:grid-cols-[1fr_1fr]">
+                {activePeerRating?.role_fit && (
+                  <RoleFitCard
+                    roleFit={activePeerRating.role_fit}
+                    similarProfiles={peerScope === "league" ? similarRoleProfiles : []}
+                  />
+                )}
 
-                <Card>
-                  <CardContent className="p-5">
+                <Card className="lg:col-span-2">
+                  <CardContent className="p-4 sm:p-5">
                     <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       Quick Read
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid gap-4 sm:grid-cols-2">
                       <div>
-                        <div className="mb-2 text-xs font-semibold text-foreground">Best signals</div>
-                        <div className="space-y-2">
-                          {bestSignals.length > 0 ? bestSignals.map((row) => (
-                            <div key={`overview-best-${row.label}`} className="flex items-baseline justify-between gap-3 text-xs">
-                              <span className="text-muted-foreground">{row.label}</span>
-                              <span className="font-bold text-foreground">{Math.round(Number(row.value))}</span>
-                            </div>
-                          )) : (
+                        <div className="mb-2 text-xs font-semibold text-emerald-400">Best signals</div>
+                        <div className="space-y-2.5">
+                          {bestSignals.length > 0 ? bestSignals.map((row) => {
+                            const v = Math.max(0, Math.min(100, Math.round(Number(row.value))));
+                            const tone =
+                              v >= 70 ? "bg-emerald-500" : v >= 50 ? "bg-emerald-500/70" : "bg-muted-foreground/40";
+                            return (
+                              <div key={`overview-best-${row.label}`} className="space-y-1">
+                                <div className="flex items-baseline justify-between gap-3 text-xs">
+                                  <span className="text-foreground truncate">{row.label}</span>
+                                  <span className="font-bold tabular-nums text-foreground">{v}</span>
+                                </div>
+                                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                                  <div className={`h-full rounded-full ${tone}`} style={{ width: `${v}%` }} />
+                                </div>
+                              </div>
+                            );
+                          }) : (
                             <div className="text-xs text-muted-foreground">No peer signal yet.</div>
                           )}
                         </div>
                       </div>
                       <div>
-                        <div className="mb-2 text-xs font-semibold text-foreground">Watch areas</div>
-                        <div className="space-y-2">
-                          {weakSignals.length > 0 ? weakSignals.map((row) => (
-                            <div key={`overview-watch-${row.label}`} className="flex items-baseline justify-between gap-3 text-xs">
-                              <span className="text-muted-foreground">{row.label}</span>
-                              <span className="font-bold text-foreground">{Math.round(Number(row.value))}</span>
-                            </div>
-                          )) : (
+                        <div className="mb-2 text-xs font-semibold text-amber-400">Watch areas</div>
+                        <div className="space-y-2.5">
+                          {weakSignals.length > 0 ? weakSignals.map((row) => {
+                            const v = Math.max(0, Math.min(100, Math.round(Number(row.value))));
+                            const tone =
+                              v <= 20 ? "bg-red-500" : v <= 40 ? "bg-amber-500" : "bg-muted-foreground/40";
+                            return (
+                              <div key={`overview-watch-${row.label}`} className="space-y-1">
+                                <div className="flex items-baseline justify-between gap-3 text-xs">
+                                  <span className="text-foreground truncate">{row.label}</span>
+                                  <span className="font-bold tabular-nums text-foreground">{v}</span>
+                                </div>
+                                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                                  <div className={`h-full rounded-full ${tone}`} style={{ width: `${v}%` }} />
+                                </div>
+                              </div>
+                            );
+                          }) : (
                             <div className="text-xs text-muted-foreground">No peer signal yet.</div>
                           )}
                         </div>
@@ -1613,10 +1584,10 @@ function PlayerProfilePage() {
 
                 {seasonTrend.length > 0 && (
                   <Card className="lg:col-span-2">
-                    <CardHeader>
+                    <CardHeader className="p-4 pb-2 sm:p-6 sm:pb-2">
                       <CardTitle>Know Ball Score by Season</CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="p-4 pt-2 sm:p-6 sm:pt-2">
                       <SeasonTrendChart activeSeasonKey={season} points={seasonTrend} />
                     </CardContent>
                   </Card>
@@ -1624,1988 +1595,127 @@ function PlayerProfilePage() {
               </div>
             )}
             {activeTab === "stats" && (
-            <Card className="mt-4" ref={percentileCardRef}>
-              <CardContent className="p-6">
+            <Card className="mt-4 overflow-hidden" ref={percentileCardRef}>
+              <CardContent className="p-4 sm:p-6">
                 {/* ── Header with toggles ───────────────────────────── */}
-                <div style={{ marginBottom: 24 }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
-                      flexWrap: "wrap",
-                      gap: 12,
-                    }}
-                  >
-                    <div>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                        }}
-                      >
-                        <h2
-                          style={{
-                            fontSize: 18,
-                            fontWeight: 600,
-                            color: "var(--foreground)",
-                            marginBottom: 2,
-                          }}
-                        >
-                          {player.name}
-                        </h2>
-                      </div>
-                      <h3
-                        style={{
-                          fontSize: 14,
-                          fontWeight: 500,
-                          color: "var(--foreground)",
-                          marginBottom: 4,
-                        }}
-                      >
+                <div className="mb-6">
+                  {/* Title row (and toolbar inline on desktop) */}
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                    <div className="min-w-0">
+                      <h2 className="mb-0.5 text-lg font-semibold text-foreground">
+                        {player.name}
+                      </h2>
+                      <h3 className="text-sm font-medium text-foreground">
                         Percentile rankings
                       </h3>
-                      <p
-                        style={{
-                          fontSize: 12,
-                          color: "var(--muted-foreground)",
-                        }}
-                      >
-                        vs{" "}
-                        {POSITION_LABELS[peerRating?.position ?? player.position ?? "ST"] ??
-                          peerRating?.position ??
-                          player.position ??
-                          "Strikers"}{" "}
-                        in{" "}
-                        {seasons.find(
-                          (s) => `${s.league_id}|${s.season}` === season,
-                        )?.league_name ??
-                          (player.team as any)?.league?.name ??
-                          "this league"}
-                      </p>
-                      <p
-                        style={{
-                          fontSize: 11,
-                          color: "var(--muted-foreground)",
-                          marginTop: 2,
-                        }}
-                      >
-                        {stats.matches} apps ·{" "}
-                        {stats.minutes?.toLocaleString() ?? 0} mins
-                      </p>
                     </div>
                     <div
                       ref={controlsRef}
-                      style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+                      className="flex flex-wrap gap-2 sm:shrink-0"
                     >
-                      {/* Stat mode toggle */}
-                      <div className="flex rounded-lg border border-border bg-card p-0.5 text-xs font-medium">
-                        <button
-                          onClick={() => setStatMode("per90")}
-                          className={`rounded-md px-3 py-1 transition-colors ${statMode === "per90" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                        >
-                          Per 90
-                        </button>
-                        <button
-                          onClick={() => setStatMode("raw")}
-                          className={`rounded-md px-3 py-1 transition-colors ${statMode === "raw" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                        >
-                          Raw
-                        </button>
-                      </div>
-                      {/* View mode toggle */}
-                      <div className="flex rounded-lg border border-border bg-card p-0.5 text-xs font-medium">
-                        <button
-                          onClick={() => setViewMode("bars")}
-                          className={`rounded-md px-3 py-1 transition-colors ${viewMode === "bars" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                        >
-                          Bars
-                        </button>
-                        <button
-                          onClick={() => setViewMode("pizza")}
-                          className={`rounded-md px-3 py-1 transition-colors ${viewMode === "pizza" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                        >
-                          Pizza
-                        </button>
-                      </div>
-                      {/* Download button */}
+                    {/* Stat mode toggle */}
+                    <div className="flex rounded-lg border border-border bg-card p-0.5 text-xs font-medium">
                       <button
-                        onClick={handleDownloadPercentiles}
-                        disabled={downloading || !peerHasData}
-                        className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50"
-                        title="Download as PNG"
+                        onClick={() => setStatMode("per90")}
+                        className={`min-h-9 rounded-md px-3 py-1.5 transition-colors ${statMode === "per90" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
                       >
-                        {downloading ? (
-                          <span style={{ fontSize: 11 }}>Downloading...</span>
-                        ) : (
-                          <>
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              width="14"
-                              height="14"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                              <polyline points="7 10 12 15 17 10" />
-                              <line x1="12" x2="12" y1="15" y2="3" />
-                            </svg>
-                            <span>PNG</span>
-                          </>
-                        )}
+                        Per 90
+                      </button>
+                      <button
+                        onClick={() => setStatMode("raw")}
+                        className={`min-h-9 rounded-md px-3 py-1.5 transition-colors ${statMode === "raw" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      >
+                        Raw
                       </button>
                     </div>
+                    {/* View mode toggle */}
+                    <div className="flex rounded-lg border border-border bg-card p-0.5 text-xs font-medium">
+                      <button
+                        onClick={() => setViewMode("bars")}
+                        className={`min-h-9 rounded-md px-3 py-1.5 transition-colors ${viewMode === "bars" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      >
+                        Bars
+                      </button>
+                      <button
+                        onClick={() => setViewMode("pizza")}
+                        className={`min-h-9 rounded-md px-3 py-1.5 transition-colors ${viewMode === "pizza" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      >
+                        Pizza
+                      </button>
+                    </div>
+                    {/* Download button — desktop only */}
+                    <button
+                      onClick={handleDownloadPercentiles}
+                      disabled={downloading || !peerHasData}
+                      className="hidden min-h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50 sm:flex"
+                      title="Download as PNG"
+                    >
+                      {downloading ? (
+                        <span className="text-[11px]">Downloading...</span>
+                      ) : (
+                        <>
+                          <Download size={14} />
+                          <span>PNG</span>
+                        </>
+                      )}
+                    </button>
+                    </div>
+                  </div>
+                  <div className="mt-3 sm:mt-2">
+                    <p className="text-xs text-muted-foreground">
+                      vs{" "}
+                      {POSITION_LABELS[peerRating?.position ?? player.position ?? "ST"] ??
+                        peerRating?.position ??
+                        player.position ??
+                        "Strikers"}{" "}
+                      in{" "}
+                      {seasons.find(
+                        (s) => `${s.league_id}|${s.season}` === season,
+                      )?.league_name ??
+                        (player.team as any)?.league?.name ??
+                        "this league"}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      {stats.matches} apps ·{" "}
+                      {stats.minutes?.toLocaleString() ?? 0} mins
+                    </p>
                   </div>
                   {!percentileHasEnoughTotalMinutes && (
-                    <p
-                      style={{
-                        fontSize: 12,
-                        color: "var(--muted-foreground)",
-                        marginTop: 12,
-                      }}
-                    >
+                    <div className="mt-3 rounded-md border border-band-warn/30 bg-band-warn/10 px-3 py-2 text-xs text-band-warn">
                       Limited game time — percentile data requires {PERCENTILE_MIN_MINUTES}+ total minutes played ({stats.minutes ?? 0} mins)
-                    </p>
+                    </div>
                   )}
                 </div>
 
                 {!percentileHasEnoughTotalMinutes ? (
-                  <div
-                    style={{
-                      padding: "2rem",
-                      color: "var(--muted-foreground)",
-                      fontSize: 14,
-                      textAlign: "center",
-                    }}
-                  >
+                  <div className="p-8 text-center text-sm text-muted-foreground">
                     <p>Percentile rankings require {PERCENTILE_MIN_MINUTES}+ total minutes played.</p>
                   </div>
                 ) : !peerHasData ? (
-                  <div
-                    style={{
-                      padding: "2rem",
-                      color: "var(--muted-foreground)",
-                      fontSize: 14,
-                      textAlign: "center",
-                    }}
-                  >
+                  <div className="p-8 text-center text-sm text-muted-foreground">
                     <p>No percentile row available for this role yet.</p>
                   </div>
                 ) : viewMode === "pizza" ? (
-                  <div style={{ marginBottom: 24 }}>
+                  <div className="mb-6">
                     <PizzaChart
-                      data={
-                        peerQualified
-                          ? isST
-                            ? [
-                                // Goalscoring (9)
-                                {
-                                  label:
-                                    statMode === "per90" ? "Goals/90" : "Goals",
-                                  percentile: pct(
-                                    peerRating?.goals_per90_percentile,
-                                    peerRating?.goals_raw_percentile,
-                                    statMode,
-                                    peerQualified,
-                                  ),
-                                },
-                                {
-                                  label: statMode === "per90" ? "xG/90" : "xG",
-                                  percentile: pct(
-                                    peerRating?.xg_per90_percentile,
-                                    peerRating?.xg_raw_percentile,
-                                    statMode,
-                                    peerQualified,
-                                  ),
-                                },
-                                {
-                                  label:
-                                    statMode === "per90" ? "Shots/90" : "Shots",
-                                  percentile: pct(
-                                    peerRating?.shots_per90_percentile,
-                                    peerRating?.shots_raw_percentile,
-                                    statMode,
-                                    peerQualified,
-                                  ),
-                                },
-                                {
-                                  label: "SoT%",
-                                  percentile:
-                                    peerRating?.shot_on_target_percentile ?? 0,
-                                },
-                                {
-                                  label: "xG/shot",
-                                  percentile:
-                                    peerRating?.xg_per_shot_percentile ?? 0,
-                                },
-                                {
-                                  label: "Conv%",
-                                  percentile:
-                                    peerRating?.shot_conversion_percentile ?? 0,
-                                },
-                                {
-                                  label:
-                                    statMode === "per90" ? "npxG/90" : "np xG",
-                                  percentile: pct(
-                                    peerRating?.np_xg_per90_percentile,
-                                    peerRating?.np_xg_raw_percentile,
-                                    statMode,
-                                    peerQualified,
-                                  ),
-                                },
-                                {
-                                  label:
-                                    statMode === "per90" ? "xGOT/90" : "xGOT",
-                                  percentile: pct(
-                                    peerRating?.xgot_per90_percentile,
-                                    peerRating?.xg_raw_percentile,
-                                    statMode,
-                                    peerQualified,
-                                  ),
-                                },
-                                {
-                                  label:
-                                    statMode === "per90" ? "BCM/90" : "BCM",
-                                  percentile: pct(
-                                    peerRating?.big_chances_missed_percentile,
-                                    peerRating?.big_chances_missed_raw_percentile,
-                                    statMode,
-                                    peerQualified,
-                                  ),
-                                  inverted: true,
-                                },
-                                // Chance creation (4)
-                                {
-                                  label: statMode === "per90" ? "xA/90" : "xA",
-                                  percentile: pct(
-                                    peerRating?.xa_per90_percentile,
-                                    peerRating?.xa_raw_percentile,
-                                    statMode,
-                                    peerQualified,
-                                  ),
-                                },
-                                {
-                                  label:
-                                    statMode === "per90" ? "Ast/90" : "Ast",
-                                  percentile: pct(
-                                    peerRating?.assists_per90_percentile,
-                                    peerRating?.assists_raw_percentile,
-                                    statMode,
-                                    peerQualified,
-                                  ),
-                                },
-                                {
-                                  label: statMode === "per90" ? "KP/90" : "KP",
-                                  percentile: pct(
-                                    peerRating?.key_passes_per90_percentile,
-                                    peerRating?.key_passes_raw_percentile,
-                                    statMode,
-                                    peerQualified,
-                                  ),
-                                },
-                                {
-                                  label:
-                                    statMode === "per90" ? "BCC/90" : "BCC",
-                                  percentile: pct(
-                                    peerRating?.big_chances_created_percentile,
-                                    peerRating?.big_chances_created_raw_percentile,
-                                    statMode,
-                                    peerQualified,
-                                  ),
-                                },
-                                // Ball carrying (4)
-                                {
-                                  label: "Drb%",
-                                  percentile:
-                                    peerRating?.dribble_success_percentile ?? 0,
-                                },
-                                {
-                                  label:
-                                    statMode === "per90" ? "Drb/90" : "Drb",
-                                  percentile: pct(
-                                    peerRating?.dribbles_per90_percentile,
-                                    peerRating?.dribbles_raw_percentile,
-                                    statMode,
-                                    peerQualified,
-                                  ),
-                                },
-                                {
-                                  label:
-                                    statMode === "per90" ? "Tch/90" : "Tch",
-                                  percentile: pct(
-                                    peerRating?.touches_per90_percentile,
-                                    peerRating?.touches_raw_percentile,
-                                    statMode,
-                                    peerQualified,
-                                  ),
-                                },
-                                {
-                                  label: "PossLoss",
-                                  percentile:
-                                    peerRating?.carrying_percentile ?? 0,
-                                  inverted: true,
-                                },
-                                // Physical (4)
-                                {
-                                  label: "Air%",
-                                  percentile:
-                                    peerRating?.aerial_win_rate_percentile ?? 0,
-                                },
-                                {
-                                  label:
-                                    statMode === "per90" ? "Air/90" : "Air",
-                                  percentile: pct(
-                                    peerRating?.aerials_per90_percentile,
-                                    peerRating?.aerials_won_raw_percentile,
-                                    statMode,
-                                    peerQualified,
-                                  ),
-                                },
-                                {
-                                  label:
-                                    statMode === "per90" ? "Grd/90" : "Grd",
-                                  percentile: pct(
-                                    peerRating?.ground_duels_won_per90_percentile,
-                                    peerRating?.ground_duels_won_raw_percentile,
-                                    statMode,
-                                    peerQualified,
-                                  ),
-                                },
-                                {
-                                  label:
-                                    statMode === "per90" ? "Cont/90" : "Cont",
-                                  percentile: pct(
-                                    peerRating?.total_contest_per90_percentile,
-                                    peerRating?.total_contests_raw_percentile,
-                                    statMode,
-                                    peerQualified,
-                                  ),
-                                },
-                                // Defending / Passing (4)
-                                {
-                                  label:
-                                    statMode === "per90" ? "Rec/90" : "Rec",
-                                  percentile: pct(
-                                    peerRating?.ball_recoveries_per90_percentile,
-                                    peerRating?.ball_recoveries_raw_percentile,
-                                    statMode,
-                                    peerQualified,
-                                  ),
-                                },
-                                {
-                                  label:
-                                    statMode === "per90" ? "Tkl/90" : "Tkl",
-                                  percentile: pct(
-                                    peerRating?.tackles_per90_percentile,
-                                    peerRating?.tackles_raw_percentile,
-                                    statMode,
-                                    peerQualified,
-                                  ),
-                                },
-                                {
-                                  label:
-                                    statMode === "per90" ? "Pass/90" : "Passes",
-                                  percentile: pct(
-                                    peerRating?.passes_completed_per90_percentile,
-                                    peerRating?.passes_completed_raw_percentile,
-                                    statMode,
-                                    peerQualified,
-                                  ),
-                                },
-                                {
-                                  label: "Pass%",
-                                  percentile:
-                                    peerRating?.passing_accuracy_percentile ??
-                                    0,
-                                },
-                              ]
-                            : isCAM
-                              ? [
-                                  // Chance creation (6)
-                                  {
-                                    label:
-                                      statMode === "per90" ? "xA/90" : "xA",
-                                    percentile: pct(
-                                      peerRating?.xa_per90_percentile,
-                                      peerRating?.xa_raw_percentile,
-                                      statMode,
-                                      peerQualified,
-                                    ),
-                                  },
-                                  {
-                                    label:
-                                      statMode === "per90" ? "Ast/90" : "Ast",
-                                    percentile: pct(
-                                      peerRating?.assists_per90_percentile,
-                                      peerRating?.assists_raw_percentile,
-                                      statMode,
-                                      peerQualified,
-                                    ),
-                                  },
-                                  {
-                                    label: "xG+xA",
-                                    percentile: pct(
-                                      peerRating?.xg_plus_xa_percentile,
-                                      peerRating?.xg_raw_percentile,
-                                      statMode,
-                                      peerQualified,
-                                    ),
-                                  },
-                                  {
-                                    label:
-                                      statMode === "per90" ? "KP/90" : "KP",
-                                    percentile: pct(
-                                      peerRating?.key_passes_per90_percentile,
-                                      peerRating?.key_passes_raw_percentile,
-                                      statMode,
-                                      peerQualified,
-                                    ),
-                                  },
-                                  {
-                                    label:
-                                      statMode === "per90" ? "BCC/90" : "BCC",
-                                    percentile: pct(
-                                      peerRating?.big_chances_created_percentile,
-                                      peerRating?.big_chances_created_raw_percentile,
-                                      statMode,
-                                      peerQualified,
-                                    ),
-                                  },
-                                  {
-                                    label:
-                                      statMode === "per90" ? "Crs/90" : "Crs",
-                                    percentile: pct(
-                                      peerRating?.accurate_cross_per90_percentile,
-                                      peerRating?.accurate_cross_raw_percentile,
-                                      statMode,
-                                      peerQualified,
-                                    ),
-                                  },
-                                  // Goal threat (5)
-                                  {
-                                    label:
-                                      statMode === "per90"
-                                        ? "Goals/90"
-                                        : "Goals",
-                                    percentile: pct(
-                                      peerRating?.goals_per90_percentile,
-                                      peerRating?.goals_raw_percentile,
-                                      statMode,
-                                      peerQualified,
-                                    ),
-                                  },
-                                  {
-                                    label:
-                                      statMode === "per90" ? "xG/90" : "xG",
-                                    percentile: pct(
-                                      peerRating?.xg_per90_percentile,
-                                      peerRating?.xg_raw_percentile,
-                                      statMode,
-                                      peerQualified,
-                                    ),
-                                  },
-                                  {
-                                    label:
-                                      statMode === "per90"
-                                        ? "Shots/90"
-                                        : "Shots",
-                                    percentile: pct(
-                                      peerRating?.shots_per90_percentile,
-                                      peerRating?.shots_raw_percentile,
-                                      statMode,
-                                      peerQualified,
-                                    ),
-                                  },
-                                  {
-                                    label: "SoT%",
-                                    percentile:
-                                      peerRating?.shot_on_target_percentile ??
-                                      0,
-                                  },
-                                  {
-                                    label:
-                                      statMode === "per90"
-                                        ? "npxG/90"
-                                        : "np xG",
-                                    percentile: pct(
-                                      peerRating?.np_xg_per90_percentile,
-                                      peerRating?.np_xg_raw_percentile,
-                                      statMode,
-                                      peerQualified,
-                                    ),
-                                  },
-                                  // Ball carrying (4)
-                                  {
-                                    label: "Drb%",
-                                    percentile:
-                                      peerRating?.dribble_success_percentile ??
-                                      0,
-                                  },
-                                  {
-                                    label:
-                                      statMode === "per90" ? "Drb/90" : "Drb",
-                                    percentile: pct(
-                                      peerRating?.dribbles_per90_percentile,
-                                      peerRating?.dribbles_raw_percentile,
-                                      statMode,
-                                      peerQualified,
-                                    ),
-                                  },
-                                  {
-                                    label:
-                                      statMode === "per90" ? "Tch/90" : "Tch",
-                                    percentile: pct(
-                                      peerRating?.touches_per90_percentile,
-                                      peerRating?.touches_raw_percentile,
-                                      statMode,
-                                      peerQualified,
-                                    ),
-                                  },
-                                  {
-                                    label: "PossLoss",
-                                    percentile:
-                                      peerRating?.carrying_percentile ?? 0,
-                                    inverted: true,
-                                  },
-                                  // Physical (3)
-                                  {
-                                    label: "Air%",
-                                    percentile:
-                                      peerRating?.aerial_win_rate_percentile ?? 0,
-                                  },
-                                  {
-                                    label:
-                                      statMode === "per90" ? "Grd/90" : "Grd",
-                                    percentile: pct(
-                                      peerRating?.ground_duels_won_per90_percentile,
-                                      peerRating?.ground_duels_won_raw_percentile,
-                                      statMode,
-                                      peerQualified,
-                                    ),
-                                  },
-                                  {
-                                    label:
-                                      statMode === "per90" ? "Cont/90" : "Cont",
-                                    percentile: pct(
-                                      peerRating?.total_contest_per90_percentile,
-                                      peerRating?.total_contests_raw_percentile,
-                                      statMode,
-                                      peerQualified,
-                                    ),
-                                  },
-                                  // Defending (4)
-                                  {
-                                    label:
-                                      statMode === "per90" ? "Rec/90" : "Rec",
-                                    percentile: pct(
-                                      peerRating?.ball_recoveries_per90_percentile,
-                                      peerRating?.ball_recoveries_raw_percentile,
-                                      statMode,
-                                      peerQualified,
-                                    ),
-                                  },
-                                  {
-                                    label:
-                                      statMode === "per90" ? "Tkl/90" : "Tkl",
-                                    percentile: pct(
-                                      peerRating?.tackles_per90_percentile,
-                                      peerRating?.tackles_raw_percentile,
-                                      statMode,
-                                      peerQualified,
-                                    ),
-                                  },
-                                  {
-                                    label:
-                                      statMode === "per90" ? "Int/90" : "Int",
-                                    percentile: pct(
-                                      peerRating?.interceptions_per90_percentile,
-                                      peerRating?.interceptions_raw_percentile,
-                                      statMode,
-                                      peerQualified,
-                                    ),
-                                  },
-                                  {
-                                    label: "FC/90",
-                                    percentile:
-                                      peerRating?.pressing_percentile ?? 0,
-                                    inverted: true,
-                                  },
-                                  // Passing (3)
-                                  {
-                                    label:
-                                      statMode === "per90"
-                                        ? "Pass/90"
-                                        : "Passes",
-                                    percentile: pct(
-                                      peerRating?.passes_completed_per90_percentile,
-                                      peerRating?.passes_completed_raw_percentile,
-                                      statMode,
-                                      peerQualified,
-                                    ),
-                                  },
-                                  {
-                                    label: "Pass%",
-                                    percentile:
-                                      peerRating?.passing_accuracy_percentile ??
-                                      0,
-                                  },
-                                  {
-                                    label:
-                                      statMode === "per90" ? "LB/90" : "LB",
-                                    percentile: pct(
-                                      peerRating?.accurate_long_balls_per90_percentile,
-                                      peerRating?.accurate_long_balls_raw_percentile,
-                                      statMode,
-                                      peerQualified,
-                                    ),
-                                  },
-                                ]
-                              : isWinger
-                                ? [
-                                    // Chance creation (5)
-                                    {
-                                      label:
-                                        statMode === "per90" ? "xA/90" : "xA",
-                                      percentile: pct(
-                                        peerRating?.xa_per90_percentile,
-                                        peerRating?.xa_raw_percentile,
-                                        statMode,
-                                        peerQualified,
-                                      ),
-                                    },
-                                    {
-                                      label:
-                                        statMode === "per90" ? "Ast/90" : "Ast",
-                                      percentile: pct(
-                                        peerRating?.assists_per90_percentile,
-                                        peerRating?.assists_raw_percentile,
-                                        statMode,
-                                        peerQualified,
-                                      ),
-                                    },
-                                    {
-                                      label:
-                                        statMode === "per90" ? "KP/90" : "KP",
-                                      percentile: pct(
-                                        peerRating?.key_passes_per90_percentile,
-                                        peerRating?.key_passes_raw_percentile,
-                                        statMode,
-                                        peerQualified,
-                                      ),
-                                    },
-                                    {
-                                      label:
-                                        statMode === "per90" ? "BCC/90" : "BCC",
-                                      percentile: pct(
-                                        peerRating?.big_chances_created_percentile,
-                                        peerRating?.big_chances_created_raw_percentile,
-                                        statMode,
-                                        peerQualified,
-                                      ),
-                                    },
-                                    {
-                                      label:
-                                        statMode === "per90" ? "Crs/90" : "Crs",
-                                      percentile: pct(
-                                        peerRating?.accurate_cross_per90_percentile,
-                                        peerRating?.accurate_cross_raw_percentile,
-                                        statMode,
-                                        peerQualified,
-                                      ),
-                                    },
-                                    // Goal threat (5)
-                                    {
-                                      label:
-                                        statMode === "per90"
-                                          ? "Goals/90"
-                                          : "Goals",
-                                      percentile: pct(
-                                        peerRating?.goals_per90_percentile,
-                                        peerRating?.goals_raw_percentile,
-                                        statMode,
-                                        peerQualified,
-                                      ),
-                                    },
-                                    {
-                                      label:
-                                        statMode === "per90" ? "xG/90" : "xG",
-                                      percentile: pct(
-                                        peerRating?.xg_per90_percentile,
-                                        peerRating?.xg_raw_percentile,
-                                        statMode,
-                                        peerQualified,
-                                      ),
-                                    },
-                                    {
-                                      label:
-                                        statMode === "per90"
-                                          ? "Shots/90"
-                                          : "Shots",
-                                      percentile: pct(
-                                        peerRating?.shots_per90_percentile,
-                                        peerRating?.shots_raw_percentile,
-                                        statMode,
-                                        peerQualified,
-                                      ),
-                                    },
-                                    {
-                                      label: "SoT%",
-                                      percentile:
-                                        peerRating?.shot_on_target_percentile ??
-                                        0,
-                                    },
-                                    {
-                                      label: "Conv%",
-                                      percentile:
-                                        peerRating?.shot_conversion_percentile ??
-                                        0,
-                                    },
-                                    // Ball carrying (5)
-                                    {
-                                      label: "Drb%",
-                                      percentile:
-                                        peerRating?.dribble_success_percentile ??
-                                        0,
-                                    },
-                                    {
-                                      label:
-                                        statMode === "per90" ? "Drb/90" : "Drb",
-                                      percentile: pct(
-                                        peerRating?.dribbles_per90_percentile,
-                                        peerRating?.dribbles_raw_percentile,
-                                        statMode,
-                                        peerQualified,
-                                      ),
-                                    },
-                                    {
-                                      label:
-                                        statMode === "per90" ? "Fw/90" : "Fw",
-                                      percentile: pct(
-                                        peerRating?.fouls_won_per90_percentile,
-                                        peerRating?.fouls_won_raw_percentile,
-                                        statMode,
-                                        peerQualified,
-                                      ),
-                                    },
-                                    {
-                                      label:
-                                        statMode === "per90" ? "Tch/90" : "Tch",
-                                      percentile: pct(
-                                        peerRating?.touches_per90_percentile,
-                                        peerRating?.touches_raw_percentile,
-                                        statMode,
-                                        peerQualified,
-                                      ),
-                                    },
-                                    {
-                                      label: "PossLoss",
-                                      percentile:
-                                        peerRating?.carrying_percentile ?? 0,
-                                      inverted: true,
-                                    },
-                                    // Physical (3)
-                                    {
-                                      label:
-                                        statMode === "per90" ? "Air/90" : "Air",
-                                      percentile: pct(
-                                        peerRating?.aerials_per90_percentile,
-                                        peerRating?.aerials_won_raw_percentile,
-                                        statMode,
-                                        peerQualified,
-                                      ),
-                                    },
-                                    {
-                                      label:
-                                        statMode === "per90" ? "Grd/90" : "Grd",
-                                      percentile: pct(
-                                        peerRating?.ground_duels_won_per90_percentile,
-                                        peerRating?.ground_duels_won_raw_percentile,
-                                        statMode,
-                                        peerQualified,
-                                      ),
-                                    },
-                                    {
-                                      label:
-                                        statMode === "per90"
-                                          ? "Cont/90"
-                                          : "Cont",
-                                      percentile: pct(
-                                        peerRating?.total_contest_per90_percentile,
-                                        peerRating?.total_contests_raw_percentile,
-                                        statMode,
-                                        peerQualified,
-                                      ),
-                                    },
-                                    // Defending (4)
-                                    {
-                                      label:
-                                        statMode === "per90" ? "Rec/90" : "Rec",
-                                      percentile: pct(
-                                        peerRating?.ball_recoveries_per90_percentile,
-                                        peerRating?.ball_recoveries_raw_percentile,
-                                        statMode,
-                                        peerQualified,
-                                      ),
-                                    },
-                                    {
-                                      label:
-                                        statMode === "per90" ? "Tkl/90" : "Tkl",
-                                      percentile: pct(
-                                        peerRating?.tackles_per90_percentile,
-                                        peerRating?.tackles_raw_percentile,
-                                        statMode,
-                                        peerQualified,
-                                      ),
-                                    },
-                                    {
-                                      label:
-                                        statMode === "per90" ? "Int/90" : "Int",
-                                      percentile: pct(
-                                        peerRating?.interceptions_per90_percentile,
-                                        peerRating?.interceptions_raw_percentile,
-                                        statMode,
-                                        peerQualified,
-                                      ),
-                                    },
-                                    {
-                                      label: "FC/90",
-                                      percentile:
-                                        peerRating?.pressing_percentile ?? 0,
-                                      inverted: true,
-                                    },
-                                    // Passing (3)
-                                    {
-                                      label:
-                                        statMode === "per90"
-                                          ? "Pass/90"
-                                          : "Passes",
-                                      percentile: pct(
-                                        peerRating?.passes_completed_per90_percentile,
-                                        peerRating?.passes_completed_raw_percentile,
-                                        statMode,
-                                        peerQualified,
-                                      ),
-                                    },
-                                    {
-                                      label: "Pass%",
-                                      percentile:
-                                        peerRating?.passing_accuracy_percentile ??
-                                        0,
-                                    },
-                                    ...(peerRating?.xg_chain_per90_percentile !=
-                                    null
-                                      ? [
-                                          {
-                                            label:
-                                              statMode === "per90"
-                                                ? "xChain/90"
-                                                : "xChain",
-                                            percentile: pct(
-                                              peerRating?.xg_chain_per90_percentile,
-                                              peerRating?.xg_chain_raw_percentile,
-                                              statMode,
-                                              peerQualified,
-                                            ),
-                                          },
-                                        ]
-                                      : [
-                                          {
-                                            label:
-                                              statMode === "per90"
-                                                ? "LB/90"
-                                                : "LB",
-                                            percentile: pct(
-                                              peerRating?.accurate_long_balls_per90_percentile,
-                                              peerRating?.accurate_long_balls_raw_percentile,
-                                              statMode,
-                                              peerQualified,
-                                            ),
-                                          },
-                                        ]),
-                                  ]
-                                : isDefensiveWinger
-                                  ? [
-                                      // Chance creation (4)
-                                      {
-                                        label:
-                                          statMode === "per90" ? "xA/90" : "xA",
-                                        percentile: pct(
-                                          peerRating?.xa_per90_percentile,
-                                          peerRating?.xa_raw_percentile,
-                                          statMode,
-                                          peerQualified,
-                                        ),
-                                      },
-                                      {
-                                        label:
-                                          statMode === "per90"
-                                            ? "Ast/90"
-                                            : "Ast",
-                                        percentile: pct(
-                                          peerRating?.assists_per90_percentile,
-                                          peerRating?.assists_raw_percentile,
-                                          statMode,
-                                          peerQualified,
-                                        ),
-                                      },
-                                      {
-                                        label:
-                                          statMode === "per90" ? "KP/90" : "KP",
-                                        percentile: pct(
-                                          peerRating?.key_passes_per90_percentile,
-                                          peerRating?.key_passes_raw_percentile,
-                                          statMode,
-                                          peerQualified,
-                                        ),
-                                      },
-                                      {
-                                        label:
-                                          statMode === "per90"
-                                            ? "Crs/90"
-                                            : "Crs",
-                                        percentile: pct(
-                                          peerRating?.accurate_cross_per90_percentile,
-                                          peerRating?.accurate_cross_raw_percentile,
-                                          statMode,
-                                          peerQualified,
-                                        ),
-                                      },
-                                      // Goal threat (3)
-                                      {
-                                        label:
-                                          statMode === "per90"
-                                            ? "Goals/90"
-                                            : "Goals",
-                                        percentile: pct(
-                                          peerRating?.goals_per90_percentile,
-                                          peerRating?.goals_raw_percentile,
-                                          statMode,
-                                          peerQualified,
-                                        ),
-                                      },
-                                      {
-                                        label:
-                                          statMode === "per90" ? "xG/90" : "xG",
-                                        percentile: pct(
-                                          peerRating?.xg_per90_percentile,
-                                          peerRating?.xg_raw_percentile,
-                                          statMode,
-                                          peerQualified,
-                                        ),
-                                      },
-                                      {
-                                        label:
-                                          statMode === "per90"
-                                            ? "Shots/90"
-                                            : "Shots",
-                                        percentile: pct(
-                                          peerRating?.shots_per90_percentile,
-                                          peerRating?.shots_raw_percentile,
-                                          statMode,
-                                          peerQualified,
-                                        ),
-                                      },
-                                      // Ball carrying (4)
-                                      {
-                                        label: "Drb%",
-                                        percentile:
-                                          peerRating?.dribble_success_percentile ??
-                                          0,
-                                      },
-                                      {
-                                        label:
-                                          statMode === "per90"
-                                            ? "Drb/90"
-                                            : "Drb",
-                                        percentile: pct(
-                                          peerRating?.dribbles_per90_percentile,
-                                          peerRating?.dribbles_raw_percentile,
-                                          statMode,
-                                          peerQualified,
-                                        ),
-                                      },
-                                      {
-                                        label:
-                                          statMode === "per90"
-                                            ? "Tch/90"
-                                            : "Tch",
-                                        percentile: pct(
-                                          peerRating?.touches_per90_percentile,
-                                          peerRating?.touches_raw_percentile,
-                                          statMode,
-                                          peerQualified,
-                                        ),
-                                      },
-                                      {
-                                        label: "PossLoss",
-                                        percentile:
-                                          peerRating?.carrying_percentile ?? 0,
-                                        inverted: true,
-                                      },
-                                      // Physical (4)
-                                      {
-                                        label: "Air%",
-                                        percentile:
-                                          peerRating?.aerial_win_rate_percentile ?? 0,
-                                      },
-                                      {
-                                        label:
-                                          statMode === "per90"
-                                            ? "Air/90"
-                                            : "Air",
-                                        percentile: pct(
-                                          peerRating?.aerials_per90_percentile,
-                                          peerRating?.aerials_won_raw_percentile,
-                                          statMode,
-                                          peerQualified,
-                                        ),
-                                      },
-                                      {
-                                        label:
-                                          statMode === "per90"
-                                            ? "Grd/90"
-                                            : "Grd",
-                                        percentile: pct(
-                                          peerRating?.ground_duels_won_per90_percentile,
-                                          peerRating?.ground_duels_won_raw_percentile,
-                                          statMode,
-                                          peerQualified,
-                                        ),
-                                      },
-                                      {
-                                        label:
-                                          statMode === "per90"
-                                            ? "Cont/90"
-                                            : "Cont",
-                                        percentile: pct(
-                                          peerRating?.total_contest_per90_percentile,
-                                          peerRating?.total_contests_raw_percentile,
-                                          statMode,
-                                          peerQualified,
-                                        ),
-                                      },
-                                      // Defending (4)
-                                      {
-                                        label:
-                                          statMode === "per90"
-                                            ? "Rec/90"
-                                            : "Rec",
-                                        percentile: pct(
-                                          peerRating?.ball_recoveries_per90_percentile,
-                                          peerRating?.ball_recoveries_raw_percentile,
-                                          statMode,
-                                          peerQualified,
-                                        ),
-                                      },
-                                      {
-                                        label:
-                                          statMode === "per90"
-                                            ? "Tkl/90"
-                                            : "Tkl",
-                                        percentile: pct(
-                                          peerRating?.tackles_per90_percentile,
-                                          peerRating?.tackles_raw_percentile,
-                                          statMode,
-                                          peerQualified,
-                                        ),
-                                      },
-                                      {
-                                        label:
-                                          statMode === "per90"
-                                            ? "Int/90"
-                                            : "Int",
-                                        percentile: pct(
-                                          peerRating?.interceptions_per90_percentile,
-                                          peerRating?.interceptions_raw_percentile,
-                                          statMode,
-                                          peerQualified,
-                                        ),
-                                      },
-                                      {
-                                        label: "FC/90",
-                                        percentile:
-                                          peerRating?.pressing_percentile ?? 0,
-                                        inverted: true,
-                                      },
-                                      // Passing (6)
-                                      {
-                                        label:
-                                          statMode === "per90"
-                                            ? "Pass/90"
-                                            : "Passes",
-                                        percentile: pct(
-                                          peerRating?.passes_completed_per90_percentile,
-                                          peerRating?.passes_completed_raw_percentile,
-                                          statMode,
-                                          peerQualified,
-                                        ),
-                                      },
-                                      {
-                                        label: "Pass%",
-                                        percentile:
-                                          peerRating?.passing_accuracy_percentile ??
-                                          0,
-                                      },
-                                      {
-                                        label:
-                                          statMode === "per90" ? "LB/90" : "LB",
-                                        percentile: pct(
-                                          peerRating?.accurate_long_balls_per90_percentile,
-                                          peerRating?.accurate_long_balls_raw_percentile,
-                                          statMode,
-                                          peerQualified,
-                                        ),
-                                      },
-                                      {
-                                        label: "LB%",
-                                        percentile:
-                                          peerRating?.long_ball_accuracy_percentile ??
-                                          0,
-                                      },
-                                      ...(peerRating?.xg_chain_per90_percentile !=
-                                      null
-                                        ? [
-                                            {
-                                              label:
-                                                statMode === "per90"
-                                                  ? "xChain/90"
-                                                  : "xChain",
-                                              percentile: pct(
-                                                peerRating?.xg_chain_per90_percentile,
-                                                peerRating?.xg_chain_raw_percentile,
-                                                statMode,
-                                                peerQualified,
-                                              ),
-                                            },
-                                          ]
-                                        : []),
-                                      ...(peerRating?.xg_buildup_per90_percentile !=
-                                      null
-                                        ? [
-                                            {
-                                              label:
-                                                statMode === "per90"
-                                                  ? "xBuildup/90"
-                                                  : "xBuildup",
-                                              percentile: pct(
-                                                peerRating?.xg_buildup_per90_percentile,
-                                                peerRating?.xg_buildup_raw_percentile,
-                                                statMode,
-                                                peerQualified,
-                                              ),
-                                            },
-                                          ]
-                                        : []),
-                                    ]
-                                  : isCM
-                                    ? [
-                                        // Chance creation (5)
-                                        {
-                                          label:
-                                            statMode === "per90"
-                                              ? "xA/90"
-                                              : "xA",
-                                          percentile: pct(
-                                            peerRating?.xa_per90_percentile,
-                                            peerRating?.xa_raw_percentile,
-                                            statMode,
-                                            peerQualified,
-                                          ),
-                                        },
-                                        {
-                                          label:
-                                            statMode === "per90"
-                                              ? "Ast/90"
-                                              : "Ast",
-                                          percentile: pct(
-                                            peerRating?.assists_per90_percentile,
-                                            peerRating?.assists_raw_percentile,
-                                            statMode,
-                                            peerQualified,
-                                          ),
-                                        },
-                                        {
-                                          label: "xG+xA",
-                                          percentile: pct(
-                                            peerRating?.xg_plus_xa_percentile,
-                                            peerRating?.xg_raw_percentile,
-                                            statMode,
-                                            peerQualified,
-                                          ),
-                                        },
-                                        {
-                                          label:
-                                            statMode === "per90"
-                                              ? "KP/90"
-                                              : "KP",
-                                          percentile: pct(
-                                            peerRating?.key_passes_per90_percentile,
-                                            peerRating?.key_passes_raw_percentile,
-                                            statMode,
-                                            peerQualified,
-                                          ),
-                                        },
-                                        {
-                                          label:
-                                            statMode === "per90"
-                                              ? "BCC/90"
-                                              : "BCC",
-                                          percentile: pct(
-                                            peerRating?.big_chances_created_percentile,
-                                            peerRating?.big_chances_created_raw_percentile,
-                                            statMode,
-                                            peerQualified,
-                                          ),
-                                        },
-                                        // Goal threat (4)
-                                        {
-                                          label:
-                                            statMode === "per90"
-                                              ? "Goals/90"
-                                              : "Goals",
-                                          percentile: pct(
-                                            peerRating?.goals_per90_percentile,
-                                            peerRating?.goals_raw_percentile,
-                                            statMode,
-                                            peerQualified,
-                                          ),
-                                        },
-                                        {
-                                          label:
-                                            statMode === "per90"
-                                              ? "xG/90"
-                                              : "xG",
-                                          percentile: pct(
-                                            peerRating?.xg_per90_percentile,
-                                            peerRating?.xg_raw_percentile,
-                                            statMode,
-                                            peerQualified,
-                                          ),
-                                        },
-                                        {
-                                          label:
-                                            statMode === "per90"
-                                              ? "Shots/90"
-                                              : "Shots",
-                                          percentile: pct(
-                                            peerRating?.shots_per90_percentile,
-                                            peerRating?.shots_raw_percentile,
-                                            statMode,
-                                            peerQualified,
-                                          ),
-                                        },
-                                        {
-                                          label: "SoT%",
-                                          percentile:
-                                            peerRating?.shot_on_target_percentile ??
-                                            0,
-                                        },
-                                        // Ball carrying (4)
-                                        {
-                                          label: "Drb%",
-                                          percentile:
-                                            peerRating?.dribble_success_percentile ??
-                                            0,
-                                        },
-                                        {
-                                          label:
-                                            statMode === "per90"
-                                              ? "Drb/90"
-                                              : "Drb",
-                                          percentile: pct(
-                                            peerRating?.dribbles_per90_percentile,
-                                            peerRating?.dribbles_raw_percentile,
-                                            statMode,
-                                            peerQualified,
-                                          ),
-                                        },
-                                        {
-                                          label:
-                                            statMode === "per90"
-                                              ? "Tch/90"
-                                              : "Tch",
-                                          percentile: pct(
-                                            peerRating?.touches_per90_percentile,
-                                            peerRating?.touches_raw_percentile,
-                                            statMode,
-                                            peerQualified,
-                                          ),
-                                        },
-                                        {
-                                          label:
-                                            statMode === "per90"
-                                              ? "Fw/90"
-                                              : "Fw",
-                                          percentile: pct(
-                                            peerRating?.fouls_won_per90_percentile,
-                                            peerRating?.fouls_won_raw_percentile,
-                                            statMode,
-                                            peerQualified,
-                                          ),
-                                        },
-                                        // Physical (3)
-                                        {
-                                          label: "Air%",
-                                          percentile:
-                                            peerRating?.aerial_win_rate_percentile ??
-                                            0,
-                                        },
-                                        {
-                                          label:
-                                            statMode === "per90"
-                                              ? "Grd/90"
-                                              : "Grd",
-                                          percentile: pct(
-                                            peerRating?.ground_duels_won_per90_percentile,
-                                            peerRating?.ground_duels_won_raw_percentile,
-                                            statMode,
-                                            peerQualified,
-                                          ),
-                                        },
-                                        {
-                                          label:
-                                            statMode === "per90"
-                                              ? "Cont/90"
-                                              : "Cont",
-                                          percentile: pct(
-                                            peerRating?.total_contest_per90_percentile,
-                                            peerRating?.total_contests_raw_percentile,
-                                            statMode,
-                                            peerQualified,
-                                          ),
-                                        },
-                                        // Defending (4)
-                                        {
-                                          label:
-                                            statMode === "per90"
-                                              ? "Rec/90"
-                                              : "Rec",
-                                          percentile: pct(
-                                            peerRating?.ball_recoveries_per90_percentile,
-                                            peerRating?.ball_recoveries_raw_percentile,
-                                            statMode,
-                                            peerQualified,
-                                          ),
-                                        },
-                                        {
-                                          label:
-                                            statMode === "per90"
-                                              ? "Tkl/90"
-                                              : "Tkl",
-                                          percentile: pct(
-                                            peerRating?.tackles_per90_percentile,
-                                            peerRating?.tackles_raw_percentile,
-                                            statMode,
-                                            peerQualified,
-                                          ),
-                                        },
-                                        {
-                                          label:
-                                            statMode === "per90"
-                                              ? "Int/90"
-                                              : "Int",
-                                          percentile: pct(
-                                            peerRating?.interceptions_per90_percentile,
-                                            peerRating?.interceptions_raw_percentile,
-                                            statMode,
-                                            peerQualified,
-                                          ),
-                                        },
-                                        {
-                                          label: "FC/90",
-                                          percentile:
-                                            peerRating?.pressing_percentile ??
-                                            0,
-                                          inverted: true,
-                                        },
-                                        // Passing (5)
-                                        {
-                                          label:
-                                            statMode === "per90"
-                                              ? "Pass/90"
-                                              : "Passes",
-                                          percentile: pct(
-                                            peerRating?.passes_completed_per90_percentile,
-                                            peerRating?.passes_completed_raw_percentile,
-                                            statMode,
-                                            peerQualified,
-                                          ),
-                                        },
-                                        {
-                                          label: "Pass%",
-                                          percentile:
-                                            peerRating?.passing_accuracy_percentile ??
-                                            0,
-                                        },
-                                        {
-                                          label:
-                                            statMode === "per90"
-                                              ? "LB/90"
-                                              : "LB",
-                                          percentile: pct(
-                                            peerRating?.accurate_long_balls_per90_percentile,
-                                            peerRating?.accurate_long_balls_raw_percentile,
-                                            statMode,
-                                            peerQualified,
-                                          ),
-                                        },
-                                        ...(peerRating?.xg_chain_per90_percentile !=
-                                        null
-                                          ? [
-                                              {
-                                                label:
-                                                  statMode === "per90"
-                                                    ? "xChain/90"
-                                                    : "xChain",
-                                                percentile: pct(
-                                                  peerRating?.xg_chain_per90_percentile,
-                                                  peerRating?.xg_chain_raw_percentile,
-                                                  statMode,
-                                                  peerQualified,
-                                                ),
-                                              },
-                                            ]
-                                          : []),
-                                        ...(peerRating?.xg_buildup_per90_percentile !=
-                                        null
-                                          ? [
-                                              {
-                                                label:
-                                                  statMode === "per90"
-                                                    ? "xBuildup/90"
-                                                    : "xBuildup",
-                                                percentile: pct(
-                                                  peerRating?.xg_buildup_per90_percentile,
-                                                  peerRating?.xg_buildup_raw_percentile,
-                                                  statMode,
-                                                  peerQualified,
-                                                ),
-                                              },
-                                            ]
-                                          : []),
-                                      ]
-                                    : isCDM
-                                      ? [
-                                          // Defending (5)
-                                          {
-                                            label:
-                                              statMode === "per90"
-                                                ? "Rec/90"
-                                                : "Rec",
-                                            percentile: pct(
-                                              peerRating?.ball_recoveries_per90_percentile,
-                                              peerRating?.ball_recoveries_raw_percentile,
-                                              statMode,
-                                              peerQualified,
-                                            ),
-                                          },
-                                          {
-                                            label:
-                                              statMode === "per90"
-                                                ? "Tkl/90"
-                                                : "Tkl",
-                                            percentile: pct(
-                                              peerRating?.tackles_per90_percentile,
-                                              peerRating?.tackles_raw_percentile,
-                                              statMode,
-                                              peerQualified,
-                                            ),
-                                          },
-                                          {
-                                            label:
-                                              statMode === "per90"
-                                                ? "Int/90"
-                                                : "Int",
-                                            percentile: pct(
-                                              peerRating?.interceptions_per90_percentile,
-                                              peerRating?.interceptions_raw_percentile,
-                                              statMode,
-                                              peerQualified,
-                                            ),
-                                          },
-                                          {
-                                            label: "FC/90",
-                                            percentile:
-                                              peerRating?.pressing_percentile ??
-                                              0,
-                                            inverted: true,
-                                          },
-                                          {
-                                            label:
-                                              statMode === "per90"
-                                                ? "Fw/90"
-                                                : "Fw",
-                                            percentile: pct(
-                                              peerRating?.fouls_won_per90_percentile,
-                                              peerRating?.fouls_won_raw_percentile,
-                                              statMode,
-                                              peerQualified,
-                                            ),
-                                          },
-                                          // Physical (5)
-                                          {
-                                            label: "Air%",
-                                            percentile:
-                                              peerRating?.aerial_win_rate_percentile ??
-                                              0,
-                                          },
-                                          {
-                                            label:
-                                              statMode === "per90"
-                                                ? "Air/90"
-                                                : "Air",
-                                            percentile: pct(
-                                              peerRating?.aerials_per90_percentile,
-                                              peerRating?.aerials_won_raw_percentile,
-                                              statMode,
-                                              peerQualified,
-                                            ),
-                                          },
-                                          {
-                                            label: "Grd%",
-                                            percentile:
-                                              peerRating?.ground_duel_win_rate_percentile ??
-                                              0,
-                                          },
-                                          {
-                                            label:
-                                              statMode === "per90"
-                                                ? "Grd/90"
-                                                : "Grd",
-                                            percentile: pct(
-                                              peerRating?.ground_duels_won_per90_percentile,
-                                              peerRating?.ground_duels_won_raw_percentile,
-                                              statMode,
-                                              peerQualified,
-                                            ),
-                                          },
-                                          {
-                                            label:
-                                              statMode === "per90"
-                                                ? "Cont/90"
-                                                : "Cont",
-                                            percentile: pct(
-                                              peerRating?.total_contest_per90_percentile,
-                                              peerRating?.total_contests_raw_percentile,
-                                              statMode,
-                                              peerQualified,
-                                            ),
-                                          },
-                                          // Ball carrying (3)
-                                          {
-                                            label: "Drb%",
-                                            percentile:
-                                              peerRating?.dribble_success_percentile ??
-                                              0,
-                                          },
-                                          {
-                                            label:
-                                              statMode === "per90"
-                                                ? "Tch/90"
-                                                : "Tch",
-                                            percentile: pct(
-                                              peerRating?.touches_per90_percentile,
-                                              peerRating?.touches_raw_percentile,
-                                              statMode,
-                                              peerQualified,
-                                            ),
-                                          },
-                                          {
-                                            label: "PossLoss",
-                                            percentile:
-                                              peerRating?.carrying_percentile ??
-                                              0,
-                                            inverted: true,
-                                          },
-                                          // Chance creation (3)
-                                          {
-                                            label:
-                                              statMode === "per90"
-                                                ? "xA/90"
-                                                : "xA",
-                                            percentile: pct(
-                                              peerRating?.xa_per90_percentile,
-                                              peerRating?.xa_raw_percentile,
-                                              statMode,
-                                              peerQualified,
-                                            ),
-                                          },
-                                          {
-                                            label: "xG+xA",
-                                            percentile: pct(
-                                              peerRating?.xg_plus_xa_percentile,
-                                              peerRating?.xg_raw_percentile,
-                                              statMode,
-                                              peerQualified,
-                                            ),
-                                          },
-                                          {
-                                            label:
-                                              statMode === "per90"
-                                                ? "KP/90"
-                                                : "KP",
-                                            percentile: pct(
-                                              peerRating?.key_passes_per90_percentile,
-                                              peerRating?.key_passes_raw_percentile,
-                                              statMode,
-                                              peerQualified,
-                                            ),
-                                          },
-                                          // Passing (6)
-                                          {
-                                            label:
-                                              statMode === "per90"
-                                                ? "Pass/90"
-                                                : "Passes",
-                                            percentile: pct(
-                                              peerRating?.passes_completed_per90_percentile,
-                                              peerRating?.passes_completed_raw_percentile,
-                                              statMode,
-                                              peerQualified,
-                                            ),
-                                          },
-                                          {
-                                            label: "Pass%",
-                                            percentile:
-                                              peerRating?.passing_accuracy_percentile ??
-                                              0,
-                                          },
-                                          {
-                                            label:
-                                              statMode === "per90"
-                                                ? "LB/90"
-                                                : "LB",
-                                            percentile: pct(
-                                              peerRating?.accurate_long_balls_per90_percentile,
-                                              peerRating?.accurate_long_balls_raw_percentile,
-                                              statMode,
-                                              peerQualified,
-                                            ),
-                                          },
-                                          {
-                                            label: "LB%",
-                                            percentile:
-                                              peerRating?.long_ball_accuracy_percentile ??
-                                              0,
-                                          },
-                                          ...(peerRating?.xg_chain_per90_percentile !=
-                                          null
-                                            ? [
-                                                {
-                                                  label:
-                                                    statMode === "per90"
-                                                      ? "xChain/90"
-                                                      : "xChain",
-                                                  percentile: pct(
-                                                    peerRating?.xg_chain_per90_percentile,
-                                                    peerRating?.xg_chain_raw_percentile,
-                                                    statMode,
-                                                    peerQualified,
-                                                  ),
-                                                },
-                                              ]
-                                            : []),
-                                          ...(peerRating?.xg_buildup_per90_percentile !=
-                                          null
-                                            ? [
-                                                {
-                                                  label:
-                                                    statMode === "per90"
-                                                      ? "xBuildup/90"
-                                                      : "xBuildup",
-                                                  percentile: pct(
-                                                    peerRating?.xg_buildup_per90_percentile,
-                                                    peerRating?.xg_buildup_raw_percentile,
-                                                    statMode,
-                                                    peerQualified,
-                                                  ),
-                                                },
-                                              ]
-                                            : []),
-                                        ]
-                                      : isDefender
-                                        ? [
-                                            // Physical (5)
-                                            {
-                                              label: "Air%",
-                                              percentile:
-                                                peerRating?.aerial_win_rate_percentile ??
-                                                0,
-                                            },
-                                            {
-                                              label:
-                                                statMode === "per90"
-                                                  ? "Air/90"
-                                                  : "Air",
-                                              percentile: pct(
-                                                peerRating?.aerials_per90_percentile,
-                                                peerRating?.aerials_won_raw_percentile,
-                                                statMode,
-                                                peerQualified,
-                                              ),
-                                            },
-                                            {
-                                              label: "Grd%",
-                                              percentile:
-                                                peerRating?.ground_duel_win_rate_percentile ??
-                                                0,
-                                            },
-                                            {
-                                              label:
-                                                statMode === "per90"
-                                                  ? "Grd/90"
-                                                  : "Grd",
-                                              percentile: pct(
-                                                peerRating?.ground_duels_won_per90_percentile,
-                                                peerRating?.ground_duels_won_raw_percentile,
-                                                statMode,
-                                                peerQualified,
-                                              ),
-                                            },
-                                            {
-                                              label:
-                                                statMode === "per90"
-                                                  ? "Cont/90"
-                                                  : "Cont",
-                                              percentile: pct(
-                                                peerRating?.total_contest_per90_percentile,
-                                                peerRating?.total_contests_raw_percentile,
-                                                statMode,
-                                                peerQualified,
-                                              ),
-                                            },
-                                            // Defending (4)
-                                            {
-                                              label:
-                                                statMode === "per90"
-                                                  ? "Rec/90"
-                                                  : "Rec",
-                                              percentile: pct(
-                                                peerRating?.ball_recoveries_per90_percentile,
-                                                peerRating?.ball_recoveries_raw_percentile,
-                                                statMode,
-                                                peerQualified,
-                                              ),
-                                            },
-                                            {
-                                              label:
-                                                statMode === "per90"
-                                                  ? "Tkl/90"
-                                                  : "Tkl",
-                                              percentile: pct(
-                                                peerRating?.tackles_per90_percentile,
-                                                peerRating?.tackles_raw_percentile,
-                                                statMode,
-                                                peerQualified,
-                                              ),
-                                            },
-                                            {
-                                              label:
-                                                statMode === "per90"
-                                                  ? "Int/90"
-                                                  : "Int",
-                                              percentile: pct(
-                                                peerRating?.interceptions_per90_percentile,
-                                                peerRating?.interceptions_raw_percentile,
-                                                statMode,
-                                                peerQualified,
-                                              ),
-                                            },
-                                            {
-                                              label: "FC/90",
-                                              percentile:
-                                                peerRating?.pressing_percentile ??
-                                                0,
-                                              inverted: true,
-                                            },
-                                            // Ball carrying (3)
-                                            {
-                                              label: "Drb%",
-                                              percentile:
-                                                peerRating?.dribble_success_percentile ??
-                                                0,
-                                            },
-                                            {
-                                              label:
-                                                statMode === "per90"
-                                                  ? "Tch/90"
-                                                  : "Tch",
-                                              percentile: pct(
-                                                peerRating?.touches_per90_percentile,
-                                                peerRating?.touches_raw_percentile,
-                                                statMode,
-                                                peerQualified,
-                                              ),
-                                            },
-                                            {
-                                              label: "PossLoss",
-                                              percentile:
-                                                peerRating?.carrying_percentile ??
-                                                0,
-                                              inverted: true,
-                                            },
-                                            // Chance creation (4)
-                                            {
-                                              label:
-                                                statMode === "per90"
-                                                  ? "xA/90"
-                                                  : "xA",
-                                              percentile: pct(
-                                                peerRating?.xa_per90_percentile,
-                                                peerRating?.xa_raw_percentile,
-                                                statMode,
-                                                peerQualified,
-                                              ),
-                                            },
-                                            {
-                                              label:
-                                                statMode === "per90"
-                                                  ? "Ast/90"
-                                                  : "Ast",
-                                              percentile: pct(
-                                                peerRating?.assists_per90_percentile,
-                                                peerRating?.assists_raw_percentile,
-                                                statMode,
-                                                peerQualified,
-                                              ),
-                                            },
-                                            {
-                                              label:
-                                                statMode === "per90"
-                                                  ? "Crs/90"
-                                                  : "Crs",
-                                              percentile: pct(
-                                                peerRating?.accurate_cross_per90_percentile,
-                                                peerRating?.accurate_cross_raw_percentile,
-                                                statMode,
-                                                peerQualified,
-                                              ),
-                                            },
-                                            {
-                                              label:
-                                                statMode === "per90"
-                                                  ? "KP/90"
-                                                  : "KP",
-                                              percentile: pct(
-                                                peerRating?.key_passes_per90_percentile,
-                                                peerRating?.key_passes_raw_percentile,
-                                                statMode,
-                                                peerQualified,
-                                              ),
-                                            },
-                                            // Passing (6)
-                                            {
-                                              label:
-                                                statMode === "per90"
-                                                  ? "Pass/90"
-                                                  : "Passes",
-                                              percentile: pct(
-                                                peerRating?.passes_completed_per90_percentile,
-                                                peerRating?.passes_completed_raw_percentile,
-                                                statMode,
-                                                peerQualified,
-                                              ),
-                                            },
-                                            {
-                                              label: "Pass%",
-                                              percentile:
-                                                peerRating?.passing_accuracy_percentile ??
-                                                0,
-                                            },
-                                            {
-                                              label:
-                                                statMode === "per90"
-                                                  ? "LB/90"
-                                                  : "LB",
-                                              percentile: pct(
-                                                peerRating?.accurate_long_balls_per90_percentile,
-                                                peerRating?.accurate_long_balls_raw_percentile,
-                                                statMode,
-                                                peerQualified,
-                                              ),
-                                            },
-                                            {
-                                              label: "LB%",
-                                              percentile:
-                                                peerRating?.long_ball_accuracy_percentile ??
-                                                0,
-                                            },
-                                            ...(peerRating?.xg_chain_per90_percentile !=
-                                            null
-                                              ? [
-                                                  {
-                                                    label:
-                                                      statMode === "per90"
-                                                        ? "xChain/90"
-                                                        : "xChain",
-                                                    percentile: pct(
-                                                      peerRating?.xg_chain_per90_percentile,
-                                                      peerRating?.xg_chain_raw_percentile,
-                                                      statMode,
-                                                      peerQualified,
-                                                    ),
-                                                  },
-                                                ]
-                                              : []),
-                                            ...(peerRating?.xg_buildup_per90_percentile !=
-                                            null
-                                              ? [
-                                                  {
-                                                    label:
-                                                      statMode === "per90"
-                                                        ? "xBuildup/90"
-                                                        : "xBuildup",
-                                                    percentile: pct(
-                                                      peerRating?.xg_buildup_per90_percentile,
-                                                      peerRating?.xg_buildup_raw_percentile,
-                                                      statMode,
-                                                      peerQualified,
-                                                    ),
-                                                  },
-                                                ]
-                                              : []),
-                                          ]
-                                        : []
-                          : []
-                      }
+                      data={getPizzaMetrics(
+                        { isST, isCAM, isWinger, isDefensiveWinger, isCM, isCDM, isDefender },
+                        peerRating,
+                        statMode,
+                        peerQualified,
+                      )}
                     />
                   </div>
                 ) : isST ? (
                   <>
                     {/* Goalscoring */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Goalscoring
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={
                             statMode === "per90" ? "Goals per 90" : "Goals"
@@ -3754,34 +1864,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* Chance Creation */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Chance creation
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={statMode === "per90" ? "xA per 90" : "xA"}
                           value={
@@ -3892,34 +1981,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* Passing */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Passing
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={statMode === "per90" ? "Passes /90" : "Passes"}
                           value={
@@ -4012,34 +2080,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* Ball Carrying */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Ball carrying
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label="Dribble success %"
                           value={fmtPct(stats.dribble_success_rate)}
@@ -4123,34 +2170,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* Physical Duels */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Physical duels
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label="Aerial win %"
                           value={fmtPct(stats.aerial_win_rate)}
@@ -4255,33 +2281,12 @@ function PlayerProfilePage() {
 
                     {/* Pressing & Recovery */}
                     <div>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Defending
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={
                             statMode === "per90"
@@ -4363,34 +2368,13 @@ function PlayerProfilePage() {
                 ) : isCAM ? (
                   <>
                     {/* CAM — Chance Creation */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Chance creation
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={statMode === "per90" ? "xA per 90" : "xA"}
                           value={
@@ -4501,34 +2485,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* CAM — Passing */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Passing
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={statMode === "per90" ? "Passes /90" : "Passes"}
                           value={
@@ -4624,34 +2587,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* CAM — Goal Threat */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Goal threat
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={
                             statMode === "per90" ? "Goals per 90" : "Goals"
@@ -4800,34 +2742,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* CAM — Ball Carrying */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Ball carrying
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label="Dribble success %"
                           value={fmtPct(stats.dribble_success_rate)}
@@ -4903,34 +2824,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* CAM — Physical Duels */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Physical duels
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label="Aerial win %"
                           value={fmtPct(stats.aerial_win_rate)}
@@ -5013,33 +2913,12 @@ function PlayerProfilePage() {
 
                     {/* CAM — Pressing & Recovery */}
                     <div>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Defending
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={
                             statMode === "per90"
@@ -5121,34 +3000,13 @@ function PlayerProfilePage() {
                 ) : isWinger ? (
                   <>
                     {/* Winger — Chance Creation */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Chance creation
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={statMode === "per90" ? "xA per 90" : "xA"}
                           value={
@@ -5259,34 +3117,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* Winger — Passing */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Passing
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={statMode === "per90" ? "Passes /90" : "Passes"}
                           value={
@@ -5379,34 +3216,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* Winger — Goal Threat */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Goal threat
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={
                             statMode === "per90" ? "Goals per 90" : "Goals"
@@ -5555,34 +3371,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* Winger — Ball Carrying */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Ball carrying
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label="Dribble success %"
                           value={fmtPct(stats.dribble_success_rate)}
@@ -5657,34 +3452,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* Winger — Physical Duels */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Physical duels
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label="Aerial win %"
                           value={fmtPct(stats.aerial_win_rate)}
@@ -5767,33 +3541,12 @@ function PlayerProfilePage() {
 
                     {/* Winger — Pressing & Recovery */}
                     <div>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Defending
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={
                             statMode === "per90"
@@ -5875,34 +3628,13 @@ function PlayerProfilePage() {
                 ) : isDefensiveWinger ? (
                   <>
                     {/* Defensive Winger — Chance Creation */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Chance creation
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={statMode === "per90" ? "xA per 90" : "xA"}
                           value={
@@ -5992,34 +3724,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* Defensive Winger — Passing */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Passing
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={statMode === "per90" ? "Passes /90" : "Passes"}
                           value={
@@ -6112,34 +3823,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* Defensive Winger — Pressing & Recovery */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Defending
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={
                             statMode === "per90"
@@ -6219,34 +3909,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* Defensive Winger — Ball Carrying */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Ball carrying
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label="Dribble success %"
                           value={fmtPct(stats.dribble_success_rate)}
@@ -6303,34 +3972,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* Defensive Winger — Physical Duels */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Physical duels
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label="Aerial win %"
                           value={fmtPct(stats.aerial_win_rate)}
@@ -6413,33 +4061,12 @@ function PlayerProfilePage() {
 
                     {/* Defensive Winger — Goal Threat */}
                     <div>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Goal threat
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={
                             statMode === "per90" ? "Goals per 90" : "Goals"
@@ -6590,34 +4217,13 @@ function PlayerProfilePage() {
                 ) : isCM ? (
                   <>
                     {/* CM — Chance Creation */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Chance creation
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={statMode === "per90" ? "xA per 90" : "xA"}
                           value={
@@ -6728,34 +4334,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* CM — Passing */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Passing
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={statMode === "per90" ? "Passes /90" : "Passes"}
                           value={
@@ -6851,34 +4436,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* CM — Goal Threat */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Goal threat
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={
                             statMode === "per90" ? "Goals per 90" : "Goals"
@@ -7045,34 +4609,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* CM — Ball Carrying */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Ball carrying
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label="Dribble success %"
                           value={fmtPct(stats.dribble_success_rate)}
@@ -7148,34 +4691,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* CM — Physical Duels */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Physical duels
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label="Aerial win %"
                           value={fmtPct(stats.aerial_win_rate)}
@@ -7258,33 +4780,12 @@ function PlayerProfilePage() {
 
                     {/* CM — Pressing & Recovery */}
                     <div>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Defending
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={
                             statMode === "per90"
@@ -7366,34 +4867,13 @@ function PlayerProfilePage() {
                 ) : isCDM ? (
                   <>
                     {/* CDM — Pressing & Recovery (first) */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Defending
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={
                             statMode === "per90"
@@ -7473,34 +4953,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* CDM — Physical Duels */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Physical duels
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label="Aerial win %"
                           value={fmtPct(stats.aerial_win_rate)}
@@ -7582,34 +5041,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* CDM — Ball Carrying */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Ball carrying
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label="Dribble success %"
                           value={fmtPct(stats.dribble_success_rate)}
@@ -7684,34 +5122,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* CDM — Chance Creation */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Chance creation
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={statMode === "per90" ? "xA per 90" : "xA"}
                           value={
@@ -7785,34 +5202,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* CDM — Passing */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Passing
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={statMode === "per90" ? "Passes /90" : "Passes"}
                           value={
@@ -7906,33 +5302,12 @@ function PlayerProfilePage() {
 
                     {/* CDM — Goal Threat */}
                     <div>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Goal threat
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={
                             statMode === "per90" ? "Goals per 90" : "Goals"
@@ -8083,34 +5458,13 @@ function PlayerProfilePage() {
                 ) : isDefender ? (
                   <>
                     {/* Defender — Physical Duels (first) */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Physical duels
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label="Aerial win %"
                           value={fmtPct(stats.aerial_win_rate)}
@@ -8213,34 +5567,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* Defender — Pressing & Recovery */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Defending
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={
                             statMode === "per90"
@@ -8320,34 +5653,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* Defender — Ball Carrying */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Ball carrying
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label="Dribble success %"
                           value={fmtPct(stats.dribble_success_rate)}
@@ -8386,34 +5698,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* Defender — Passing */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Passing
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={statMode === "per90" ? "Passes /90" : "Passes"}
                           value={
@@ -8506,34 +5797,13 @@ function PlayerProfilePage() {
                     </div>
 
                     {/* Defender — Chance Creation */}
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                    <div className="mb-6 sm:mb-8">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Chance creation
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={statMode === "per90" ? "xA per 90" : "xA"}
                           value={
@@ -8605,33 +5875,12 @@ function PlayerProfilePage() {
 
                     {/* Defender — Goal Threat */}
                     <div>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Goal threat
                         </span>
                       </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr",
-                          gap: "2px",
-                        }}
-                      >
+                      <div className="grid grid-cols-1 gap-0.5">
                         <StatRow
                           label={
                             statMode === "per90" ? "Goals per 90" : "Goals"
@@ -8781,18 +6030,7 @@ function PlayerProfilePage() {
                   </>
                 ) : null}
                 {/* ── Watermark ───────────────────────────── */}
-                <div
-                  style={{
-                    marginTop: 20,
-                    paddingTop: 12,
-                    borderTop: "1px solid var(--border)",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    fontSize: 10,
-                    color: "var(--muted-foreground)",
-                  }}
-                >
+                <div className="mt-5 flex items-center justify-between border-t border-border pt-3 text-[10px] text-muted-foreground">
                   <span>
                     {
                       seasons.find(
@@ -8805,7 +6043,7 @@ function PlayerProfilePage() {
                       )?.season
                     }
                   </span>
-                  <span style={{ fontWeight: 500 }}>Know Ball</span>
+                  <span className="font-medium">Know Ball</span>
                 </div>
               </CardContent>
             </Card>
@@ -8820,14 +6058,10 @@ function PlayerProfilePage() {
                 aria-hidden="true"
                 style={{
                   position: "fixed",
-                  left: 0,
+                  left: -99999,
                   top: 0,
-                  zIndex: 9999,
-                  width: "100vw",
-                  height: "100vh",
-                  background: "#0a0a0a",
-                  overflow: "hidden",
                   pointerEvents: "none",
+                  opacity: 0,
                 }}
               >
                 <div ref={scoutingSocialCardRef} style={{ width: 1080, height: 1350 }}>
@@ -8836,24 +6070,9 @@ function PlayerProfilePage() {
               </div>
             )}
             <Card className="mt-4">
-              <CardContent className="p-5">
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: 12,
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: "var(--muted-foreground)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.08em",
-                    }}
-                  >
+              <CardContent className="p-4 sm:p-5">
+                <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Peer comparison
                   </span>
                   <div className="flex flex-wrap items-center gap-2">
@@ -8888,23 +6107,11 @@ function PlayerProfilePage() {
                   </div>
                 </div>
                 {activePeerRating == null ? (
-                  <div
-                    style={{
-                      fontSize: 13,
-                      color: "var(--muted-foreground)",
-                      padding: "1rem 0",
-                    }}
-                  >
+                  <div className="py-4 text-[13px] text-muted-foreground">
                     No peer comparison data available.
                   </div>
                 ) : (activePeerRating.rated_minutes ?? 0) < activePeerMinMinutes ? (
-                  <div
-                    style={{
-                      fontSize: 13,
-                      color: "var(--muted-foreground)",
-                      padding: "1rem 0",
-                    }}
-                  >
+                  <div className="py-4 text-[13px] text-muted-foreground">
                     Peer comparison requires {activePeerMinMinutes}+ minutes rated as{" "}
                     {POSITION_LABELS[activePeerRating.position ?? player.position ?? "ST"] ??
                       activePeerRating.position ??
@@ -8912,261 +6119,144 @@ function PlayerProfilePage() {
                     . Currently {activePeerRating.rated_minutes ?? 0} mins.
                   </div>
                 ) : (
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 12,
-                    }}
-                  >
+                  <div className="flex flex-col gap-3">
                     {/* Model score */}
-                    {activePeerRating.model_score != null && (
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          padding: "10px 14px",
-                          background: "var(--muted)",
-                          borderRadius: 8,
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 2,
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontSize: 11,
-                              fontWeight: 600,
-                              color: "var(--muted-foreground)",
-                              textTransform: "uppercase",
-                              letterSpacing: "0.08em",
-                            }}
-                          >
-                            Know Ball Score
-                          </span>
-                          <span
-                            style={{
-                              fontSize: 13,
-                              color: "var(--foreground)",
-                              fontWeight: 600,
-                              maxWidth: 360,
-                            }}
-                          >
-                            {scoreCopy(activePeerRating.model_score, roleArchetype)}
-                          </span>
-                          <span
-                            style={{
-                              fontSize: 11,
-                              color: "var(--muted-foreground)",
-                              maxWidth: 320,
-                            }}
-                          >
-                            Compared with {POSITION_LABELS[activePeerRating.position ?? "ST"] ?? activePeerRating.position ?? "players"} in {comparisonPool}.
-                          </span>
-                          {roleArchetype && (
-                            <span
-                              style={{
-                                alignSelf: "flex-start",
-                                marginTop: 4,
-                                padding: "3px 8px",
-                                border: "1px solid var(--border)",
-                                borderRadius: 6,
-                                fontSize: 11,
-                                fontWeight: 700,
-                                color: "var(--foreground)",
-                                background: "var(--card)",
-                              }}
-                            >
-                              {roleArchetype}
-                            </span>
-                          )}
-                          {confidenceMessage && (
-                            <span
-                              style={{
-                                fontSize: 11,
-                                color:
-                                  Number(activePeerRating.model_score_confidence ?? 0) < 45
-                                    ? "#ef9f27"
-                                    : "var(--muted-foreground)",
-                                marginTop: 2,
-                              }}
-                            >
-                              {confidenceMessage}
-                            </span>
-                          )}
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "flex-end",
-                            gap: 2,
-                            flexShrink: 0,
-                            marginLeft: 16,
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontSize: 24,
-                              fontWeight: 700,
-                              lineHeight: 1.1,
-                              color:
-                                Number(activePeerRating.model_score) >= 60
-                                  ? "#1d9e75"
-                                  : Number(activePeerRating.model_score) >= 45
-                                    ? "#ef9f27"
-                                    : "#e24b4a",
-                            }}
-                          >
-                            {Number(activePeerRating.model_score).toFixed(2)}
-                          </span>
-                          {activePeerRating.model_score_confidence != null && (
-                            <span
-                              style={{
-                                fontSize: 11,
-                                color: "var(--muted-foreground)",
-                              }}
-                            >
-                              {Math.round(
-                                Number(activePeerRating.model_score_confidence),
+                    {activePeerRating.model_score != null && (() => {
+                        const score = Number(activePeerRating.model_score);
+                        const scoreTone =
+                          score >= 60
+                            ? "text-rating-high"
+                            : score >= 45
+                              ? "text-rating-mid"
+                              : "text-rating-low";
+                        const band = scoreConfidenceBand(
+                          activePeerRating.model_score_confidence,
+                          activePeerRating.rated_minutes,
+                        );
+                        const bandClass =
+                          band === "limited"
+                            ? "border-rating-mid/30 bg-rating-mid/10 text-rating-mid"
+                            : band === "trusted"
+                              ? "border-rating-high/30 bg-rating-high/10 text-rating-high"
+                              : "border-border bg-card text-muted-foreground";
+                        const lowConfidence =
+                          Number(activePeerRating.model_score_confidence ?? 0) < 45;
+                        return (
+                          <div className="flex flex-col gap-3 rounded-lg bg-muted px-3.5 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                            <div className="flex flex-col gap-0.5 min-w-0">
+                              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                Know Ball Score
+                              </span>
+                              <div className="flex items-baseline gap-2 sm:hidden">
+                                <span className={`text-2xl font-bold leading-none tabular-nums ${scoreTone}`}>
+                                  {score.toFixed(2)}
+                                </span>
+                                {activePeerRating.model_score_confidence != null && (
+                                  <span className="text-[11px] text-muted-foreground">
+                                    {Math.round(Number(activePeerRating.model_score_confidence))}% confidence
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[13px] font-semibold text-foreground">
+                                {scoreCopy(activePeerRating.model_score, roleArchetype)}
+                              </span>
+                              <span className="text-[11px] text-muted-foreground">
+                                Compared with {POSITION_LABELS[activePeerRating.position ?? "ST"] ?? activePeerRating.position ?? "players"} in {comparisonPool}.
+                              </span>
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                {roleArchetype && (
+                                  <span className="rounded-md border border-border bg-card px-2 py-0.5 text-[11px] font-bold text-foreground">
+                                    {roleArchetype}
+                                  </span>
+                                )}
+                                <span
+                                  title={scoreConfidenceDetail(
+                                    activePeerRating.model_score_confidence,
+                                    activePeerRating.rated_minutes,
+                                  )}
+                                  className={`whitespace-nowrap rounded-md border px-1.5 py-0.5 text-[10px] font-extrabold uppercase sm:hidden ${bandClass}`}
+                                >
+                                  {scoreConfidenceLabel(
+                                    activePeerRating.model_score_confidence,
+                                    activePeerRating.rated_minutes,
+                                  )}
+                                </span>
+                              </div>
+                              {confidenceMessage && (
+                                <span
+                                  className={`mt-0.5 text-[11px] ${lowConfidence ? "text-rating-mid" : "text-muted-foreground"}`}
+                                >
+                                  {confidenceMessage}
+                                </span>
                               )}
-                              % confidence
-                            </span>
-                          )}
-                          <span
-                            title={scoreConfidenceDetail(
-                              activePeerRating.model_score_confidence,
-                              activePeerRating.rated_minutes,
-                            )}
-                            style={{
-                              marginTop: 2,
-                              padding: "3px 7px",
-                              borderRadius: 6,
-                              border: "1px solid var(--border)",
-                              background:
-                                scoreConfidenceBand(
+                            </div>
+                            <div className="hidden sm:flex shrink-0 flex-col items-end gap-0.5">
+                              <span className={`text-2xl font-bold leading-tight tabular-nums ${scoreTone}`}>
+                                {score.toFixed(2)}
+                              </span>
+                              {activePeerRating.model_score_confidence != null && (
+                                <span className="text-[11px] text-muted-foreground">
+                                  {Math.round(Number(activePeerRating.model_score_confidence))}% confidence
+                                </span>
+                              )}
+                              <span
+                                title={scoreConfidenceDetail(
                                   activePeerRating.model_score_confidence,
                                   activePeerRating.rated_minutes,
-                                ) === "limited"
-                                  ? "rgba(239, 159, 39, 0.12)"
-                                  : scoreConfidenceBand(
-                                        activePeerRating.model_score_confidence,
-                                        activePeerRating.rated_minutes,
-                                      ) === "trusted"
-                                    ? "rgba(29, 158, 117, 0.12)"
-                                    : "var(--card)",
-                              color:
-                                scoreConfidenceBand(
+                                )}
+                                className={`mt-0.5 whitespace-nowrap rounded-md border px-1.5 py-0.5 text-[10px] font-extrabold uppercase ${bandClass}`}
+                              >
+                                {scoreConfidenceLabel(
                                   activePeerRating.model_score_confidence,
                                   activePeerRating.rated_minutes,
-                                ) === "limited"
-                                  ? "#b7791f"
-                                  : scoreConfidenceBand(
-                                        activePeerRating.model_score_confidence,
-                                        activePeerRating.rated_minutes,
-                                      ) === "trusted"
-                                    ? "#1d9e75"
-                                    : "var(--muted-foreground)",
-                              fontSize: 10,
-                              fontWeight: 800,
-                              textTransform: "uppercase",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            {scoreConfidenceLabel(
-                              activePeerRating.model_score_confidence,
-                              activePeerRating.rated_minutes,
-                            )}
-                          </span>
-                        </div>
-                      </div>
-                    )}
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     {attackingScoutReport && (
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 12,
-                          padding: "12px 14px",
-                          background: "var(--muted)",
-                          borderRadius: 8,
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            gap: 12,
-                            alignItems: "flex-start",
-                          }}
-                        >
+                      <div className="flex flex-col gap-3 rounded-lg bg-muted px-3.5 py-3">
+                        <div className="flex items-start justify-between gap-3">
                           <div>
-                            <div
-                              style={{
-                                fontSize: 11,
-                                fontWeight: 700,
-                                color: "var(--muted-foreground)",
-                                textTransform: "uppercase",
-                                letterSpacing: "0.08em",
-                              }}
-                            >
+                            <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                               {attackingScoutReport.title}
                             </div>
-                            <div
-                              style={{
-                                marginTop: 4,
-                                fontSize: 15,
-                                fontWeight: 700,
-                                color: "var(--foreground)",
-                                lineHeight: 1.35,
-                              }}
-                            >
+                            <div className="mt-1 text-[15px] font-bold leading-snug text-foreground">
                               {attackingScoutReport.report.headline}
                             </div>
                           </div>
-                          <div
-                            style={{
-                              textAlign: "right",
-                              fontSize: 11,
-                              color: "var(--muted-foreground)",
-                              flexShrink: 0,
-                            }}
-                          >
+                          <div className="shrink-0 text-right text-[11px] text-muted-foreground">
                             {activePeerRating.rated_minutes ?? 0} rated mins
                             <br />
                             {comparisonPool}
                           </div>
                         </div>
 
-                        <div className="grid gap-3 md:grid-cols-3">
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                           <div>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--foreground)", marginBottom: 6 }}>
+                            <div className="mb-1.5 text-xs font-bold text-foreground">
                               Main Value
                             </div>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            <div className="flex flex-col gap-1.5">
                               {attackingScoutReport.report.top.length > 0 ? attackingScoutReport.report.top.map((row) => (
-                                <div key={row.metricKey} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12 }}>
-                                  <span style={{ color: "var(--muted-foreground)" }}>{row.label}</span>
-                                  <span style={{ color: "var(--foreground)", fontWeight: 700 }}>{rowRankText(row, activePeerMetricRanks)}</span>
+                                <div key={row.metricKey} className="flex justify-between gap-2 text-xs">
+                                  <span className="text-muted-foreground">{row.label}</span>
+                                  <span className="font-bold text-foreground">{rowRankText(row, activePeerMetricRanks)}</span>
                                 </div>
                               )) : (
-                                <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>No strong signal yet.</span>
+                                <span className="text-xs text-muted-foreground">No strong signal yet.</span>
                               )}
                             </div>
                           </div>
 
                           <div>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--foreground)", marginBottom: 6 }}>
+                            <div className="mb-1.5 text-xs font-bold text-foreground">
                               Best Usage
                             </div>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            <div className="flex flex-col gap-1.5">
                               {attackingScoutReport.report.usageItems.slice(0, 3).map((item) => (
-                                <div key={item} style={{ fontSize: 12, color: "var(--muted-foreground)", lineHeight: 1.45 }}>
+                                <div key={item} className="text-xs leading-relaxed text-muted-foreground">
                                   {item}
                                 </div>
                               ))}
@@ -9174,18 +6264,18 @@ function PlayerProfilePage() {
                           </div>
 
                           <div>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--foreground)", marginBottom: 6 }}>
+                            <div className="mb-1.5 text-xs font-bold text-foreground">
                               Limits
                             </div>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            <div className="flex flex-col gap-1.5">
                               {(attackingScoutReport.report.concernItems.length > 0 || attackingScoutReport.report.notExpectItems.length > 0)
                                 ? [...attackingScoutReport.report.concernItems, ...attackingScoutReport.report.notExpectItems].slice(0, 3).map((item) => (
-                                    <div key={item} style={{ fontSize: 12, color: "var(--muted-foreground)", lineHeight: 1.45 }}>
+                                    <div key={item} className="text-xs leading-relaxed text-muted-foreground">
                                       {item}
                                     </div>
                                   ))
                                 : (
-                                  <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>
+                                  <span className="text-xs text-muted-foreground">
                                     {attackingScoutReport.emptyWarning}
                                   </span>
                                 )}
@@ -9193,16 +6283,16 @@ function PlayerProfilePage() {
                           </div>
                         </div>
 
-                        <div className="grid gap-3 md:grid-cols-2">
+                        <div className="grid gap-3 sm:grid-cols-2">
                           <div>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>
+                            <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                               Core Evidence
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                               {attackingScoutReport.report.evidenceRows.map((row) => (
-                                <div key={row.metricKey} style={{ border: "1px solid var(--border)", borderRadius: 6, padding: "8px 9px", background: "var(--card)" }}>
-                                  <div style={{ fontSize: 11, color: "var(--muted-foreground)" }}>{row.label}</div>
-                                  <div style={{ marginTop: 2, fontSize: 14, fontWeight: 800, color: Number(row.value ?? 0) >= 70 ? "#1d9e75" : Number(row.value ?? 0) >= 40 ? "#ef9f27" : "#e24b4a" }}>
+                                <div key={row.metricKey} className="rounded-md border border-border bg-card px-2.5 py-2">
+                                  <div className="text-[11px] text-muted-foreground">{row.label}</div>
+                                  <div className={`mt-0.5 text-sm font-extrabold ${bandToneClass(row.value)}`}>
                                     {rowRankText(row, activePeerMetricRanks)}
                                   </div>
                                 </div>
@@ -9211,14 +6301,14 @@ function PlayerProfilePage() {
                           </div>
 
                           <div>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>
+                            <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                               {attackingScoutReport.seasonTitle}
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                               {attackingScoutReport.report.seasonRows.map((row) => (
-                                <div key={row.label} style={{ border: "1px solid var(--border)", borderRadius: 6, padding: "8px 9px", background: "var(--card)" }}>
-                                  <div style={{ fontSize: 11, color: "var(--muted-foreground)" }}>{row.label}</div>
-                                  <div style={{ marginTop: 2, fontSize: 14, fontWeight: 800, color: row.value == null ? "var(--muted-foreground)" : Number(row.value) >= 70 ? "#1d9e75" : Number(row.value) >= 40 ? "#ef9f27" : "#e24b4a" }}>
+                                <div key={row.label} className="rounded-md border border-border bg-card px-2.5 py-2">
+                                  <div className="text-[11px] text-muted-foreground">{row.label}</div>
+                                  <div className={`mt-0.5 text-sm font-extrabold ${bandToneClass(row.value)}`}>
                                     {row.rank}
                                   </div>
                                 </div>
@@ -9229,86 +6319,47 @@ function PlayerProfilePage() {
                       </div>
                     )}
                     {cmReport && (
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 12,
-                          padding: "12px 14px",
-                          background: "var(--muted)",
-                          borderRadius: 8,
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            gap: 12,
-                            alignItems: "flex-start",
-                          }}
-                        >
+                      <div className="flex flex-col gap-3 rounded-lg bg-muted px-3.5 py-3">
+                        <div className="flex items-start justify-between gap-3">
                           <div>
-                            <div
-                              style={{
-                                fontSize: 11,
-                                fontWeight: 700,
-                                color: "var(--muted-foreground)",
-                                textTransform: "uppercase",
-                                letterSpacing: "0.08em",
-                              }}
-                            >
+                            <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                               CM Scout Report
                             </div>
-                            <div
-                              style={{
-                                marginTop: 4,
-                                fontSize: 15,
-                                fontWeight: 700,
-                                color: "var(--foreground)",
-                                lineHeight: 1.35,
-                              }}
-                            >
+                            <div className="mt-1 text-[15px] font-bold leading-snug text-foreground">
                               {cmReport.headline}
                             </div>
                           </div>
-                          <div
-                            style={{
-                              textAlign: "right",
-                              fontSize: 11,
-                              color: "var(--muted-foreground)",
-                              flexShrink: 0,
-                            }}
-                          >
+                          <div className="shrink-0 text-right text-[11px] text-muted-foreground">
                             {activePeerRating.rated_minutes ?? 0} rated mins
                             <br />
                             {comparisonPool}
                           </div>
                         </div>
 
-                        <div className="grid gap-3 md:grid-cols-3">
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                           <div>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--foreground)", marginBottom: 6 }}>
+                            <div className="mb-1.5 text-xs font-bold text-foreground">
                               Main Value
                             </div>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            <div className="flex flex-col gap-1.5">
                               {cmReport.top.length > 0 ? cmReport.top.map((row) => (
-                                <div key={row.metricKey} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12 }}>
-                                  <span style={{ color: "var(--muted-foreground)" }}>{row.label}</span>
-                                  <span style={{ color: "var(--foreground)", fontWeight: 700 }}>{rowRankText(row, activePeerMetricRanks)}</span>
+                                <div key={row.metricKey} className="flex justify-between gap-2 text-xs">
+                                  <span className="text-muted-foreground">{row.label}</span>
+                                  <span className="font-bold text-foreground">{rowRankText(row, activePeerMetricRanks)}</span>
                                 </div>
                               )) : (
-                                <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>No strong signal yet.</span>
+                                <span className="text-xs text-muted-foreground">No strong signal yet.</span>
                               )}
                             </div>
                           </div>
 
                           <div>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--foreground)", marginBottom: 6 }}>
+                            <div className="mb-1.5 text-xs font-bold text-foreground">
                               Best Usage
                             </div>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            <div className="flex flex-col gap-1.5">
                               {cmReport.usageItems.slice(0, 3).map((item) => (
-                                <div key={item} style={{ fontSize: 12, color: "var(--muted-foreground)", lineHeight: 1.45 }}>
+                                <div key={item} className="text-xs leading-relaxed text-muted-foreground">
                                   {item}
                                 </div>
                               ))}
@@ -9316,18 +6367,18 @@ function PlayerProfilePage() {
                           </div>
 
                           <div>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--foreground)", marginBottom: 6 }}>
+                            <div className="mb-1.5 text-xs font-bold text-foreground">
                               Limits
                             </div>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            <div className="flex flex-col gap-1.5">
                               {(cmReport.concernItems.length > 0 || cmReport.notExpectItems.length > 0)
                                 ? [...cmReport.concernItems, ...cmReport.notExpectItems].slice(0, 3).map((item) => (
-                                    <div key={item} style={{ fontSize: 12, color: "var(--muted-foreground)", lineHeight: 1.45 }}>
+                                    <div key={item} className="text-xs leading-relaxed text-muted-foreground">
                                       {item}
                                     </div>
                                   ))
                                 : (
-                                  <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>
+                                  <span className="text-xs text-muted-foreground">
                                     No major CM-specific statistical warning in this peer pool.
                                   </span>
                                 )}
@@ -9335,16 +6386,16 @@ function PlayerProfilePage() {
                           </div>
                         </div>
 
-                        <div className="grid gap-3 md:grid-cols-2">
+                        <div className="grid gap-3 sm:grid-cols-2">
                           <div>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>
+                            <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                               Core Evidence
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                               {cmReport.evidenceRows.map((row) => (
-                                <div key={row.metricKey} style={{ border: "1px solid var(--border)", borderRadius: 6, padding: "8px 9px", background: "var(--card)" }}>
-                                  <div style={{ fontSize: 11, color: "var(--muted-foreground)" }}>{row.label}</div>
-                                  <div style={{ marginTop: 2, fontSize: 14, fontWeight: 800, color: Number(row.value ?? 0) >= 70 ? "#1d9e75" : Number(row.value ?? 0) >= 40 ? "#ef9f27" : "#e24b4a" }}>
+                                <div key={row.metricKey} className="rounded-md border border-border bg-card px-2.5 py-2">
+                                  <div className="text-[11px] text-muted-foreground">{row.label}</div>
+                                  <div className={`mt-0.5 text-sm font-extrabold ${bandToneClass(row.value)}`}>
                                     {rowRankText(row, activePeerMetricRanks)}
                                   </div>
                                 </div>
@@ -9353,14 +6404,14 @@ function PlayerProfilePage() {
                           </div>
 
                           <div>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>
+                            <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                               Season Context
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                               {cmReport.seasonOnlyRows.map((row) => (
-                                <div key={row.label} style={{ border: "1px solid var(--border)", borderRadius: 6, padding: "8px 9px", background: "var(--card)" }}>
-                                  <div style={{ fontSize: 11, color: "var(--muted-foreground)" }}>{row.label}</div>
-                                  <div style={{ marginTop: 2, fontSize: 14, fontWeight: 800, color: row.value == null ? "var(--muted-foreground)" : Number(row.value) >= 70 ? "#1d9e75" : Number(row.value) >= 40 ? "#ef9f27" : "#e24b4a" }}>
+                                <div key={row.label} className="rounded-md border border-border bg-card px-2.5 py-2">
+                                  <div className="text-[11px] text-muted-foreground">{row.label}</div>
+                                  <div className={`mt-0.5 text-sm font-extrabold ${bandToneClass(row.value)}`}>
                                     {row.rank}
                                   </div>
                                 </div>
@@ -9371,25 +6422,8 @@ function PlayerProfilePage() {
                       </div>
                     )}
                     {!attackingScoutReport && !cmReport && peerDimensionRows.length > 0 && (
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 10,
-                          padding: "12px 14px",
-                          background: "var(--muted)",
-                          borderRadius: 8,
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 700,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                      <div className="flex flex-col gap-2.5 rounded-lg bg-muted px-3.5 py-3">
+                        <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                           Scout Summary
                         </div>
                         {[
@@ -9397,11 +6431,11 @@ function PlayerProfilePage() {
                           ["Caution", scoutSummary.cautionText],
                           ["Role Fit", scoutSummary.roleText],
                         ].map(([label, copy]) => (
-                          <div key={label} style={{ display: "grid", gridTemplateColumns: "86px 1fr", gap: 10 }}>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--foreground)" }}>
+                          <div key={label} className="grid grid-cols-[86px_1fr] gap-2.5">
+                            <div className="text-xs font-bold text-foreground">
                               {label}
                             </div>
-                            <div style={{ fontSize: 12, color: "var(--muted-foreground)", lineHeight: 1.55 }}>
+                            <div className="text-xs leading-relaxed text-muted-foreground">
                               {copy}
                             </div>
                           </div>
@@ -9411,25 +6445,8 @@ function PlayerProfilePage() {
                     {/* Good match rate & high impact rate */}
                     {(activePeerRating.consistency_score != null ||
                       activePeerRating.impact_rate != null) && (
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 6,
-                          padding: "10px 14px",
-                          background: "var(--muted)",
-                          borderRadius: 8,
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--muted-foreground)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
+                      <div className="flex flex-col gap-1.5 rounded-lg bg-muted px-3.5 py-2.5">
+                        <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Match Profile
                         </div>
 
@@ -9443,34 +6460,18 @@ function PlayerProfilePage() {
                             const labelColor = rateColor(val, 20, 70);
                             return (
                               <div>
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    alignItems: "baseline",
-                                    marginBottom: 4,
-                                  }}
-                                >
-                                  <span
-                                    style={{
-                                      fontSize: 12,
-                                      color: "var(--foreground)",
-                                      fontWeight: 500,
-                                    }}
-                                  >
+                                <div className="mb-1 flex items-baseline justify-between">
+                                  <span className="text-xs font-medium text-foreground">
                                     Good Performance Rate
                                   </span>
                                   <span
-                                    style={{
-                                      fontSize: 15,
-                                      fontWeight: 700,
-                                      color: labelColor,
-                                    }}
+                                    className="text-[15px] font-bold"
+                                    style={{ color: labelColor }}
                                   >
                                     {val.toFixed(0)}%
                                   </span>
                                 </div>
-                                <div style={{ display: "flex", gap: 2 }}>
+                                <div className="flex gap-0.5">
                                   {Array.from({ length: 10 }, (_, i) => {
                                     const segMid = (i + 0.5) * 10; // midpoint % of this segment
                                     const opacity =
@@ -9511,34 +6512,18 @@ function PlayerProfilePage() {
                             const labelColor = rateColor(val, 5, 35);
                             return (
                               <div>
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    alignItems: "baseline",
-                                    marginBottom: 4,
-                                  }}
-                                >
-                                  <span
-                                    style={{
-                                      fontSize: 12,
-                                      color: "var(--foreground)",
-                                      fontWeight: 500,
-                                    }}
-                                  >
+                                <div className="mb-1 flex items-baseline justify-between">
+                                  <span className="text-xs font-medium text-foreground">
                                     Elite Performance Rate
                                   </span>
                                   <span
-                                    style={{
-                                      fontSize: 15,
-                                      fontWeight: 700,
-                                      color: labelColor,
-                                    }}
+                                    className="text-[15px] font-bold"
+                                    style={{ color: labelColor }}
                                   >
                                     {val.toFixed(0)}%
                                   </span>
                                 </div>
-                                <div style={{ display: "flex", gap: 2 }}>
+                                <div className="flex gap-0.5">
                                   {Array.from({ length: 10 }, (_, i) => {
                                     const segMid = (i + 0.5) * 10;
                                     const opacity =
@@ -9572,29 +6557,12 @@ function PlayerProfilePage() {
                           })()}
 
                         {/* Explanation */}
-                        <div
-                          style={{
-                            fontSize: 11,
-                            color: "var(--muted-foreground)",
-                            marginTop: 4,
-                            lineHeight: 1.5,
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontWeight: 600,
-                              color: "var(--foreground)",
-                            }}
-                          >
+                        <div className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                          <span className="font-semibold text-foreground">
                             Good Performance Rate
                           </span>{" "}
                           = share of rated matches with a good performance.{" "}
-                          <span
-                            style={{
-                              fontWeight: 600,
-                              color: "var(--foreground)",
-                            }}
-                          >
+                          <span className="font-semibold text-foreground">
                             Elite Performance Rate
                           </span>{" "}
                           = share of rated matches with an elite performance.
@@ -9604,103 +6572,55 @@ function PlayerProfilePage() {
                     )}
 
                     {/* Description */}
-                    <p
-                      style={{
-                        fontSize: 11,
-                        color: "var(--muted-foreground)",
-                        margin: 0,
-                      }}
-                    >
+                    <p className="m-0 text-[11px] text-muted-foreground">
                       Match Rating = individual games. Know Ball Score = season-level performance.
                       Rank = standing among rated players in this peer pool. Confidence = how much the sample is trusted.
                     </p>
                     {!attackingScoutReport && !cmReport && (
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 8,
-                        }}
-                      >
+                      <div className="flex flex-col gap-2">
                         {peerDimensionRows.map((row) => {
                           const { label, sublabel, value } = row;
                           const pct = value ?? 0;
-                          const barColor =
+                          const barBg =
                             pct >= 70
-                              ? "#1d9e75"
+                              ? "bg-band-good"
                               : pct >= 40
-                                ? "#ef9f27"
-                                : "#e24b4a";
+                                ? "bg-band-warn"
+                                : "bg-band-bad";
+                          const textTone =
+                            pct >= 70
+                              ? "text-band-good"
+                              : pct >= 40
+                                ? "text-band-warn"
+                                : "text-band-bad";
                           return (
                             <div
                               key={label}
                               className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3"
                             >
                               <div className="flex items-baseline justify-between gap-3 sm:contents">
-                                <span
-                                  className="sm:w-[150px] sm:flex-shrink-0"
-                                  style={{
-                                    fontSize: 12,
-                                    color: "var(--foreground)",
-                                    minWidth: 0,
-                                  }}
-                                >
+                                <span className="min-w-0 text-xs text-foreground sm:w-44 sm:shrink-0">
                                   {label}
                                   {sublabel && (
-                                    <span
-                                      style={{
-                                        display: "block",
-                                        fontSize: 10,
-                                        color: "var(--muted-foreground)",
-                                        marginTop: 1,
-                                      }}
-                                    >
+                                    <span className="mt-0.5 block text-[10px] text-muted-foreground">
                                       {sublabel}
                                     </span>
                                   )}
                                 </span>
-                                <span
-                                  className="sm:order-3 sm:min-w-[28px] sm:text-right"
-                                  style={{
-                                    fontSize: 13,
-                                    fontWeight: 700,
-                                    color: barColor,
-                                    flexShrink: 0,
-                                  }}
-                                >
+                                <span className={`shrink-0 text-[13px] font-bold sm:order-3 sm:min-w-[28px] sm:text-right ${textTone}`}>
                                   {rankCopy(row, activePeerMetricRanks)}
                                 </span>
                               </div>
-                              <div
-                                className="sm:order-2 sm:flex-1"
-                                style={{
-                                  position: "relative",
-                                  height: 10,
-                                  background: "var(--muted)",
-                                  borderRadius: 5,
-                                  overflow: "hidden",
-                                }}
-                              >
+                              <div className="relative h-2.5 overflow-hidden rounded-full bg-muted sm:order-2 sm:flex-1">
                                 <div
-                                  style={{
-                                    height: "100%",
-                                    width: `${pct}%`,
-                                    background: barColor,
-                                    borderRadius: 5,
-                                  }}
+                                  className={`h-full rounded-full ${barBg}`}
+                                  style={{ width: `${pct}%` }}
                                 />
                                 {[25, 50, 75].map((tick) => (
                                   <div
                                     key={tick}
-                                    style={{
-                                      position: "absolute",
-                                      top: 0,
-                                      bottom: 0,
-                                      left: `${tick}%`,
-                                      width: 1,
-                                      background: "var(--background)",
-                                      opacity: 0.6,
-                                    }}
+                                    className="absolute inset-y-0 w-px bg-background/60"
+                                    style={{ left: `${tick}%` }}
                                   />
                                 ))}
                               </div>
@@ -9718,13 +6638,7 @@ function PlayerProfilePage() {
           </>
         ) : (
           !isSupported && (
-            <div
-              style={{
-                padding: "2rem",
-                color: "var(--muted-foreground)",
-                fontSize: 14,
-              }}
-            >
+            <div className="p-8 text-sm text-muted-foreground">
               Detailed stats coming soon for this position.
             </div>
           )

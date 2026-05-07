@@ -52,6 +52,11 @@
   --color-rating-high: #22c55e;
   --color-rating-mid: #eab308;
   --color-rating-low: #ef4444;
+  /* Peer-comparison band colors (slightly muted vs rating-high/mid/low) */
+  --color-band-good: #1d9e75;
+  --color-band-warn: #ef9f27;
+  --color-band-bad: #e24b4a;
+  --color-band-warn-strong: #b7791f;
   /* Category colors */
   --color-cat-finishing: var(--cat-finishing);
   --color-cat-involvement: var(--cat-involvement);

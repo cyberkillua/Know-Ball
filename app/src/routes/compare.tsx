@@ -360,6 +360,15 @@ function getStatSectionsForPosition(position: string | null, archetype?: string 
     if (archetype === 'ball_playing_defender' || archetype === 'ball_playing_cb' || archetype === 'composed_retainer') {
       return [S.passing, S.defending, S.physicalFull, S.carryingDefender, S.chanceCreationDefender, S.goalscoring]
     }
+    if (archetype === 'inverted_fullback') {
+      return [S.passing, S.carryingDefender, S.defending, S.chanceCreationDefender, S.physicalFull, S.goalscoring]
+    }
+    if (archetype === 'overlapping_fullback' || archetype === 'progressive_fullback') {
+      return [S.carryingDefender, S.chanceCreationDefender, S.passing, S.defending, S.physicalFull, S.goalscoring]
+    }
+    if (archetype === 'defensive_fullback') {
+      return [S.defending, S.physicalFull, S.passing, S.carryingDefender, S.chanceCreationDefender, S.goalscoring]
+    }
     if (archetype === 'sweeper_libero' || archetype === 'sweeper_recovery_cb' || archetype === 'wide_centre_back') {
       return [S.carryingDefender, S.passing, S.defending, S.physicalFull, S.chanceCreationDefender, S.goalscoring]
     }

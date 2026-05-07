@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { query, queryOne } from './db.server'
 import { POSITION_GROUPS, positionGroupSql, type PositionGroup } from './positions'
-import type { League, Match, MatchRating, PeerMetricRank, Player, PlayerSeasonTrendPoint, PeerRating, PlayerPeerRatingResponse, PlayerUnderstat, Shot } from './types'
+import type { League, Match, MatchRating, PeerMetricRank, Player, PlayerSeasonTrendPoint, PeerRating, PlayerPeerRatingResponse, PlayerUnderstat, RoleFitProfile, Shot, SimilarRoleProfile } from './types'
 
 export const getLeagues = createServerFn({ method: 'GET' }).handler(async () => {
   return query<League>('SELECT * FROM leagues ORDER BY tier, name')
@@ -200,6 +200,81 @@ export const getPlayerPeerRating = createServerFn({ method: 'GET' })
         )
 
     return { peerRating, positionBreakdown: [], availablePositionScopes: [] } satisfies PlayerPeerRatingResponse
+  })
+
+function roleVector(roleFit: RoleFitProfile | null | undefined) {
+  const vector = new Map<string, number>()
+  for (const fit of roleFit?.top ?? []) {
+    vector.set(fit.key, Number(fit.score) || 0)
+  }
+  return vector
+}
+
+function roleDistance(a: RoleFitProfile | null | undefined, b: RoleFitProfile | null | undefined) {
+  const av = roleVector(a)
+  const bv = roleVector(b)
+  const keys = new Set([...av.keys(), ...bv.keys()])
+  if (keys.size === 0) return Number.POSITIVE_INFINITY
+
+  let total = 0
+  for (const key of keys) {
+    total += Math.abs((av.get(key) ?? 0) - (bv.get(key) ?? 0))
+  }
+  return total / keys.size
+}
+
+export const getSimilarRoleProfiles = createServerFn({ method: 'GET' })
+  .inputValidator((d: { playerId: number; season: string; leagueId: number; limit?: number }) => d)
+  .handler(async ({ data }) => {
+    const target = await queryOne<PeerRating>(
+      `SELECT *
+       FROM peer_ratings
+       WHERE player_id = $1 AND season = $2 AND league_id = $3
+         AND peer_mode = 'dominant' AND position_scope = ''`,
+      [data.playerId, data.season, data.leagueId],
+    )
+
+    if (!target?.role_fit) return []
+
+    const candidates = await query<PeerRating & { player_name: string; league_name: string | null }>(
+      `SELECT pr.*, p.name as player_name, l.name as league_name
+       FROM peer_ratings pr
+       JOIN players p ON p.id = pr.player_id
+       LEFT JOIN leagues l ON l.id = pr.league_id
+       WHERE pr.position = $1
+         AND pr.peer_mode = 'dominant'
+         AND pr.position_scope = ''
+         AND pr.role_fit IS NOT NULL
+         AND NOT (pr.player_id = $2 AND pr.season = $3 AND pr.league_id = $4)
+       ORDER BY pr.role_confidence DESC NULLS LAST, pr.model_score DESC NULLS LAST
+       LIMIT 300`,
+      [target.position, data.playerId, data.season, data.leagueId],
+    )
+
+    return candidates
+      .map((candidate) => {
+        const distance = roleDistance(target.role_fit, candidate.role_fit)
+        const modelScoreGap =
+          target.model_score != null && candidate.model_score != null
+            ? Math.abs(Number(target.model_score) - Number(candidate.model_score)) / 5
+            : 0
+        const similarity = Math.max(0, Math.min(100, 100 - distance - modelScoreGap))
+        return {
+          player_id: candidate.player_id,
+          player_name: candidate.player_name,
+          season: candidate.season,
+          league_name: candidate.league_name,
+          position: candidate.position,
+          role_archetype: candidate.role_archetype,
+          role_label: candidate.role_fit?.primary?.label ?? null,
+          role_score: Number(candidate.role_fit?.primary?.score ?? 0),
+          role_confidence: candidate.role_confidence,
+          model_score: candidate.model_score,
+          similarity: Number(similarity.toFixed(1)),
+        } satisfies SimilarRoleProfile
+      })
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, data.limit ?? 5)
   })
 
 const SCOUTING_RANK_METRICS = [
