@@ -17,3 +17,5 @@ __pycache__/
 *.log
 .claude
 commands.MD 
+docs/feature-roadmap.md
+docs/phase-0-model-language.md

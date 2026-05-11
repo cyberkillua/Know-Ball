@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { query, queryOne } from './db.server'
-import { POSITION_GROUPS, positionGroupSql, type PositionGroup } from './positions'
+import { POSITION_GROUPS, type PositionGroup } from './positions'
 import type { League, Match, MatchRating, PeerMetricRank, Player, PlayerSeasonTrendPoint, PeerRating, PlayerPeerRatingResponse, PlayerUnderstat, RoleFitProfile, Shot, SimilarRoleProfile } from './types'
 
 export const getLeagues = createServerFn({ method: 'GET' }).handler(async () => {
@@ -120,17 +120,17 @@ export const getPlayerSeasons = createServerFn({ method: 'GET' })
   .inputValidator((d: { playerId: number }) => d)
   .handler(async ({ data }) => {
     return query<{ season: string; league_id: number; league_name: string; matches: number }>(
-      `SELECT DISTINCT
-          mat.season,
-          l.id as league_id,
-          l.name as league_name,
-          COUNT(DISTINCT mat.id)::int as matches
-       FROM match_player_stats mps
-       JOIN matches mat ON mat.id = mps.match_id
-       JOIN leagues l ON l.id = mat.league_id
-       WHERE mps.player_id = $1
-       GROUP BY mat.season, l.id, l.name
-       ORDER BY mat.season DESC, l.name`,
+      `SELECT pr.season,
+              l.id as league_id,
+              l.name as league_name,
+              pr.matches_played::int as matches
+       FROM peer_ratings pr
+       JOIN leagues l ON l.id = pr.league_id
+       WHERE pr.player_id = $1
+         AND pr.league_id IS NOT NULL
+         AND pr.peer_mode = 'dominant'
+         AND pr.position_scope = ''
+       ORDER BY pr.season DESC, l.name`,
       [data.playerId],
     )
   })
@@ -229,8 +229,8 @@ function roleDistance(a: RoleFitProfile | null | undefined, b: RoleFitProfile | 
 export const getSimilarRoleProfiles = createServerFn({ method: 'GET' })
   .inputValidator((d: { playerId: number; season: string; leagueId: number; limit?: number }) => d)
   .handler(async ({ data }) => {
-    const target = await queryOne<PeerRating>(
-      `SELECT *
+    const target = await queryOne<Pick<PeerRating, 'position' | 'role_fit' | 'model_score'>>(
+      `SELECT position, role_fit, model_score
        FROM peer_ratings
        WHERE player_id = $1 AND season = $2 AND league_id = $3
          AND peer_mode = 'dominant' AND position_scope = ''`,
@@ -239,8 +239,10 @@ export const getSimilarRoleProfiles = createServerFn({ method: 'GET' })
 
     if (!target?.role_fit) return []
 
-    const candidates = await query<PeerRating & { player_name: string; league_name: string | null }>(
-      `SELECT pr.*, p.name as player_name, l.name as league_name
+    const candidates = await query<Pick<PeerRating, 'player_id' | 'season' | 'position' | 'role_archetype' | 'role_fit' | 'role_confidence' | 'model_score'> & { player_name: string; league_name: string | null }>(
+      `SELECT pr.player_id, pr.season, pr.position, pr.role_archetype, pr.role_fit,
+              pr.role_confidence, pr.model_score,
+              p.name as player_name, l.name as league_name
        FROM peer_ratings pr
        JOIN players p ON p.id = pr.player_id
        LEFT JOIN leagues l ON l.id = pr.league_id
@@ -306,60 +308,49 @@ export const getPlayerPeerMetricRanks = createServerFn({ method: 'GET' })
   .inputValidator((d: { playerId: number; season: string; leagueId: number; scope?: 'league' | 'all' }) => d)
   .handler(async ({ data }) => {
     const scope = data.scope ?? 'league'
-    const target = scope === 'all'
-      ? await queryOne<PeerRating>(
-          `SELECT * FROM peer_ratings
-           WHERE player_id = $1 AND season = $2 AND league_id IS NULL
-             AND peer_mode = 'dominant' AND position_scope = ''`,
-          [data.playerId, data.season],
-        )
-      : await queryOne<PeerRating>(
-          `SELECT * FROM peer_ratings
-           WHERE player_id = $1 AND season = $2 AND league_id = $3
-             AND peer_mode = 'dominant' AND position_scope = ''`,
-          [data.playerId, data.season, data.leagueId],
-        )
+    const targetWhere = scope === 'all'
+      ? `player_id = $1 AND season = $2 AND league_id IS NULL
+         AND peer_mode = 'dominant' AND position_scope = ''`
+      : `player_id = $1 AND season = $2 AND league_id = $3
+         AND peer_mode = 'dominant' AND position_scope = ''`
+    const poolWhere = scope === 'all'
+      ? `pool.season = $2 AND pool.league_id IS NULL
+         AND pool.position = target.position
+         AND pool.peer_mode = 'dominant' AND pool.position_scope = ''
+         AND COALESCE(pool.rated_minutes, 0) >= 300`
+      : `pool.season = $2 AND pool.league_id = $3
+         AND pool.position = target.position
+         AND pool.peer_mode = 'dominant' AND pool.position_scope = ''
+         AND COALESCE(pool.rated_minutes, 0) >= 300`
+    const params = scope === 'all'
+      ? [data.playerId, data.season]
+      : [data.playerId, data.season, data.leagueId]
+    const metricQueries = SCOUTING_RANK_METRICS.map((metric) => `
+      SELECT
+        '${metric}'::text AS metric,
+        (COUNT(*) FILTER (WHERE pool.${metric} > target.${metric}) + 1)::int AS rank,
+        COUNT(pool.${metric})::int AS "poolSize",
+        target.${metric}::float AS percentile
+      FROM target
+      JOIN peer_ratings pool ON ${poolWhere}
+      WHERE target.${metric} IS NOT NULL
+    `).join('\nUNION ALL\n')
 
-    if (!target) return {} as Record<string, PeerMetricRank>
+    const rows = await query<PeerMetricRank>(
+      `WITH target AS (
+        SELECT position, ${SCOUTING_RANK_METRICS.join(', ')}
+        FROM peer_ratings
+        WHERE ${targetWhere}
+        LIMIT 1
+      )
+      ${metricQueries}`,
+      params,
+    )
 
-    const pool = scope === 'all'
-      ? await query<PeerRating>(
-          `SELECT * FROM peer_ratings
-           WHERE season = $1 AND league_id IS NULL
-             AND position = $2
-             AND peer_mode = 'dominant' AND position_scope = ''
-             AND COALESCE(rated_minutes, 0) >= 300`,
-          [data.season, target.position],
-        )
-      : await query<PeerRating>(
-          `SELECT * FROM peer_ratings
-           WHERE season = $1 AND league_id = $2
-             AND position = $3
-             AND peer_mode = 'dominant' AND position_scope = ''
-             AND COALESCE(rated_minutes, 0) >= 300`,
-          [data.season, data.leagueId, target.position],
-        )
-
-    const result: Record<string, PeerMetricRank> = {}
-    for (const metric of SCOUTING_RANK_METRICS) {
-      const targetValue = Number((target as any)[metric])
-      if (!Number.isFinite(targetValue)) continue
-
-      const values = pool
-        .map((row) => Number((row as any)[metric]))
-        .filter((value) => Number.isFinite(value))
-
-      if (values.length === 0) continue
-
-      result[metric] = {
-        metric,
-        rank: values.filter((value) => value > targetValue).length + 1,
-        poolSize: values.length,
-        percentile: targetValue,
-      }
-    }
-
-    return result
+    return rows.reduce<Record<string, PeerMetricRank>>((acc, row) => {
+      if (row.poolSize > 0) acc[row.metric] = row
+      return acc
+    }, {})
   })
 
 export const getPlayerShots = createServerFn({ method: 'GET' })
@@ -740,11 +731,11 @@ export const getLeaguePlayers = createServerFn({ method: 'GET' })
     let searchFilter = ''
 
     if (data.position) {
-      posFilter = ` AND ${positionGroupSql('p')} = $${params.length + 1}`
+      posFilter = ` AND pr.position = $${params.length + 1}`
       params.push(data.position)
     }
     if (data.clubId) {
-      clubFilter = ` AND season_team.team_id = $${params.length + 1}`
+      clubFilter = ` AND primary_team.team_id = $${params.length + 1}`
       params.push(data.clubId)
     }
     if (data.search) {
@@ -754,27 +745,36 @@ export const getLeaguePlayers = createServerFn({ method: 'GET' })
     }
 
     return query<LeaguePlayer>(
-      `SELECT p.id, p.name, p.position, p.nationality, p.date_of_birth,
-              EXTRACT(YEAR FROM AGE(p.date_of_birth))::int as age,
-              st.name as club, season_team.team_id as club_id, p.photo_url,
-              pr.model_score, pr.model_score_confidence, pr.rated_minutes
-       FROM players p
-       JOIN LATERAL (
-         SELECT mps.team_id, COUNT(*) as cnt
+      `WITH season_team AS (
+         SELECT
+           mps.player_id,
+           mps.team_id,
+           COUNT(*) AS appearances,
+           SUM(mps.minutes_played) AS minutes_played,
+           ROW_NUMBER() OVER (
+             PARTITION BY mps.player_id
+             ORDER BY COUNT(*) DESC, SUM(mps.minutes_played) DESC, mps.team_id
+           ) AS rn
          FROM match_player_stats mps
          JOIN matches m ON m.id = mps.match_id
-         WHERE mps.player_id = p.id AND m.league_id = $1 AND m.season = $2
-         GROUP BY mps.team_id
-         ORDER BY cnt DESC LIMIT 1
-       ) season_team ON true
-       LEFT JOIN teams st ON st.id = season_team.team_id
-       LEFT JOIN peer_ratings pr ON pr.player_id = p.id AND pr.league_id = $1 AND pr.season = $2
-         AND pr.peer_mode = 'dominant' AND pr.position_scope = ''
-       WHERE EXISTS (
-         SELECT 1 FROM match_player_stats mps
-         JOIN matches m ON m.id = mps.match_id
-         WHERE mps.player_id = p.id AND m.league_id = $1 AND m.season = $2
+         WHERE m.league_id = $1 AND m.season = $2
+         GROUP BY mps.player_id, mps.team_id
+       ),
+       primary_team AS (
+         SELECT player_id, team_id
+         FROM season_team
+         WHERE rn = 1
        )
+       SELECT p.id, p.name, COALESCE(pr.position, p.position) as position, p.nationality, p.date_of_birth,
+              EXTRACT(YEAR FROM AGE(p.date_of_birth))::int as age,
+              st.name as club, primary_team.team_id as club_id, p.photo_url,
+              pr.model_score, pr.model_score_confidence, pr.rated_minutes
+       FROM peer_ratings pr
+       JOIN players p ON p.id = pr.player_id
+       LEFT JOIN primary_team ON primary_team.player_id = pr.player_id
+       LEFT JOIN teams st ON st.id = primary_team.team_id
+       WHERE pr.league_id = $1 AND pr.season = $2
+         AND pr.peer_mode = 'dominant' AND pr.position_scope = ''
          ${posFilter}${clubFilter}${searchFilter}
        ORDER BY pr.model_score DESC NULLS LAST, p.name ASC`,
       params,
@@ -804,21 +804,21 @@ export const getAllPlayers = createServerFn({ method: 'GET' })
     const params: any[] = [data.season]
     let leagueParamIdx: number | null = null
 
-    let lateralLeagueFilter = ''
+    let seasonTeamLeagueFilter = ''
     if (data.leagueId != null) {
       params.push(data.leagueId)
       leagueParamIdx = params.length
-      lateralLeagueFilter = ` AND lat_m.league_id = $${leagueParamIdx}`
+      seasonTeamLeagueFilter = ` AND m.league_id = $${leagueParamIdx}`
     }
 
     const postWhere: string[] = []
     if (data.position != null) {
       params.push(data.position)
-      postWhere.push(`${positionGroupSql('p')} = $${params.length}`)
+      postWhere.push(`pr.position = $${params.length}`)
     }
     if (data.clubId != null) {
       params.push(data.clubId)
-      postWhere.push(`season_team.team_id = $${params.length}`)
+      postWhere.push(`primary_team.team_id = $${params.length}`)
     }
     if (data.search) {
       params.push(data.search)
@@ -826,33 +826,46 @@ export const getAllPlayers = createServerFn({ method: 'GET' })
       postWhere.push(`(unaccent(p.name) ILIKE '%' || unaccent($${idx}) || '%' OR similarity(unaccent(lower(p.name)), unaccent(lower($${idx}))) > 0.3)`)
     }
 
-    const prLeagueFilter = leagueParamIdx != null
-      ? `AND pr.league_id = $${leagueParamIdx}`
-      : `AND pr.league_id = season_team.league_id`
-
-    const whereClause = postWhere.length ? `WHERE ${postWhere.join(' AND ')}` : ''
+    const prLeagueFilter = leagueParamIdx != null ? `AND pr.league_id = $${leagueParamIdx}` : ''
 
     return query<LeaguePlayer & { league_name: string | null }>(
-      `SELECT p.id, p.name, p.position, p.nationality, p.date_of_birth,
+      `WITH season_team AS (
+         SELECT
+           mps.player_id,
+           mps.team_id,
+           m.league_id,
+           COUNT(*) AS appearances,
+           SUM(mps.minutes_played) AS minutes_played,
+           ROW_NUMBER() OVER (
+             PARTITION BY mps.player_id, m.league_id
+             ORDER BY COUNT(*) DESC, SUM(mps.minutes_played) DESC, mps.team_id
+           ) AS rn
+         FROM match_player_stats mps
+         JOIN matches m ON m.id = mps.match_id
+         WHERE m.season = $1${seasonTeamLeagueFilter}
+         GROUP BY mps.player_id, mps.team_id, m.league_id
+       ),
+       primary_team AS (
+         SELECT player_id, team_id, league_id
+         FROM season_team
+         WHERE rn = 1
+       )
+       SELECT p.id, p.name, COALESCE(pr.position, p.position) as position, p.nationality, p.date_of_birth,
               EXTRACT(YEAR FROM AGE(p.date_of_birth))::int as age,
-              st.name as club, season_team.team_id as club_id, p.photo_url,
+              st.name as club, primary_team.team_id as club_id, p.photo_url,
               pr.model_score, pr.model_score_confidence, pr.rated_minutes, l.name as league_name
-       FROM players p
-       JOIN LATERAL (
-         SELECT mps2.team_id, lat_m.league_id, COUNT(*) as cnt
-         FROM match_player_stats mps2
-         JOIN matches lat_m ON lat_m.id = mps2.match_id
-         WHERE mps2.player_id = p.id AND lat_m.season = $1${lateralLeagueFilter}
-         GROUP BY mps2.team_id, lat_m.league_id
-         ORDER BY cnt DESC LIMIT 1
-       ) season_team ON true
-       LEFT JOIN teams st ON st.id = season_team.team_id
-       LEFT JOIN leagues l ON l.id = season_team.league_id
-       LEFT JOIN peer_ratings pr ON pr.player_id = p.id
+       FROM peer_ratings pr
+       JOIN players p ON p.id = pr.player_id
+       LEFT JOIN primary_team
+         ON primary_team.player_id = pr.player_id
+        AND primary_team.league_id = pr.league_id
+       LEFT JOIN teams st ON st.id = primary_team.team_id
+       LEFT JOIN leagues l ON l.id = pr.league_id
+       WHERE pr.season = $1
+         AND pr.league_id IS NOT NULL
          ${prLeagueFilter}
-         AND pr.season = $1
          AND pr.peer_mode = 'dominant' AND pr.position_scope = ''
-       ${whereClause}
+         ${postWhere.length ? `AND ${postWhere.join(' AND ')}` : ''}
        ORDER BY pr.model_score DESC NULLS LAST, p.name ASC
        LIMIT 500`,
       params,
@@ -874,11 +887,13 @@ export const getLeaguePositions = createServerFn({ method: 'GET' })
   .inputValidator((d: { leagueId: number; season: string }) => d)
   .handler(async ({ data }) => {
     const rows = await query<{ position_group: PositionGroup }>(
-      `SELECT DISTINCT ${positionGroupSql('p')} as position_group
-       FROM players p
-       JOIN match_player_stats mps ON mps.player_id = p.id
-       JOIN matches m ON m.id = mps.match_id
-       WHERE m.league_id = $1 AND m.season = $2 AND p.position IS NOT NULL`,
+      `SELECT DISTINCT position as position_group
+       FROM peer_ratings
+       WHERE league_id = $1
+         AND season = $2
+         AND peer_mode = 'dominant'
+         AND position_scope = ''
+         AND position IS NOT NULL`,
       [data.leagueId, data.season],
     )
     const available = new Set(rows.map((r) => r.position_group).filter(Boolean))

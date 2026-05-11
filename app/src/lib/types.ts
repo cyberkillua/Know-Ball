@@ -179,6 +179,34 @@ export interface RoleFitProfile {
   concerns: RoleSignal[]
 }
 
+export interface StyleTraitItem {
+  key: string
+  label: string
+  description: string
+  family: string
+  risk: boolean
+  score: number
+  evidence: RoleSignal[]
+  concerns: RoleSignal[]
+}
+
+export interface StyleProfile {
+  version: number
+  position: string
+  primary: StyleTraitItem
+  strengths: StyleTraitItem[]
+  risks: StyleTraitItem[]
+  top: StyleTraitItem[]
+  confidence: {
+    score: number
+    level: 'low' | 'moderate' | 'high'
+    reasons: string[]
+  }
+  coverage: number
+  evidence: RoleSignal[]
+  concerns: RoleSignal[]
+}
+
 export interface PeerRating {
   id: number
   player_id: number
@@ -193,6 +221,8 @@ export interface PeerRating {
   role_fit: RoleFitProfile | null
   role_confidence: number | null
   role_evidence: RoleSignal[] | null
+  style_profile: StyleProfile | null
+  style_confidence: number | null
   // Per-90 base metrics
   goals_per90: number
   xa_per90: number

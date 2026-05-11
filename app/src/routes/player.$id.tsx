@@ -49,6 +49,7 @@ import type {
 import ShotProfile from "../components/ShotProfile";
 import RatingMethodNote from "../components/RatingMethodNote";
 import RoleFitCard from "../components/RoleFitCard";
+import StyleFingerprintCard from "../components/StyleFingerprintCard";
 import ScoutReportCard, { type ScoutMetric } from "../components/ScoutReportCard";
 import SocialScoutingReportCard, {
   type SocialMetric,
@@ -229,13 +230,6 @@ function getPeerDimensionRows(
     { label: "Defensive Work", sublabel: "pressing and recoveries", value: pr.defensive_percentile, metricKey: "defensive_percentile" },
     { label: "Clinicality", sublabel: "finishing versus xG", value: pr.xg_overperformance_percentile, metricKey: "xg_overperformance_percentile" },
   ];
-}
-
-function strongestSignals(rows: PeerDimensionRow[], takeWeak = false) {
-  return rows
-    .filter((row) => row.value != null && row.label !== "Overall Season Value")
-    .sort((a, b) => takeWeak ? Number(a.value) - Number(b.value) : Number(b.value) - Number(a.value))
-    .slice(0, 3);
 }
 
 function rankCopy(row: PeerDimensionRow, ranks: Record<string, PeerMetricRank>) {
@@ -1096,6 +1090,12 @@ function PlayerProfilePage() {
     const leagueIdNum = Number(leagueId);
     setSeasonLoading(true);
     setSimilarRoleProfiles([]);
+    setPeerMetricRanks({});
+    setAllPeerMetricRanks({});
+    setShots([]);
+    setXgotDelta(null);
+    setUnderstat(null);
+
     Promise.all([
       getPlayerRatings({
         data: { playerId, season: seasonStr, leagueId: leagueIdNum },
@@ -1116,6 +1116,22 @@ function PlayerProfilePage() {
           scope: "all",
         },
       }),
+      getPlayerStats({
+        data: { playerId, season: seasonStr, leagueId: leagueIdNum },
+      }),
+    ]).then(([r, pr, apr, st]) => {
+      if (!isCurrent) return;
+      const leaguePeerResponse = pr as PlayerPeerRatingResponse;
+      const allPeerResponse = apr as PlayerPeerRatingResponse;
+      setRatings(r);
+      setPeerRating(leaguePeerResponse.peerRating);
+      setAllPeerRating(allPeerResponse.peerRating);
+      setStats(st as PlayerStats | null);
+      setLoading(false);
+      setSeasonLoading(false);
+    });
+
+    Promise.all([
       getPlayerPeerMetricRanks({
         data: {
           playerId,
@@ -1132,9 +1148,6 @@ function PlayerProfilePage() {
           scope: "all",
         },
       }),
-      getPlayerStats({
-        data: { playerId, season: seasonStr, leagueId: leagueIdNum },
-      }),
       getPlayerShots({
         data: { playerId, season: seasonStr, leagueId: leagueIdNum },
       }),
@@ -1145,23 +1158,15 @@ function PlayerProfilePage() {
       getSimilarRoleProfiles({
         data: { playerId, season: seasonStr, leagueId: leagueIdNum, limit: 4 },
       }),
-    ]).then(([r, pr, apr, prRanks, aprRanks, st, sh, xgd, ustat, similarProfiles]) => {
+    ]).then(([prRanks, aprRanks, sh, xgd, ustat, similarProfiles]) => {
       if (!isCurrent) return;
-      const leaguePeerResponse = pr as PlayerPeerRatingResponse;
-      const allPeerResponse = apr as PlayerPeerRatingResponse;
-      setRatings(r);
-      setPeerRating(leaguePeerResponse.peerRating);
-      setAllPeerRating(allPeerResponse.peerRating);
       setPeerMetricRanks(prRanks as Record<string, PeerMetricRank>);
       setAllPeerMetricRanks(aprRanks as Record<string, PeerMetricRank>);
-      setStats(st as PlayerStats | null);
       setShots(sh as Shot[]);
       const rawDelta = (xgd as any)?.delta;
       setXgotDelta(rawDelta != null ? Number(rawDelta) : null);
       setUnderstat(ustat as PlayerUnderstat | null);
       setSimilarRoleProfiles(similarProfiles as SimilarRoleProfile[]);
-      setLoading(false);
-      setSeasonLoading(false);
     });
     return () => { isCurrent = false; };
   }, [id, season]);
@@ -1255,8 +1260,6 @@ function PlayerProfilePage() {
         activePreAssistPercentile ?? undefined,
       )
     : [];
-  const bestSignals = strongestSignals(peerDimensionRows);
-  const weakSignals = strongestSignals(peerDimensionRows, true);
   const scoutSummary = scoutingSummaryCopy(peerDimensionRows, activePeerMetricRanks, roleArchetype);
   const cmReport = isCM && activePeerRating
     ? cmScoutReport(peerDimensionRows, activePeerMetricRanks, activePeerRating)
@@ -1526,61 +1529,9 @@ function PlayerProfilePage() {
                   />
                 )}
 
-                <Card className="lg:col-span-2">
-                  <CardContent className="p-4 sm:p-5">
-                    <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Quick Read
-                    </div>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div>
-                        <div className="mb-2 text-xs font-semibold text-emerald-400">Best signals</div>
-                        <div className="space-y-2.5">
-                          {bestSignals.length > 0 ? bestSignals.map((row) => {
-                            const v = Math.max(0, Math.min(100, Math.round(Number(row.value))));
-                            const tone =
-                              v >= 70 ? "bg-emerald-500" : v >= 50 ? "bg-emerald-500/70" : "bg-muted-foreground/40";
-                            return (
-                              <div key={`overview-best-${row.label}`} className="space-y-1">
-                                <div className="flex items-baseline justify-between gap-3 text-xs">
-                                  <span className="text-foreground truncate">{row.label}</span>
-                                  <span className="font-bold tabular-nums text-foreground">{v}</span>
-                                </div>
-                                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                                  <div className={`h-full rounded-full ${tone}`} style={{ width: `${v}%` }} />
-                                </div>
-                              </div>
-                            );
-                          }) : (
-                            <div className="text-xs text-muted-foreground">No peer signal yet.</div>
-                          )}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="mb-2 text-xs font-semibold text-amber-400">Watch areas</div>
-                        <div className="space-y-2.5">
-                          {weakSignals.length > 0 ? weakSignals.map((row) => {
-                            const v = Math.max(0, Math.min(100, Math.round(Number(row.value))));
-                            const tone =
-                              v <= 20 ? "bg-red-500" : v <= 40 ? "bg-amber-500" : "bg-muted-foreground/40";
-                            return (
-                              <div key={`overview-watch-${row.label}`} className="space-y-1">
-                                <div className="flex items-baseline justify-between gap-3 text-xs">
-                                  <span className="text-foreground truncate">{row.label}</span>
-                                  <span className="font-bold tabular-nums text-foreground">{v}</span>
-                                </div>
-                                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                                  <div className={`h-full rounded-full ${tone}`} style={{ width: `${v}%` }} />
-                                </div>
-                              </div>
-                            );
-                          }) : (
-                            <div className="text-xs text-muted-foreground">No peer signal yet.</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                {activePeerRating?.style_profile && (
+                  <StyleFingerprintCard styleProfile={activePeerRating.style_profile} />
+                )}
 
                 {seasonTrend.length > 0 && (
                   <Card className="lg:col-span-2">

@@ -20,6 +20,7 @@ from pipeline.engine.season_score import (
     calculate_season_score,
 )
 from pipeline.engine.roles import assign_role_fit
+from pipeline.engine.traits import assign_style_profile
 from pipeline.logger import get_logger
 
 log = get_logger("compute")
@@ -787,6 +788,8 @@ def compute_peer_ratings(
             "role_fit": None,
             "role_confidence": None,
             "role_evidence": None,
+            "style_profile": None,
+            "style_confidence": None,
             "matches_played": r["matches_played"],
             "minutes_played": minutes,
             "rated_minutes": rated_minutes,
@@ -1593,11 +1596,19 @@ def compute_peer_ratings(
                 role_fit.get("confidence", {}).get("score") if role_fit else None
             )
             p["role_evidence"] = role_fit.get("evidence") if role_fit else None
+            style_profile = assign_style_profile(p, position_label)
+            p["style_profile"] = style_profile
+            p["style_confidence"] = (
+                style_profile.get("confidence", {}).get("score")
+                if style_profile
+                else None
+            )
 
     upsert_sql = """
             INSERT INTO peer_ratings (
                 player_id, league_id, season, position, peer_mode, position_scope,
                 cm_archetype, role_archetype, role_family, role_fit, role_confidence, role_evidence,
+                style_profile, style_confidence,
                 matches_played, minutes_played, rated_minutes, avg_match_rating,
                 goals_per90, shots_per90, xg_per90, xgot_per90, xa_per90,
                 assists_per90, key_passes_per90, accurate_cross_per90,
@@ -1681,6 +1692,7 @@ def compute_peer_ratings(
             ) VALUES (
                 %(player_id)s, %(league_id)s, %(season)s, %(position)s, %(peer_mode)s, %(position_scope)s,
                 %(cm_archetype)s, %(role_archetype)s, %(role_family)s, %(role_fit)s, %(role_confidence)s, %(role_evidence)s,
+                %(style_profile)s, %(style_confidence)s,
                 %(matches_played)s, %(minutes_played)s, %(rated_minutes)s, %(avg_match_rating)s,
                 %(goals_per90)s, %(shots_per90)s, %(xg_per90)s, %(xgot_per90)s, %(xa_per90)s,
                 %(assists_per90)s, %(key_passes_per90)s, %(accurate_cross_per90)s,
@@ -1772,6 +1784,8 @@ def compute_peer_ratings(
                 role_fit                          = EXCLUDED.role_fit,
                 role_confidence                   = EXCLUDED.role_confidence,
                 role_evidence                     = EXCLUDED.role_evidence,
+                style_profile                     = EXCLUDED.style_profile,
+                style_confidence                  = EXCLUDED.style_confidence,
                 matches_played                    = EXCLUDED.matches_played,
                 minutes_played                    = EXCLUDED.minutes_played,
                 rated_minutes                     = EXCLUDED.rated_minutes,
@@ -1927,7 +1941,7 @@ def compute_peer_ratings(
             """
 
     for p in players:
-        for json_col in ("role_fit", "role_evidence"):
+        for json_col in ("role_fit", "role_evidence", "style_profile"):
             if isinstance(p.get(json_col), (dict, list)):
                 p[json_col] = psycopg2.extras.Json(p[json_col])
 

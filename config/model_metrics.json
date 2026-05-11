@@ -1,0 +1,182 @@
+{
+  "version": 1,
+  "position_build_order": ["ST", "W", "CAM", "CM", "DEF"],
+  "metrics": [
+    {
+      "key": "shots_per90_percentile",
+      "label": "Shot Volume",
+      "description": "How often the player gets shots off, ranked against positional peers.",
+      "domain": "shooting",
+      "value_type": "percentile",
+      "direction": "higher_is_better",
+      "positions": ["ST", "W", "CAM"],
+      "source": "peer_ratings.shots_per90_percentile",
+      "confidence_notes": "Can be inflated by team dominance or a role that funnels shots to one player."
+    },
+    {
+      "key": "xg_per90_percentile",
+      "label": "xG Volume",
+      "description": "How much expected goal threat the player generates per 90 minutes.",
+      "domain": "shooting",
+      "value_type": "percentile",
+      "direction": "higher_is_better",
+      "positions": ["ST", "W", "CAM"],
+      "source": "peer_ratings.xg_per90_percentile",
+      "confidence_notes": "Can move quickly in small samples or for players with unusual shot selection."
+    },
+    {
+      "key": "xg_per_shot_percentile",
+      "label": "Shot Quality",
+      "description": "The average quality of the player's shots, ranked against positional peers.",
+      "domain": "shooting",
+      "value_type": "percentile",
+      "direction": "higher_is_better",
+      "positions": ["ST", "W", "CAM"],
+      "source": "peer_ratings.xg_per_shot_percentile",
+      "confidence_notes": "Best read alongside shot volume because selective shooters can look cleaner."
+    },
+    {
+      "key": "np_goals_per90_percentile",
+      "label": "Non-Penalty Goals",
+      "description": "Open-play and non-penalty scoring output per 90 minutes.",
+      "domain": "shooting",
+      "value_type": "percentile",
+      "direction": "higher_is_better",
+      "positions": ["ST", "W", "CAM"],
+      "source": "peer_ratings.np_goals_per90_percentile",
+      "confidence_notes": "Finishing output is noisy and should be checked against xG and shot quality."
+    },
+    {
+      "key": "shot_conversion_percentile",
+      "label": "Shot Conversion",
+      "description": "How efficiently the player turns shots into goals.",
+      "domain": "shooting",
+      "value_type": "percentile",
+      "direction": "higher_is_better",
+      "positions": ["ST", "W", "CAM"],
+      "source": "peer_ratings.shot_conversion_percentile",
+      "confidence_notes": "Highly sensitive to shot sample size and finishing variance."
+    },
+    {
+      "key": "shot_generation_percentile",
+      "label": "Shot Generation",
+      "description": "Know Ball's role-adjusted shot threat dimension.",
+      "domain": "shooting",
+      "value_type": "percentile",
+      "direction": "higher_is_better",
+      "positions": ["ST", "W"],
+      "source": "peer_ratings.shot_generation_percentile",
+      "confidence_notes": "Depends on the underlying position rating config and rated minutes."
+    },
+    {
+      "key": "chance_creation_percentile",
+      "label": "Chance Creation",
+      "description": "Know Ball's role-adjusted creative output dimension.",
+      "domain": "creation",
+      "value_type": "percentile",
+      "direction": "higher_is_better",
+      "positions": ["ST", "W", "CAM", "CM"],
+      "source": "peer_ratings.chance_creation_percentile",
+      "confidence_notes": "Team style and set-piece role can materially affect this signal."
+    },
+    {
+      "key": "xa_per90_percentile",
+      "label": "xA Volume",
+      "description": "Expected assists generated per 90 minutes.",
+      "domain": "creation",
+      "value_type": "percentile",
+      "direction": "higher_is_better",
+      "positions": ["ST", "W", "CAM", "CM"],
+      "source": "peer_ratings.xa_per90_percentile",
+      "confidence_notes": "Can be suppressed by poor teammate finishing or inflated by set-piece usage."
+    },
+    {
+      "key": "key_passes_per90_percentile",
+      "label": "Key Pass Volume",
+      "description": "Passes leading directly to shots per 90 minutes.",
+      "domain": "creation",
+      "value_type": "percentile",
+      "direction": "higher_is_better",
+      "positions": ["ST", "W", "CAM", "CM"],
+      "source": "peer_ratings.key_passes_per90_percentile",
+      "confidence_notes": "Can favor high-tempo teams and players in set-piece roles."
+    },
+    {
+      "key": "carrying_percentile",
+      "label": "Carrying",
+      "description": "Know Ball's role-adjusted ball carrying dimension.",
+      "domain": "carrying",
+      "value_type": "percentile",
+      "direction": "higher_is_better",
+      "positions": ["ST", "W", "CAM", "CM", "DEF"],
+      "source": "peer_ratings.carrying_percentile",
+      "confidence_notes": "Should be checked with possession loss and role context."
+    },
+    {
+      "key": "dribbles_per90_percentile",
+      "label": "Dribble Volume",
+      "description": "Successful dribbles per 90 minutes, ranked against positional peers.",
+      "domain": "carrying",
+      "value_type": "percentile",
+      "direction": "higher_is_better",
+      "positions": ["ST", "W", "CAM", "CM"],
+      "source": "peer_ratings.dribbles_per90_percentile",
+      "confidence_notes": "Needs success-rate context because raw volume can include inefficient attempts."
+    },
+    {
+      "key": "dribble_success_percentile",
+      "label": "Dribble Success",
+      "description": "How often the player beats opponents when attempting dribbles.",
+      "domain": "carrying",
+      "value_type": "percentile",
+      "direction": "higher_is_better",
+      "positions": ["ST", "W", "CAM", "CM"],
+      "source": "peer_ratings.dribble_success_percentile",
+      "confidence_notes": "Can be inflated by selective dribbling or low attempt volume."
+    },
+    {
+      "key": "aerials_per90_percentile",
+      "label": "Aerial Volume",
+      "description": "Aerial duels won per 90 minutes, ranked against positional peers.",
+      "domain": "physical",
+      "value_type": "percentile",
+      "direction": "higher_is_better",
+      "positions": ["ST", "DEF"],
+      "source": "peer_ratings.aerials_per90_percentile",
+      "confidence_notes": "Volume is shaped by team directness and opponent behavior."
+    },
+    {
+      "key": "aerial_win_rate_percentile",
+      "label": "Aerial Win Rate",
+      "description": "How efficiently the player wins aerial duels.",
+      "domain": "physical",
+      "value_type": "percentile",
+      "direction": "higher_is_better",
+      "positions": ["ST", "DEF"],
+      "source": "peer_ratings.aerial_win_rate_percentile",
+      "confidence_notes": "Needs volume context because low-attempt players can rate well."
+    },
+    {
+      "key": "ball_recoveries_per90_percentile",
+      "label": "Ball Recoveries",
+      "description": "How often the player recovers possession per 90 minutes.",
+      "domain": "defending",
+      "value_type": "percentile",
+      "direction": "higher_is_better",
+      "positions": ["ST", "W", "CAM", "CM", "DEF"],
+      "source": "peer_ratings.ball_recoveries_per90_percentile",
+      "confidence_notes": "Team pressing structure can create or reduce recovery opportunities."
+    },
+    {
+      "key": "possession_loss_rate_percentile",
+      "label": "Possession Security",
+      "description": "Possession loss rate, inverted so higher percentile means safer possession.",
+      "domain": "risk",
+      "value_type": "percentile",
+      "direction": "higher_is_better",
+      "positions": ["ST", "W", "CAM", "CM", "DEF"],
+      "source": "peer_ratings.possession_loss_rate_percentile",
+      "confidence_notes": "Must be interpreted alongside how risky and valuable the player's role is."
+    }
+  ]
+}

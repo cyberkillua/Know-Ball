@@ -1,0 +1,628 @@
+{
+  "version": 1,
+  "position_build_order": ["ST", "W", "CAM", "CM", "DEF"],
+  "positions": {
+    "ST": [
+      {
+        "key": "shot_getter",
+        "label": "Shot Getter",
+        "description": "A striker who reliably gets attempts off and creates repeatable shot volume.",
+        "family": "shooting",
+        "signals": [
+          { "metric": "shots_per90_percentile", "label": "Shot volume", "weight": 0.36 },
+          { "metric": "shot_generation_percentile", "label": "Shot generation", "weight": 0.28 },
+          { "metric": "xg_per90_percentile", "label": "xG volume", "weight": 0.24 },
+          { "metric": "np_goals_per90_percentile", "label": "Non-penalty goals", "weight": 0.12 }
+        ],
+        "gates": [
+          { "metric": "shots_per90_percentile", "label": "Shot volume gate", "min": 50, "cap": 58 }
+        ],
+        "concerns": [
+          { "metric": "xg_per_shot_percentile", "label": "Shot quality may lag behind volume", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "box_threat",
+        "label": "Box Threat",
+        "description": "A striker whose value comes from getting dangerous chances and finishing around the box.",
+        "family": "shooting",
+        "signals": [
+          { "metric": "xg_per90_percentile", "label": "xG volume", "weight": 0.3 },
+          { "metric": "xg_per_shot_percentile", "label": "Shot quality", "weight": 0.25 },
+          { "metric": "np_goals_per90_percentile", "label": "Non-penalty goals", "weight": 0.25 },
+          { "metric": "finishing_percentile", "label": "Finishing", "weight": 0.2 }
+        ],
+        "gates": [
+          { "metric": "xg_per90_percentile", "label": "xG volume gate", "min": 45, "cap": 56 },
+          { "metric": "xg_per_shot_percentile", "label": "Shot quality gate", "min": 40, "cap": 54 }
+        ],
+        "concerns": [
+          { "metric": "shots_per90_percentile", "label": "May not create enough attempts", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "high_quality_finisher",
+        "label": "High-Quality Finisher",
+        "description": "A striker whose finishing and shot selection make chances feel more valuable.",
+        "family": "shooting",
+        "signals": [
+          { "metric": "finishing_percentile", "label": "Finishing", "weight": 0.32 },
+          { "metric": "shot_conversion_percentile", "label": "Shot conversion", "weight": 0.24 },
+          { "metric": "xg_per_shot_percentile", "label": "Shot quality", "weight": 0.22 },
+          { "metric": "np_goals_per90_percentile", "label": "Non-penalty goals", "weight": 0.22 }
+        ],
+        "gates": [
+          { "metric": "shot_conversion_percentile", "label": "Conversion gate", "min": 45, "cap": 56 }
+        ],
+        "concerns": [
+          { "metric": "xg_per90_percentile", "label": "Finishing may not be backed by enough chance volume", "below": 40 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "link_creator",
+        "label": "Link Creator",
+        "description": "A striker who connects attacks and creates chances for others.",
+        "family": "creation",
+        "signals": [
+          { "metric": "chance_creation_percentile", "label": "Chance creation", "weight": 0.34 },
+          { "metric": "xa_per90_percentile", "label": "xA volume", "weight": 0.24 },
+          { "metric": "key_passes_per90_percentile", "label": "Key pass volume", "weight": 0.2 },
+          { "metric": "team_function_percentile", "label": "Team function", "weight": 0.14 },
+          { "metric": "assists_per90_percentile", "label": "Assists", "weight": 0.08 }
+        ],
+        "gates": [
+          { "metric": "chance_creation_percentile", "label": "Creation gate", "min": 45, "cap": 56 }
+        ],
+        "concerns": [
+          { "metric": "shot_generation_percentile", "label": "May not carry enough direct shot threat", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "ball_carrier",
+        "label": "Ball Carrier",
+        "description": "A striker who can carry possession, beat pressure, or threaten by driving with the ball.",
+        "family": "carrying",
+        "signals": [
+          { "metric": "carrying_percentile", "label": "Carrying", "weight": 0.36 },
+          { "metric": "dribbles_per90_percentile", "label": "Dribble volume", "weight": 0.24 },
+          { "metric": "dribble_success_percentile", "label": "Dribble success", "weight": 0.24 },
+          { "metric": "fouls_won_per90_percentile", "label": "Fouls won", "weight": 0.16 }
+        ],
+        "gates": [
+          { "metric": "dribbles_per90_percentile", "label": "Carry volume gate", "min": 40, "cap": 55 },
+          { "metric": "dribble_success_percentile", "label": "Carry success gate", "min": 40, "cap": 55 }
+        ],
+        "concerns": [
+          { "metric": "possession_loss_rate_percentile", "label": "Carries may come with possession risk", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "aerial_outlet",
+        "label": "Aerial Outlet",
+        "description": "A striker who can receive direct play, compete aerially, and give the team an outlet.",
+        "family": "physical",
+        "signals": [
+          { "metric": "duels_percentile", "label": "Duel presence", "weight": 0.3 },
+          { "metric": "aerials_per90_percentile", "label": "Aerial volume", "weight": 0.3 },
+          { "metric": "aerial_win_rate_percentile", "label": "Aerial win rate", "weight": 0.28 },
+          { "metric": "ground_duels_won_per90_percentile", "label": "Ground duels", "weight": 0.12 }
+        ],
+        "gates": [
+          { "metric": "aerials_per90_percentile", "label": "Aerial volume gate", "min": 45, "cap": 54 },
+          { "metric": "aerial_win_rate_percentile", "label": "Aerial success gate", "min": 40, "cap": 54 }
+        ],
+        "concerns": [
+          { "metric": "carrying_percentile", "label": "May offer less threat carrying into space", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "defensive_worker",
+        "label": "Defensive Worker",
+        "description": "A striker who contributes out of possession through pressure, recoveries, and duels.",
+        "family": "defending",
+        "signals": [
+          { "metric": "defensive_percentile", "label": "Defensive work", "weight": 0.34 },
+          { "metric": "ball_recoveries_per90_percentile", "label": "Ball recoveries", "weight": 0.24 },
+          { "metric": "tackles_per90_percentile", "label": "Tackles", "weight": 0.18 },
+          { "metric": "duels_percentile", "label": "Duel work", "weight": 0.16 },
+          { "metric": "interceptions_per90_percentile", "label": "Interceptions", "weight": 0.08 }
+        ],
+        "gates": [
+          { "metric": "defensive_percentile", "label": "Defensive work gate", "min": 45, "cap": 56 }
+        ],
+        "concerns": [
+          { "metric": "shot_generation_percentile", "label": "Defensive workload may come with less attacking threat", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "possession_security_risk",
+        "label": "Possession Security Risk",
+        "description": "A risk flag for strikers whose touches or carries may come with high possession loss.",
+        "family": "risk",
+        "risk": true,
+        "signals": [
+          { "metric": "possession_loss_rate_percentile", "label": "Possession security", "weight": 0.45, "invert": true },
+          { "metric": "carrying_percentile", "label": "Carrying exposure", "weight": 0.25 },
+          { "metric": "touches_per90_percentile", "label": "Touch volume", "weight": 0.15 },
+          { "metric": "dribbles_per90_percentile", "label": "Dribble exposure", "weight": 0.15 }
+        ],
+        "gates": [
+          { "metric": "possession_loss_rate_percentile", "label": "Possession security risk gate", "max": 45, "cap": 45, "invert": true }
+        ],
+        "concerns": [],
+        "minimum_minutes": 600
+      }
+    ],
+    "W": [
+      {
+        "key": "wide_isolator",
+        "label": "Wide Isolator",
+        "description": "A wide player who repeatedly takes on and beats direct markers.",
+        "family": "carrying",
+        "signals": [
+          { "metric": "productive_dribbling_percentile", "label": "1v1 threat", "weight": 0.3 },
+          { "metric": "dribbles_per90_percentile", "label": "Dribble volume", "weight": 0.25 },
+          { "metric": "dribble_success_percentile", "label": "Dribble success", "weight": 0.25 },
+          { "metric": "carrying_percentile", "label": "Carrying", "weight": 0.2 }
+        ],
+        "gates": [
+          { "metric": "dribbles_per90_percentile", "label": "1v1 volume gate", "min": 45, "cap": 56 },
+          { "metric": "dribble_success_percentile", "label": "1v1 success gate", "min": 40, "cap": 55 }
+        ],
+        "concerns": [
+          { "metric": "possession_loss_rate_percentile", "label": "1v1s may come with possession risk", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "inside_forward_threat",
+        "label": "Inside Forward Threat",
+        "description": "A wide attacker whose value comes from shots, box threat, and scoring output.",
+        "family": "shooting",
+        "signals": [
+          { "metric": "goal_contribution_percentile", "label": "Goal contribution", "weight": 0.28 },
+          { "metric": "shot_generation_percentile", "label": "Shot generation", "weight": 0.26 },
+          { "metric": "shots_per90_percentile", "label": "Shot volume", "weight": 0.2 },
+          { "metric": "xg_per90_percentile", "label": "xG volume", "weight": 0.16 },
+          { "metric": "np_goals_per90_percentile", "label": "Non-penalty goals", "weight": 0.1 }
+        ],
+        "gates": [
+          { "metric": "shots_per90_percentile", "label": "Shot volume gate", "min": 45, "cap": 56 }
+        ],
+        "concerns": [
+          { "metric": "chance_creation_percentile", "label": "May offer limited service value", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "service_winger",
+        "label": "Service Winger",
+        "description": "A wide player who creates through crosses, final balls, and chance volume.",
+        "family": "creation",
+        "signals": [
+          { "metric": "chance_creation_percentile", "label": "Chance creation", "weight": 0.3 },
+          { "metric": "xa_per90_percentile", "label": "xA volume", "weight": 0.22 },
+          { "metric": "key_passes_per90_percentile", "label": "Key pass volume", "weight": 0.18 },
+          { "metric": "accurate_cross_per90_percentile", "label": "Accurate crosses", "weight": 0.18 },
+          { "metric": "big_chances_created_percentile", "label": "Big chances created", "weight": 0.12 }
+        ],
+        "gates": [
+          { "metric": "chance_creation_percentile", "label": "Creation gate", "min": 45, "cap": 56 }
+        ],
+        "concerns": [
+          { "metric": "shot_generation_percentile", "label": "May not threaten enough as a scorer", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "transition_carrier",
+        "label": "Transition Carrier",
+        "description": "A wide player who carries attacks forward and turns open space into territory.",
+        "family": "carrying",
+        "signals": [
+          { "metric": "carrying_percentile", "label": "Carrying", "weight": 0.3 },
+          { "metric": "progressive_carries_distance_per90_percentile", "label": "Progressive carry distance", "weight": 0.28 },
+          { "metric": "dribbles_per90_percentile", "label": "Dribble volume", "weight": 0.18 },
+          { "metric": "fouls_won_per90_percentile", "label": "Fouls won", "weight": 0.14 },
+          { "metric": "touches_per90_percentile", "label": "Involvement", "weight": 0.1 }
+        ],
+        "gates": [
+          { "metric": "carrying_percentile", "label": "Carrying gate", "min": 45, "cap": 56 }
+        ],
+        "concerns": [
+          { "metric": "possession_loss_rate_percentile", "label": "Carrying may come with turnover risk", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "two_way_wide_worker",
+        "label": "Two-Way Wide Worker",
+        "description": "A wide player who adds defensive work and transition support without the ball.",
+        "family": "defending",
+        "signals": [
+          { "metric": "defensive_percentile", "label": "Defensive work", "weight": 0.34 },
+          { "metric": "ball_recoveries_per90_percentile", "label": "Ball recoveries", "weight": 0.22 },
+          { "metric": "tackles_per90_percentile", "label": "Tackles", "weight": 0.18 },
+          { "metric": "interceptions_per90_percentile", "label": "Interceptions", "weight": 0.12 },
+          { "metric": "presence_percentile", "label": "Involvement", "weight": 0.14 }
+        ],
+        "gates": [
+          { "metric": "defensive_percentile", "label": "Defensive work gate", "min": 45, "cap": 56 }
+        ],
+        "concerns": [
+          { "metric": "goal_contribution_percentile", "label": "May be lighter on end product", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "wide_possession_risk",
+        "label": "Wide Possession Risk",
+        "description": "A risk flag for wide players whose attacking touches come with high possession loss.",
+        "family": "risk",
+        "risk": true,
+        "signals": [
+          { "metric": "possession_loss_rate_percentile", "label": "Possession security", "weight": 0.45, "invert": true },
+          { "metric": "dribbles_per90_percentile", "label": "Dribble exposure", "weight": 0.2 },
+          { "metric": "carrying_percentile", "label": "Carrying exposure", "weight": 0.2 },
+          { "metric": "touches_per90_percentile", "label": "Touch volume", "weight": 0.15 }
+        ],
+        "gates": [
+          { "metric": "possession_loss_rate_percentile", "label": "Possession security risk gate", "max": 45, "cap": 45 }
+        ],
+        "concerns": [],
+        "minimum_minutes": 600
+      }
+    ],
+    "CAM": [
+      {
+        "key": "central_creator",
+        "label": "Central Creator",
+        "description": "An attacking midfielder who generates final balls and chance volume from central zones.",
+        "family": "creation",
+        "signals": [
+          { "metric": "chance_creation_percentile", "label": "Chance creation", "weight": 0.32 },
+          { "metric": "xa_per90_percentile", "label": "xA volume", "weight": 0.22 },
+          { "metric": "key_passes_per90_percentile", "label": "Key pass volume", "weight": 0.2 },
+          { "metric": "big_chances_created_percentile", "label": "Big chances created", "weight": 0.16 },
+          { "metric": "assists_per90_percentile", "label": "Assists", "weight": 0.1 }
+        ],
+        "gates": [
+          { "metric": "chance_creation_percentile", "label": "Creation gate", "min": 45, "cap": 56 }
+        ],
+        "concerns": [
+          { "metric": "goal_threat_percentile", "label": "May not threaten the box enough", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "between_lines_carrier",
+        "label": "Between-Lines Carrier",
+        "description": "An attacking midfielder who receives under pressure and carries at defenders.",
+        "family": "carrying",
+        "signals": [
+          { "metric": "carrying_percentile", "label": "Carrying", "weight": 0.34 },
+          { "metric": "dribbles_per90_percentile", "label": "Dribble volume", "weight": 0.22 },
+          { "metric": "dribble_success_percentile", "label": "Dribble success", "weight": 0.22 },
+          { "metric": "progressive_carries_distance_per90_percentile", "label": "Progressive carry distance", "weight": 0.14 },
+          { "metric": "fouls_won_per90_percentile", "label": "Fouls won", "weight": 0.08 }
+        ],
+        "gates": [
+          { "metric": "dribbles_per90_percentile", "label": "Carry volume gate", "min": 40, "cap": 55 },
+          { "metric": "dribble_success_percentile", "label": "Carry success gate", "min": 40, "cap": 55 }
+        ],
+        "concerns": [
+          { "metric": "possession_loss_rate_percentile", "label": "Carries may come with possession risk", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "shadow_striker_threat",
+        "label": "Shadow Striker Threat",
+        "description": "An attacking midfielder who plays close to goal and contributes as a scorer.",
+        "family": "shooting",
+        "signals": [
+          { "metric": "goal_threat_percentile", "label": "Goal threat", "weight": 0.3 },
+          { "metric": "shots_per90_percentile", "label": "Shot volume", "weight": 0.22 },
+          { "metric": "xg_per90_percentile", "label": "xG volume", "weight": 0.2 },
+          { "metric": "np_goals_per90_percentile", "label": "Non-penalty goals", "weight": 0.16 },
+          { "metric": "xg_per_shot_percentile", "label": "Shot quality", "weight": 0.12 }
+        ],
+        "gates": [
+          { "metric": "shots_per90_percentile", "label": "Shot volume gate", "min": 45, "cap": 56 }
+        ],
+        "concerns": [
+          { "metric": "chance_creation_percentile", "label": "May not create enough for others", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "connective_10",
+        "label": "Connective 10",
+        "description": "An attacking midfielder who links phases, keeps attacks alive, and supports buildup.",
+        "family": "passing",
+        "signals": [
+          { "metric": "team_function_percentile", "label": "Connective play", "weight": 0.3 },
+          { "metric": "passes_completed_per90_percentile", "label": "Pass volume", "weight": 0.18 },
+          { "metric": "xg_chain_per90_percentile", "label": "xGChain", "weight": 0.18 },
+          { "metric": "xg_buildup_per90_percentile", "label": "xGBuildup", "weight": 0.16 },
+          { "metric": "accurate_final_third_passes_per90_percentile", "label": "Final-third passes", "weight": 0.18 }
+        ],
+        "gates": [
+          { "metric": "team_function_percentile", "label": "Connective play gate", "min": 45, "cap": 56 }
+        ],
+        "concerns": [
+          { "metric": "goal_threat_percentile", "label": "May not be a direct goal threat", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "pressing_10",
+        "label": "Pressing 10",
+        "description": "An attacking midfielder who can lead pressure and contribute defensively.",
+        "family": "defending",
+        "signals": [
+          { "metric": "defensive_percentile", "label": "Defensive work", "weight": 0.34 },
+          { "metric": "ball_recoveries_per90_percentile", "label": "Ball recoveries", "weight": 0.22 },
+          { "metric": "tackles_per90_percentile", "label": "Tackles", "weight": 0.16 },
+          { "metric": "interceptions_per90_percentile", "label": "Interceptions", "weight": 0.12 },
+          { "metric": "fouls_committed_per90_percentile", "label": "Discipline", "weight": 0.16 }
+        ],
+        "gates": [
+          { "metric": "defensive_percentile", "label": "Defensive work gate", "min": 45, "cap": 56 }
+        ],
+        "concerns": [
+          { "metric": "goal_threat_percentile", "label": "May be less dangerous near goal", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      }
+    ],
+    "CM": [
+      {
+        "key": "progressive_passer",
+        "label": "Progressive Passer",
+        "description": "A central midfielder who moves possession forward by pass.",
+        "family": "passing",
+        "signals": [
+          { "metric": "volume_passing_percentile", "label": "Forward passing value", "weight": 0.3 },
+          { "metric": "pass_value_normalized_percentile", "label": "Pass value", "weight": 0.22 },
+          { "metric": "accurate_final_third_passes_per90_percentile", "label": "Final-third passes", "weight": 0.18 },
+          { "metric": "xg_chain_per90_percentile", "label": "xGChain", "weight": 0.16 },
+          { "metric": "passes_completed_per90_percentile", "label": "Pass volume", "weight": 0.14 }
+        ],
+        "gates": [
+          { "metric": "volume_passing_percentile", "label": "Progression gate", "min": 45, "cap": 56 }
+        ],
+        "concerns": [
+          { "metric": "control_percentile", "label": "Progression may come with control risk", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "safe_circulator",
+        "label": "Safe Circulator",
+        "description": "A central midfielder who stabilizes possession and keeps the ball moving.",
+        "family": "control",
+        "signals": [
+          { "metric": "control_percentile", "label": "Control", "weight": 0.32 },
+          { "metric": "passing_accuracy_percentile", "label": "Passing accuracy", "weight": 0.22 },
+          { "metric": "passes_completed_per90_percentile", "label": "Pass volume", "weight": 0.18 },
+          { "metric": "xg_buildup_per90_percentile", "label": "xGBuildup", "weight": 0.16 },
+          { "metric": "possession_loss_rate_percentile", "label": "Possession security", "weight": 0.12 }
+        ],
+        "gates": [
+          { "metric": "control_percentile", "label": "Control gate", "min": 45, "cap": 56 }
+        ],
+        "concerns": [
+          { "metric": "volume_passing_percentile", "label": "May not progress the ball enough", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "midfield_carrier",
+        "label": "Midfield Carrier",
+        "description": "A central midfielder who advances play by carrying through midfield.",
+        "family": "carrying",
+        "signals": [
+          { "metric": "carrying_percentile", "label": "Carrying", "weight": 0.32 },
+          { "metric": "progressive_carries_distance_per90_percentile", "label": "Progressive carry distance", "weight": 0.26 },
+          { "metric": "dribbles_per90_percentile", "label": "Dribble volume", "weight": 0.16 },
+          { "metric": "dribble_success_percentile", "label": "Dribble success", "weight": 0.16 },
+          { "metric": "fouls_won_per90_percentile", "label": "Fouls won", "weight": 0.1 }
+        ],
+        "gates": [
+          { "metric": "carrying_percentile", "label": "Carrying gate", "min": 45, "cap": 56 }
+        ],
+        "concerns": [
+          { "metric": "control_percentile", "label": "Carrying may come with possession-control risk", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "ball_winner",
+        "label": "Ball Winner",
+        "description": "A central midfielder who wins possession and covers defensive ground.",
+        "family": "defending",
+        "signals": [
+          { "metric": "defensive_percentile", "label": "Defensive coverage", "weight": 0.34 },
+          { "metric": "ball_recoveries_per90_percentile", "label": "Ball recoveries", "weight": 0.22 },
+          { "metric": "tackles_per90_percentile", "label": "Tackles", "weight": 0.18 },
+          { "metric": "interceptions_per90_percentile", "label": "Interceptions", "weight": 0.16 },
+          { "metric": "ground_duels_won_per90_percentile", "label": "Ground duels", "weight": 0.1 }
+        ],
+        "gates": [
+          { "metric": "defensive_percentile", "label": "Defensive coverage gate", "min": 45, "cap": 56 }
+        ],
+        "concerns": [
+          { "metric": "volume_passing_percentile", "label": "May offer less progression by pass", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "box_to_box_threat",
+        "label": "Box-to-Box Threat",
+        "description": "A central midfielder who contributes in both boxes through defending, carrying, and goal threat.",
+        "family": "hybrid",
+        "signals": [
+          { "metric": "goal_threat_percentile", "label": "Box threat", "weight": 0.22 },
+          { "metric": "defensive_percentile", "label": "Defensive coverage", "weight": 0.22 },
+          { "metric": "carrying_percentile", "label": "Carrying", "weight": 0.2 },
+          { "metric": "chance_creation_percentile", "label": "Chance creation", "weight": 0.18 },
+          { "metric": "ball_recoveries_per90_percentile", "label": "Ball recoveries", "weight": 0.18 }
+        ],
+        "gates": [
+          { "metric": "goal_threat_percentile", "label": "Box threat gate", "min": 40, "cap": 55 },
+          { "metric": "defensive_percentile", "label": "Defensive coverage gate", "min": 40, "cap": 55 }
+        ],
+        "concerns": [
+          { "metric": "control_percentile", "label": "Role may be less possession-secure", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "midfield_control_risk",
+        "label": "Midfield Control Risk",
+        "description": "A risk flag for central midfielders whose role may expose possession security.",
+        "family": "risk",
+        "risk": true,
+        "signals": [
+          { "metric": "control_percentile", "label": "Control", "weight": 0.45, "invert": true },
+          { "metric": "possession_loss_rate_percentile", "label": "Possession security", "weight": 0.25, "invert": true },
+          { "metric": "passes_completed_per90_percentile", "label": "Pass involvement", "weight": 0.15 },
+          { "metric": "carrying_percentile", "label": "Carry exposure", "weight": 0.15 }
+        ],
+        "gates": [
+          { "metric": "control_percentile", "label": "Control risk gate", "max": 45, "cap": 45 }
+        ],
+        "concerns": [],
+        "minimum_minutes": 600
+      }
+    ],
+    "DEF": [
+      {
+        "key": "box_defender",
+        "label": "Box Defender",
+        "description": "A defender whose strongest value is defending the penalty area and stopping danger.",
+        "family": "defending",
+        "signals": [
+          { "metric": "defensive_percentile", "label": "Box defending", "weight": 0.34 },
+          { "metric": "interceptions_per90_percentile", "label": "Interceptions", "weight": 0.18 },
+          { "metric": "tackles_per90_percentile", "label": "Tackles", "weight": 0.16 },
+          { "metric": "ball_recoveries_per90_percentile", "label": "Recoveries", "weight": 0.16 },
+          { "metric": "duels_percentile", "label": "Duel support", "weight": 0.16 }
+        ],
+        "gates": [
+          { "metric": "defensive_percentile", "label": "Defensive output gate", "min": 45, "cap": 56 }
+        ],
+        "concerns": [
+          { "metric": "volume_passing_percentile", "label": "May not add much progression from the back", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "aerial_stop",
+        "label": "Aerial Stopper",
+        "description": "A defender who protects the box through aerial dominance and duel volume.",
+        "family": "physical",
+        "signals": [
+          { "metric": "duels_percentile", "label": "Duel profile", "weight": 0.3 },
+          { "metric": "aerials_per90_percentile", "label": "Aerial volume", "weight": 0.28 },
+          { "metric": "aerial_win_rate_percentile", "label": "Aerial win rate", "weight": 0.28 },
+          { "metric": "ground_duels_won_per90_percentile", "label": "Ground duels", "weight": 0.14 }
+        ],
+        "gates": [
+          { "metric": "aerials_per90_percentile", "label": "Aerial volume gate", "min": 45, "cap": 54 },
+          { "metric": "aerial_win_rate_percentile", "label": "Aerial success gate", "min": 40, "cap": 54 }
+        ],
+        "concerns": [
+          { "metric": "carrying_percentile", "label": "May be less comfortable covering space", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "ball_playing_defender",
+        "label": "Ball-Playing Defender",
+        "description": "A defender who adds value in buildup and progresses play from the back.",
+        "family": "passing",
+        "signals": [
+          { "metric": "volume_passing_percentile", "label": "Ball-playing value", "weight": 0.3 },
+          { "metric": "pass_value_normalized_percentile", "label": "Pass value", "weight": 0.2 },
+          { "metric": "accurate_long_balls_per90_percentile", "label": "Long-ball volume", "weight": 0.16 },
+          { "metric": "long_ball_accuracy_percentile", "label": "Long-ball accuracy", "weight": 0.16 },
+          { "metric": "team_function_percentile", "label": "Composure", "weight": 0.18 }
+        ],
+        "gates": [
+          { "metric": "volume_passing_percentile", "label": "Ball-playing gate", "min": 45, "cap": 56 }
+        ],
+        "concerns": [
+          { "metric": "defensive_percentile", "label": "Defensive output needs checking", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "recovery_defender",
+        "label": "Recovery Defender",
+        "description": "A defender who can cover space, recover loose balls, and defend outside the box.",
+        "family": "mobility",
+        "signals": [
+          { "metric": "carrying_percentile", "label": "Recovery and carrying", "weight": 0.28 },
+          { "metric": "ball_recoveries_per90_percentile", "label": "Ball recoveries", "weight": 0.24 },
+          { "metric": "ground_duel_win_rate_percentile", "label": "Ground duel success", "weight": 0.18 },
+          { "metric": "ground_duels_won_per90_percentile", "label": "Ground duel volume", "weight": 0.16 },
+          { "metric": "tackles_per90_percentile", "label": "Tackles", "weight": 0.14 }
+        ],
+        "gates": [
+          { "metric": "carrying_percentile", "label": "Recovery mobility gate", "min": 40, "cap": 55 }
+        ],
+        "concerns": [
+          { "metric": "aerial_win_rate_percentile", "label": "May not dominate aerially", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "set_piece_threat",
+        "label": "Set-Piece Threat",
+        "description": "A defender who gives the team attacking threat from dead balls and box arrivals.",
+        "family": "shooting",
+        "signals": [
+          { "metric": "goal_threat_percentile", "label": "Goal threat", "weight": 0.32 },
+          { "metric": "xg_per90_percentile", "label": "xG volume", "weight": 0.24 },
+          { "metric": "shots_per90_percentile", "label": "Shot volume", "weight": 0.2 },
+          { "metric": "aerials_per90_percentile", "label": "Aerial volume", "weight": 0.14 },
+          { "metric": "xg_per_shot_percentile", "label": "Shot quality", "weight": 0.1 }
+        ],
+        "gates": [
+          { "metric": "goal_threat_percentile", "label": "Set-piece threat gate", "min": 45, "cap": 56 }
+        ],
+        "concerns": [
+          { "metric": "defensive_percentile", "label": "Attacking threat should not hide defending level", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "defensive_composure_risk",
+        "label": "Defensive Composure Risk",
+        "description": "A risk flag for defenders whose profile may be exposed under pressure or in buildup.",
+        "family": "risk",
+        "risk": true,
+        "signals": [
+          { "metric": "team_function_percentile", "label": "Composure", "weight": 0.35, "invert": true },
+          { "metric": "passing_accuracy_percentile", "label": "Passing security", "weight": 0.25, "invert": true },
+          { "metric": "possession_loss_rate_percentile", "label": "Possession security", "weight": 0.2, "invert": true },
+          { "metric": "volume_passing_percentile", "label": "Buildup exposure", "weight": 0.2 }
+        ],
+        "gates": [
+          { "metric": "team_function_percentile", "label": "Composure risk gate", "max": 45, "cap": 45 }
+        ],
+        "concerns": [],
+        "minimum_minutes": 600
+      }
+    ]
+  }
+}
