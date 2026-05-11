@@ -122,11 +122,12 @@ def scrape_league(
     understat_slug: str | None,
     season: str,
     existing_ids: set[int],
-):
+    matches: list[dict] | None = None,
+) -> dict:
     league_id = get_league_id(db, fotmob_league_id)
     if not league_id:
         log.error(f"League not found in DB: {league_name}")
-        return
+        return {"expected": 0, "new": 0, "stats_ok": 0, "stats_skipped": 0}
 
     log.info(f"=== Scraping {league_name} ({season}) ===")
 
@@ -135,7 +136,7 @@ def scrape_league(
     except Exception as e:
         log.warning(f"Skipping standings for {league_name} ({season}): {e}")
 
-    matches = fetch_league_matches(fotmob_league_id, season)
+    matches = matches if matches is not None else fetch_league_matches(fotmob_league_id, season)
     new_matches = [m for m in matches if m["sofascore_id"] not in existing_ids]
     log.info(f"{len(new_matches)} new matches to process")
 
@@ -164,6 +165,13 @@ def scrape_league(
     if understat_slug and stats_ok > 0:
         backfill_understat_match_ids(db, understat_slug, season, league_id)
         update_understat_stats(db, understat_slug, season)
+
+    return {
+        "expected": len(matches),
+        "new": len(new_matches),
+        "stats_ok": stats_ok,
+        "stats_skipped": stats_skipped,
+    }
 
 
 def _event_tournament_id(event: dict) -> int | None:

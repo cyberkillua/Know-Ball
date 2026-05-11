@@ -6,6 +6,7 @@ grouped by position. Each position group is ranked only against players
 in the same group. Runs after rate.py.
 """
 
+import argparse
 import statistics
 from bisect import bisect_left, bisect_right
 from collections import defaultdict
@@ -22,6 +23,7 @@ from pipeline.engine.season_score import (
 from pipeline.engine.roles import assign_role_fit
 from pipeline.engine.traits import assign_style_profile
 from pipeline.logger import get_logger
+from pipeline.store import get_league_id
 
 log = get_logger("compute")
 
@@ -481,6 +483,8 @@ def compute_peer_ratings(
     position_label: str,
     peer_mode: str = "dominant",
     min_minutes: int = MIN_MINUTES,
+    season: str | None = None,
+    league_id: int | None = None,
 ) -> None:
     """
     Compute and upsert peer_ratings for a group of positions.
@@ -508,6 +512,22 @@ def compute_peer_ratings(
             DEFAULT_SEASON_SCORE_CONFIG["impact_threshold"],
         )
     )
+    query_params = {
+        "position_label": position_label,
+        "rating_position": rating_position,
+        "consistency_threshold": consistency_threshold,
+        "impact_threshold": impact_threshold,
+    }
+    scope_clauses = []
+    if season:
+        query_params["season"] = season
+        scope_clauses.append("mat.season = %(season)s")
+    if league_id:
+        query_params["league_id"] = league_id
+        scope_clauses.append("mat.league_id = %(league_id)s")
+    scope_sql = ""
+    if scope_clauses:
+        scope_sql = "\n              AND " + "\n              AND ".join(scope_clauses)
 
     annotated_cte = f"""
         WITH annotated_stats AS (
@@ -522,7 +542,7 @@ def compute_peer_ratings(
             FROM match_player_stats mps
             JOIN matches mat ON mat.id = mps.match_id
             JOIN players p ON p.id = mps.player_id
-            WHERE p.position IS NOT NULL
+            WHERE p.position IS NOT NULL{scope_sql}
         ),
         valid_player_teams AS (
             SELECT
@@ -643,7 +663,7 @@ def compute_peer_ratings(
         WHERE {player_filter}
         GROUP BY a.player_id, a.player_position, a.league_id, a.season
         """,
-        {"position_label": position_label},
+        query_params,
     )
 
     if not stat_rows:
@@ -701,12 +721,7 @@ def compute_peer_ratings(
           AND {norm_player_filter}
         GROUP BY mr.player_id, a.league_id, a.season
         """,
-        {
-            "position_label": position_label,
-            "rating_position": rating_position,
-            "consistency_threshold": consistency_threshold,
-            "impact_threshold": impact_threshold,
-        },
+        query_params,
     )
 
     norm_lookup: dict[tuple, dict] = {
@@ -1962,7 +1977,7 @@ def compute_peer_ratings(
     log.info(f"[{position_label}][{peer_mode}] Upserted {upserted} peer_rating records")
 
 
-def compute_cross_league_ratings(db: DB) -> None:
+def compute_cross_league_ratings(db: DB, season: str | None = None) -> None:
     """
     Cross-league ratings for ST/CF — compares all top-5 league strikers on the
     same z-score scale within a season.
@@ -1972,6 +1987,14 @@ def compute_cross_league_ratings(db: DB) -> None:
     sample, then upserts into cross_league_ratings.
     """
     log.info("[cross-league] Computing cross-league ST ratings")
+
+    season_filter = ""
+    pr_season_filter = ""
+    query_params = {}
+    if season:
+        season_filter = "AND mat.season = %(season)s"
+        pr_season_filter = "AND pr.season = %(season)s"
+        query_params["season"] = season
 
     rows = db.query(
         """
@@ -2003,12 +2026,15 @@ def compute_cross_league_ratings(db: DB) -> None:
             FROM match_ratings mr
             JOIN matches mat ON mat.id = mr.match_id
             WHERE mr.position = 'ST'
+              {season_filter}
             GROUP BY mr.player_id, mat.season
         ) mr_agg ON mr_agg.player_id = pr.player_id AND mr_agg.season = pr.season
         WHERE pr.position = 'ST'
           AND pr.peer_mode = 'dominant'
           AND pr.minutes_played >= 300
-        """
+          {pr_season_filter}
+        """.format(season_filter=season_filter, pr_season_filter=pr_season_filter),
+        query_params,
     )
 
     if not rows:
@@ -2105,10 +2131,29 @@ def compute_cross_league_ratings(db: DB) -> None:
 
 
 def main():
-    log.info("Starting Know Ball compute (all positions)")
+    parser = argparse.ArgumentParser(description="Compute Know Ball season peer ratings")
+    parser.add_argument("--season", help="Limit compute to one season, e.g. 2025/2026")
+    parser.add_argument("--league", type=int, help="Limit compute to one DB league id")
+    parser.add_argument("--fotmob-league-id", type=int, help="Limit compute to one FotMob league id")
+    parser.add_argument("--skip-cross-league", action="store_true", help="Skip ST cross-league recompute")
+    args = parser.parse_args()
+
+    log.info("Starting Know Ball compute")
     db = DB()
     db.execute("SET statement_timeout TO 0")
-    db.execute("DELETE FROM peer_ratings WHERE peer_mode = 'position'")
+
+    league_id = args.league
+    if args.fotmob_league_id:
+        league_id = get_league_id(db, args.fotmob_league_id)
+        if not league_id:
+            db.close()
+            raise SystemExit(f"Unknown FotMob league id: {args.fotmob_league_id}")
+
+    if args.season or league_id:
+        log.info(f"Compute scope: season={args.season or 'all'}, league_id={league_id or 'all'}")
+    else:
+        db.execute("DELETE FROM peer_ratings WHERE peer_mode = 'position'")
+
     for profile_positions, rating_position, label in POSITION_GROUPS:
         compute_peer_ratings(
             db,
@@ -2117,8 +2162,11 @@ def main():
             label,
             peer_mode="dominant",
             min_minutes=MIN_MINUTES,
+            season=args.season,
+            league_id=league_id,
         )
-    compute_cross_league_ratings(db)
+    if not args.skip_cross_league:
+        compute_cross_league_ratings(db, season=args.season)
     db.close()
     log.info("Compute complete")
 

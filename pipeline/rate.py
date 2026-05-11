@@ -5,6 +5,8 @@ Calculates match ratings for all unrated player-match records.
 Designed to run after scrape.py.
 """
 
+import argparse
+
 from pipeline.db import DB
 from pipeline.logger import get_logger
 from pipeline.engine.config import load_position_config, get_available_positions
@@ -13,6 +15,7 @@ from pipeline.engine.w_calculator import calculate_winger_rating, W_CATEGORIES
 from pipeline.engine.cam_calculator import calculate_cam_rating, CAM_CATEGORIES
 from pipeline.engine.cm_calculator import calculate_cm_rating, CM_CATEGORIES
 from pipeline.engine.def_calculator import calculate_def_rating
+from pipeline.store import get_league_id
 
 log = get_logger("rate")
 
@@ -20,9 +23,28 @@ MIN_MINUTES = 10
 BATCH_SIZE = 1000
 
 
-def get_unrated_records_batch(db: DB, last_id: int, batch_size: int) -> list[dict]:
+def get_unrated_records_batch(
+    db: DB,
+    last_id: int,
+    batch_size: int,
+    season: str | None = None,
+    league_id: int | None = None,
+) -> list[dict]:
+    scope_clauses = []
+    params: list = [last_id, MIN_MINUTES]
+    if season:
+        scope_clauses.append("m.season = %s")
+        params.append(season)
+    if league_id:
+        scope_clauses.append("m.league_id = %s")
+        params.append(league_id)
+    scope_sql = ""
+    if scope_clauses:
+        scope_sql = "\n          AND " + "\n          AND ".join(scope_clauses)
+    params.append(batch_size)
+
     return db.query(
-        """
+        f"""
         SELECT mps.id,
                mps.match_id,
                mps.player_id,
@@ -98,6 +120,7 @@ def get_unrated_records_batch(db: DB, last_id: int, batch_size: int) -> list[dic
         WHERE mps.id > %s
           AND p.position IS NOT NULL
           AND mps.minutes_played >= %s
+          {scope_sql}
           AND NOT EXISTS (
               SELECT 1
               FROM match_ratings mr
@@ -107,7 +130,7 @@ def get_unrated_records_batch(db: DB, last_id: int, batch_size: int) -> list[dic
         ORDER BY mps.id
         LIMIT %s
     """,
-        (last_id, MIN_MINUTES, batch_size),
+        tuple(params),
     )
 
 
@@ -397,8 +420,24 @@ def rate_record(
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Rate unrated player-match records")
+    parser.add_argument("--season", help="Limit rating to one season, e.g. 2025/2026")
+    parser.add_argument("--league", type=int, help="Limit rating to one DB league id")
+    parser.add_argument("--fotmob-league-id", type=int, help="Limit rating to one FotMob league id")
+    args = parser.parse_args()
+
     log.info("Starting Know Ball rating engine")
     db = DB()
+
+    league_id = args.league
+    if args.fotmob_league_id:
+        league_id = get_league_id(db, args.fotmob_league_id)
+        if not league_id:
+            db.close()
+            raise SystemExit(f"Unknown FotMob league id: {args.fotmob_league_id}")
+
+    if args.season or league_id:
+        log.info(f"Rating scope: season={args.season or 'all'}, league_id={league_id or 'all'}")
 
     available = get_available_positions()
     configs = {}
@@ -411,7 +450,13 @@ def main():
     last_id = 0
 
     while True:
-        unrated = get_unrated_records_batch(db, last_id, BATCH_SIZE)
+        unrated = get_unrated_records_batch(
+            db,
+            last_id,
+            BATCH_SIZE,
+            season=args.season,
+            league_id=league_id,
+        )
         if not unrated:
             break
 
