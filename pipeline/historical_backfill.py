@@ -21,6 +21,7 @@ from pipeline.leagues import CURRENT_SEASON, LEAGUES
 from pipeline.logger import get_logger
 from pipeline.scrape import clear_player_cache, get_existing_match_ids, get_league_id, scrape_league
 from pipeline.scrapers.sofascore import fetch_league_matches
+from pipeline.store import clear_player_team_state_cache
 
 log = get_logger("historical_backfill")
 
@@ -310,6 +311,7 @@ def main() -> None:
         existing_ids = get_existing_match_ids(db)
         log.info(f"Historical backfill plan: {len(jobs)} league-season jobs")
         clear_player_cache()
+        clear_player_team_state_cache()
 
         for idx, job in enumerate(jobs, start=1):
             league_id = get_league_id(db, job.fotmob_id)
@@ -435,6 +437,7 @@ def main() -> None:
                     completed=True,
                 )
                 clear_player_cache()
+                clear_player_team_state_cache()
             except KeyboardInterrupt:
                 upsert_progress(
                     db,

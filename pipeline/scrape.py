@@ -32,6 +32,7 @@ from pipeline.scrapers.sofascore import (
     clear_player_cache,
 )
 from pipeline.store import (
+    clear_player_team_state_cache,
     get_existing_match_ids,
     get_league_id,
     needs_profile_fetch,
@@ -726,6 +727,7 @@ def main():
     log.info("Starting Know Ball scrape (Sofascore)")
 
     clear_player_cache()
+    clear_player_team_state_cache()
 
     db = DB()
     existing_ids = get_existing_match_ids(db)
@@ -755,6 +757,7 @@ def main():
                     existing_ids,
                 )
                 clear_player_cache()
+                clear_player_team_state_cache()
             except Exception as e:
                 log.error(f"Failed to scrape {league_name}: {e}")
                 import traceback

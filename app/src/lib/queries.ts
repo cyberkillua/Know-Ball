@@ -306,7 +306,24 @@ const SCOUTING_RANK_METRICS = [
 
 export const getPlayerPeerMetricRanks = createServerFn({ method: 'GET' })
   .inputValidator((d: { playerId: number; season: string; leagueId: number; scope?: 'league' | 'all' }) => d)
+  .handler(async ({ data }) => getPeerMetricRanks(data))
+
+export const getPlayerPeerMetricRankScopes = createServerFn({ method: 'GET' })
+  .inputValidator((d: { playerId: number; season: string; leagueId: number }) => d)
   .handler(async ({ data }) => {
+    const [league, all] = await Promise.all([
+      getPeerMetricRanks({ ...data, scope: 'league' }),
+      getPeerMetricRanks({ ...data, scope: 'all' }),
+    ])
+    return { league, all }
+  })
+
+async function getPeerMetricRanks(data: {
+  playerId: number
+  season: string
+  leagueId: number
+  scope?: 'league' | 'all'
+}) {
     const scope = data.scope ?? 'league'
     const targetWhere = scope === 'all'
       ? `player_id = $1 AND season = $2 AND league_id IS NULL
@@ -325,16 +342,9 @@ export const getPlayerPeerMetricRanks = createServerFn({ method: 'GET' })
     const params = scope === 'all'
       ? [data.playerId, data.season]
       : [data.playerId, data.season, data.leagueId]
-    const metricQueries = SCOUTING_RANK_METRICS.map((metric) => `
-      SELECT
-        '${metric}'::text AS metric,
-        (COUNT(*) FILTER (WHERE pool.${metric} > target.${metric}) + 1)::int AS rank,
-        COUNT(pool.${metric})::int AS "poolSize",
-        target.${metric}::float AS percentile
-      FROM target
-      JOIN peer_ratings pool ON ${poolWhere}
-      WHERE target.${metric} IS NOT NULL
-    `).join('\nUNION ALL\n')
+    const metricValues = SCOUTING_RANK_METRICS.map((metric) => (
+      `('${metric}'::text, pool.${metric}::float, target.${metric}::float)`
+    )).join(',\n')
 
     const rows = await query<PeerMetricRank>(
       `WITH target AS (
@@ -343,7 +353,19 @@ export const getPlayerPeerMetricRanks = createServerFn({ method: 'GET' })
         WHERE ${targetWhere}
         LIMIT 1
       )
-      ${metricQueries}`,
+      SELECT
+        metric_values.metric,
+        (COUNT(*) FILTER (WHERE metric_values.pool_value > metric_values.target_value) + 1)::int AS rank,
+        COUNT(metric_values.pool_value)::int AS "poolSize",
+        MAX(metric_values.target_value)::float AS percentile
+      FROM target
+      JOIN peer_ratings pool ON ${poolWhere}
+      CROSS JOIN LATERAL (
+        VALUES
+          ${metricValues}
+      ) AS metric_values(metric, pool_value, target_value)
+      WHERE metric_values.target_value IS NOT NULL
+      GROUP BY metric_values.metric`,
       params,
     )
 
@@ -351,7 +373,7 @@ export const getPlayerPeerMetricRanks = createServerFn({ method: 'GET' })
       if (row.poolSize > 0) acc[row.metric] = row
       return acc
     }, {})
-  })
+}
 
 export const getPlayerShots = createServerFn({ method: 'GET' })
   .inputValidator((d: { playerId: number; season: string; leagueId: number }) => d)

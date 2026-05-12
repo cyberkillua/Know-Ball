@@ -578,16 +578,20 @@ function SubSection({
 
 interface ShotProfileProps {
   shots: Shot[];
+  totalShots?: number | null;
   xgotDelta: number | null;
   xgOverperformance?: number | null;
 }
 
 export default function ShotProfile({
   shots,
+  totalShots,
   xgotDelta,
   xgOverperformance,
 }: ShotProfileProps) {
   if (shots.length === 0) {
+    const hasSeasonShots = (totalShots ?? 0) > 0;
+
     return (
       <div
         style={{
@@ -597,7 +601,9 @@ export default function ShotProfile({
           fontSize: 14,
         }}
       >
-        No shot data available for this season.
+        {hasSeasonShots
+          ? "Season shot totals exist, but no per-shot map data is available for this player-season."
+          : "No recorded shots for this player-season."}
       </div>
     );
   }

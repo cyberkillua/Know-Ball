@@ -21,7 +21,7 @@ import {
   getPlayerRatings,
   getPlayerSeasonTrend,
   getPlayerPeerRating,
-  getPlayerPeerMetricRanks,
+  getPlayerPeerMetricRankScopes,
   getSimilarRoleProfiles,
   getPlayerStats,
   getPlayerShots,
@@ -974,6 +974,7 @@ function PlayerProfilePage() {
   const [understat, setUnderstat] = useState<PlayerUnderstat | null>(null);
   const [loading, setLoading] = useState(true);
   const [seasonLoading, setSeasonLoading] = useState(false);
+  const [shotProfileLoading, setShotProfileLoading] = useState(false);
   const [peerScope, setPeerScope] = useState<"league" | "all">("league");
   const [statMode, setStatMode] = useState<"per90" | "raw">("per90");
   const [viewMode, setViewMode] = useState<"bars" | "pizza">("bars");
@@ -1089,6 +1090,7 @@ function PlayerProfilePage() {
     const [leagueId, seasonStr] = season.split("|");
     const leagueIdNum = Number(leagueId);
     setSeasonLoading(true);
+    setShotProfileLoading(true);
     setSimilarRoleProfiles([]);
     setPeerMetricRanks({});
     setAllPeerMetricRanks({});
@@ -1131,21 +1133,12 @@ function PlayerProfilePage() {
       setSeasonLoading(false);
     });
 
-    Promise.all([
-      getPlayerPeerMetricRanks({
+    Promise.allSettled([
+      getPlayerPeerMetricRankScopes({
         data: {
           playerId,
           season: seasonStr,
           leagueId: leagueIdNum,
-          scope: "league",
-        },
-      }),
-      getPlayerPeerMetricRanks({
-        data: {
-          playerId,
-          season: seasonStr,
-          leagueId: leagueIdNum,
-          scope: "all",
         },
       }),
       getPlayerShots({
@@ -1158,15 +1151,46 @@ function PlayerProfilePage() {
       getSimilarRoleProfiles({
         data: { playerId, season: seasonStr, leagueId: leagueIdNum, limit: 4 },
       }),
-    ]).then(([prRanks, aprRanks, sh, xgd, ustat, similarProfiles]) => {
+    ]).then(([
+      rankScopes,
+      sh,
+      xgd,
+      ustat,
+      similarProfiles,
+    ]) => {
       if (!isCurrent) return;
-      setPeerMetricRanks(prRanks as Record<string, PeerMetricRank>);
-      setAllPeerMetricRanks(aprRanks as Record<string, PeerMetricRank>);
-      setShots(sh as Shot[]);
-      const rawDelta = (xgd as any)?.delta;
-      setXgotDelta(rawDelta != null ? Number(rawDelta) : null);
-      setUnderstat(ustat as PlayerUnderstat | null);
-      setSimilarRoleProfiles(similarProfiles as SimilarRoleProfile[]);
+      if (rankScopes.status === "fulfilled") {
+        const ranks = rankScopes.value as {
+          league: Record<string, PeerMetricRank>;
+          all: Record<string, PeerMetricRank>;
+        };
+        setPeerMetricRanks(ranks.league);
+        setAllPeerMetricRanks(ranks.all);
+      } else {
+        console.error("Failed to load peer metric ranks", rankScopes.reason);
+      }
+      if (sh.status === "fulfilled") {
+        setShots(sh.value as Shot[]);
+      } else {
+        console.error("Failed to load player shots", sh.reason);
+      }
+      setShotProfileLoading(false);
+      if (xgd.status === "fulfilled") {
+        const rawDelta = (xgd.value as any)?.delta;
+        setXgotDelta(rawDelta != null ? Number(rawDelta) : null);
+      } else {
+        console.error("Failed to load xGOT delta", xgd.reason);
+      }
+      if (ustat.status === "fulfilled") {
+        setUnderstat(ustat.value as PlayerUnderstat | null);
+      } else {
+        console.error("Failed to load Understat profile", ustat.reason);
+      }
+      if (similarProfiles.status === "fulfilled") {
+        setSimilarRoleProfiles(similarProfiles.value as SimilarRoleProfile[]);
+      } else {
+        console.error("Failed to load similar role profiles", similarProfiles.reason);
+      }
     });
     return () => { isCurrent = false; };
   }, [id, season]);
@@ -6443,11 +6467,28 @@ function PlayerProfilePage() {
             <CardTitle>Shot Profile</CardTitle>
           </CardHeader>
           <CardContent>
-            <ShotProfile
-              shots={shots}
-              xgotDelta={xgotDelta}
-              xgOverperformance={stats?.xg_overperformance}
-            />
+            {shotProfileLoading ? (
+              <div className="space-y-4">
+                <Skeleton className="h-56 rounded-lg" />
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <Skeleton className="h-20 rounded-lg" />
+                  <Skeleton className="h-20 rounded-lg" />
+                  <Skeleton className="h-20 rounded-lg" />
+                  <Skeleton className="h-20 rounded-lg" />
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <Skeleton className="h-40 rounded-lg" />
+                  <Skeleton className="h-40 rounded-lg" />
+                </div>
+              </div>
+            ) : (
+              <ShotProfile
+                shots={shots}
+                totalShots={stats?.shots}
+                xgotDelta={xgotDelta}
+                xgOverperformance={stats?.xg_overperformance}
+              />
+            )}
           </CardContent>
         </Card>
         )}
