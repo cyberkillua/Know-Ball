@@ -8,8 +8,7 @@ import {
   getLeagues,
   getLeaguePlayerCounts,
   getTotalPlayerCount,
-  getTopRatedByMatchday,
-  getLatestMatchday,
+  getTopRatedFromLatestMatchdays,
 } from '../lib/queries'
 import type { League, MatchRating } from '../lib/types'
 
@@ -30,6 +29,7 @@ interface PlayerRating extends MatchRating {
     home_team?: { name: string }
     away_team?: { name: string }
   }
+  league?: { id: number; name: string }
 }
 
 function LandingPage() {
@@ -42,16 +42,11 @@ function LandingPage() {
     async function fetchData() {
       setLoading(true)
       try {
-        const [leaguesData, playerCounts, total, latestMatchdayData] = await Promise.all([
+        const [leaguesData, playerCounts, total, ratings] = await Promise.all([
           getLeagues(),
           getLeaguePlayerCounts(),
           getTotalPlayerCount(),
-          getLeagues().then((l) => {
-            if (l.length > 0) {
-              return getLatestMatchday({ data: { leagueId: l[0].id, season: CURRENT_SEASON } })
-            }
-            return null
-          }),
+          getTopRatedFromLatestMatchdays({ data: { season: CURRENT_SEASON, limit: 10 } }),
         ])
 
         const countsMap = new Map(playerCounts.map((c) => [c.league_id, c.player_count]))
@@ -61,13 +56,7 @@ function LandingPage() {
         }))
         setLeagues(leaguesWithCounts)
         setTotalPlayers(total)
-
-        if (latestMatchdayData && leaguesData.length > 0) {
-          const ratings = await getTopRatedByMatchday({
-            data: { leagueId: leaguesData[0].id, season: CURRENT_SEASON, matchday: latestMatchdayData },
-          })
-          setTopRated(ratings as PlayerRating[])
-        }
+        setTopRated(ratings as PlayerRating[])
       } catch (error) {
         console.error('Failed to fetch data:', error)
       } finally {
@@ -108,11 +97,11 @@ function LandingPage() {
         )}
       </section>
 
-      {/* Trending Players */}
+      {/* Latest Matchday Standouts */}
       <section className="space-y-3">
-        <h2 className="text-xl font-bold">Trending Players</h2>
+        <h2 className="text-xl font-bold">Latest Matchday Standouts</h2>
         <p className="text-sm text-muted-foreground">
-          Top rated from latest matchday
+          Top rated from each competition's latest matchday
         </p>
 
         {loading ? (
@@ -128,7 +117,7 @@ function LandingPage() {
                 key={player.id}
                 rank={i + 1}
                 playerName={player.player?.name ?? `Player ${player.player_id}`}
-                teamName=""
+                teamName={[player.player?.position, player.league?.name].filter(Boolean).join(' - ')}
                 rating={Number(player.final_rating)}
               />
             ))}

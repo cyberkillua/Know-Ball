@@ -73,6 +73,37 @@ export const getTopRatedByMatchday = createServerFn({ method: 'GET' })
     )
   })
 
+export const getTopRatedFromLatestMatchdays = createServerFn({ method: 'GET' })
+  .inputValidator((d: { season: string; limit?: number }) => d)
+  .handler(async ({ data }) => {
+    return query(
+      `WITH latest_matchdays AS (
+         SELECT league_id, MAX(matchday) as matchday
+         FROM matches
+         WHERE season = $1
+           AND home_score IS NOT NULL
+           AND matchday IS NOT NULL
+         GROUP BY league_id
+       )
+       SELECT mr.*,
+              json_build_object('id', p.id, 'name', p.name, 'position', p.position) as player,
+              json_build_object('id', l.id, 'name', l.name) as league,
+              json_build_object('id', mat.id, 'home_score', mat.home_score, 'away_score', mat.away_score,
+                'home_team', json_build_object('name', ht.name),
+                'away_team', json_build_object('name', at.name)) as match
+       FROM latest_matchdays lm
+       JOIN matches mat ON mat.league_id = lm.league_id AND mat.matchday = lm.matchday AND mat.season = $1
+       JOIN leagues l ON l.id = mat.league_id
+       JOIN match_ratings mr ON mr.match_id = mat.id
+       JOIN players p ON p.id = mr.player_id
+       JOIN teams ht ON ht.id = mat.home_team_id
+       JOIN teams at ON at.id = mat.away_team_id
+       ORDER BY mr.final_rating DESC
+       LIMIT $2`,
+      [data.season, data.limit ?? 10],
+    )
+  })
+
 export const getMatch = createServerFn({ method: 'GET' })
   .inputValidator((d: { matchId: number }) => d)
   .handler(async ({ data }) => {
