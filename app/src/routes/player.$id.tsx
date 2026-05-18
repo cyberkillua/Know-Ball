@@ -16,17 +16,10 @@ import StatRow from "../components/StatRow";
 import PizzaChart from "../components/charts/PizzaChart";
 import { getPizzaMetrics } from "../lib/playerMetrics";
 import {
-  getPlayer,
-  getPlayerSeasons,
-  getPlayerRatings,
-  getPlayerSeasonTrend,
-  getPlayerPeerRating,
+  getPlayerOverview,
+  getPlayerSeasonBundle,
   getPlayerPeerMetricRankScopes,
   getSimilarRoleProfiles,
-  getPlayerStats,
-  getPlayerShots,
-  getPlayerXgotDelta,
-  getPlayerUnderstat,
 } from "../lib/queries";
 import {
   formatRoleArchetype,
@@ -39,7 +32,6 @@ import type {
   MatchRating,
   PeerRating,
   PeerMetricRank,
-  PlayerPeerRatingResponse,
   PlayerSeasonTrendPoint,
   PlayerStats,
   PlayerUnderstat,
@@ -1063,11 +1055,7 @@ function PlayerProfilePage() {
     setSeason(""); // reset stale season from previous player before fetching
     setSeasonTrend([]);
     setLoading(true);
-    Promise.all([
-      getPlayer({ data: { playerId } }),
-      getPlayerSeasons({ data: { playerId } }),
-      getPlayerSeasonTrend({ data: { playerId } }),
-    ]).then(([p, s, trend]) => {
+    getPlayerOverview({ data: { playerId } }).then(({ player: p, seasons: s, trend }) => {
       if (!isCurrent) return;
       setPlayer(p);
       setSeasons(s);
@@ -1098,99 +1086,45 @@ function PlayerProfilePage() {
     setXgotDelta(null);
     setUnderstat(null);
 
-    Promise.all([
-      getPlayerRatings({
-        data: { playerId, season: seasonStr, leagueId: leagueIdNum },
-      }),
-      getPlayerPeerRating({
-        data: {
-          playerId,
-          season: seasonStr,
-          leagueId: leagueIdNum,
-          scope: "league",
-        },
-      }),
-      getPlayerPeerRating({
-        data: {
-          playerId,
-          season: seasonStr,
-          leagueId: leagueIdNum,
-          scope: "all",
-        },
-      }),
-      getPlayerStats({
-        data: { playerId, season: seasonStr, leagueId: leagueIdNum },
-      }),
-    ]).then(([r, pr, apr, st]) => {
+    getPlayerSeasonBundle({
+      data: { playerId, season: seasonStr, leagueId: leagueIdNum },
+    }).then((bundle) => {
       if (!isCurrent) return;
-      const leaguePeerResponse = pr as PlayerPeerRatingResponse;
-      const allPeerResponse = apr as PlayerPeerRatingResponse;
-      setRatings(r);
-      setPeerRating(leaguePeerResponse.peerRating);
-      setAllPeerRating(allPeerResponse.peerRating);
-      setStats(st as PlayerStats | null);
+      setRatings(bundle.ratings as MatchRating[]);
+      setPeerRating(bundle.peerRatingLeague);
+      setAllPeerRating(bundle.peerRatingAll);
+      setStats(bundle.stats as PlayerStats | null);
+      setShots(bundle.shots as Shot[]);
+      setXgotDelta(bundle.xgotDelta);
+      setUnderstat(bundle.understat as PlayerUnderstat | null);
       setLoading(false);
       setSeasonLoading(false);
+      setShotProfileLoading(false);
+    }).catch((err) => {
+      if (!isCurrent) return;
+      console.error("Failed to load player season bundle", err);
+      setLoading(false);
+      setSeasonLoading(false);
+      setShotProfileLoading(false);
     });
 
-    Promise.allSettled([
-      getPlayerPeerMetricRankScopes({
-        data: {
-          playerId,
-          season: seasonStr,
-          leagueId: leagueIdNum,
-        },
-      }),
-      getPlayerShots({
-        data: { playerId, season: seasonStr, leagueId: leagueIdNum },
-      }),
-      getPlayerXgotDelta({
-        data: { playerId, season: seasonStr, leagueId: leagueIdNum },
-      }),
-      getPlayerUnderstat({ data: { playerId, season: seasonStr } }),
-      getSimilarRoleProfiles({
-        data: { playerId, season: seasonStr, leagueId: leagueIdNum, limit: 4 },
-      }),
-    ]).then(([
-      rankScopes,
-      sh,
-      xgd,
-      ustat,
-      similarProfiles,
-    ]) => {
+    getPlayerPeerMetricRankScopes({
+      data: { playerId, season: seasonStr, leagueId: leagueIdNum },
+    }).then((ranks) => {
       if (!isCurrent) return;
-      if (rankScopes.status === "fulfilled") {
-        const ranks = rankScopes.value as {
-          league: Record<string, PeerMetricRank>;
-          all: Record<string, PeerMetricRank>;
-        };
-        setPeerMetricRanks(ranks.league);
-        setAllPeerMetricRanks(ranks.all);
-      } else {
-        console.error("Failed to load peer metric ranks", rankScopes.reason);
-      }
-      if (sh.status === "fulfilled") {
-        setShots(sh.value as Shot[]);
-      } else {
-        console.error("Failed to load player shots", sh.reason);
-      }
-      setShotProfileLoading(false);
-      if (xgd.status === "fulfilled") {
-        const rawDelta = (xgd.value as any)?.delta;
-        setXgotDelta(rawDelta != null ? Number(rawDelta) : null);
-      } else {
-        console.error("Failed to load xGOT delta", xgd.reason);
-      }
-      if (ustat.status === "fulfilled") {
-        setUnderstat(ustat.value as PlayerUnderstat | null);
-      } else {
-        console.error("Failed to load Understat profile", ustat.reason);
-      }
-      if (similarProfiles.status === "fulfilled") {
-        setSimilarRoleProfiles(similarProfiles.value as SimilarRoleProfile[]);
-      } else {
-        console.error("Failed to load similar role profiles", similarProfiles.reason);
-      }
+      setPeerMetricRanks(ranks.league);
+      setAllPeerMetricRanks(ranks.all);
+    }).catch((err) => {
+      console.error("Failed to load peer metric ranks", err);
+    });
+
+    getSimilarRoleProfiles({
+      data: { playerId, season: seasonStr, leagueId: leagueIdNum, limit: 4 },
+    }).then((profiles) => {
+      if (!isCurrent) return;
+      setSimilarRoleProfiles(profiles as SimilarRoleProfile[]);
+    }).catch((err) => {
+      console.error("Failed to load similar role profiles", err);
     });
     return () => { isCurrent = false; };
   }, [id, season]);

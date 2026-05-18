@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { query, queryOne } from './db.server'
 import { POSITION_GROUPS, type PositionGroup } from './positions'
-import type { League, Match, MatchRating, PeerMetricRank, Player, PlayerSeasonTrendPoint, PeerRating, PlayerPeerRatingResponse, PlayerUnderstat, RoleFitProfile, Shot, SimilarRoleProfile } from './types'
+import type { League, Match, MatchRating, PeerMetricRank, Player, PlayerSeasonTrendPoint, PlayerStats, PeerRating, PlayerPeerRatingResponse, PlayerUnderstat, RoleFitProfile, Shot, SimilarRoleProfile } from './types'
 
 export const getLeagues = createServerFn({ method: 'GET' }).handler(async () => {
   return query<League>('SELECT * FROM leagues ORDER BY tier, name')
@@ -133,108 +133,124 @@ export const getMatchRatings = createServerFn({ method: 'GET' })
     )
   })
 
+type PlayerSeasonRow = { season: string; league_id: number; league_name: string; matches: number }
+
+function playerQuery(playerId: number) {
+  return queryOne<Player>(
+    `SELECT p.*,
+            json_build_object('id', t.id, 'name', t.name, 'league', json_build_object('id', l.id, 'name', l.name)) as team
+     FROM players p
+     LEFT JOIN teams t ON t.id = p.current_team_id
+     LEFT JOIN leagues l ON l.id = t.league_id
+     WHERE p.id = $1`,
+    [playerId],
+  )
+}
+
+function playerSeasonsQuery(playerId: number) {
+  return query<PlayerSeasonRow>(
+    `SELECT pr.season,
+            l.id as league_id,
+            l.name as league_name,
+            pr.matches_played::int as matches
+     FROM peer_ratings pr
+     JOIN leagues l ON l.id = pr.league_id
+     WHERE pr.player_id = $1
+       AND pr.league_id IS NOT NULL
+       AND pr.peer_mode = 'dominant'
+       AND pr.position_scope = ''
+     ORDER BY pr.season DESC, l.name`,
+    [playerId],
+  )
+}
+
 export const getPlayer = createServerFn({ method: 'GET' })
   .inputValidator((d: { playerId: number }) => d)
-  .handler(async ({ data }) => {
-    return queryOne<Player>(
-      `SELECT p.*,
-              json_build_object('id', t.id, 'name', t.name, 'league', json_build_object('id', l.id, 'name', l.name)) as team
-       FROM players p
-       LEFT JOIN teams t ON t.id = p.current_team_id
-       LEFT JOIN leagues l ON l.id = t.league_id
-       WHERE p.id = $1`,
-      [data.playerId],
-    )
-  })
+  .handler(async ({ data }) => playerQuery(data.playerId))
 
 export const getPlayerSeasons = createServerFn({ method: 'GET' })
   .inputValidator((d: { playerId: number }) => d)
-  .handler(async ({ data }) => {
-    return query<{ season: string; league_id: number; league_name: string; matches: number }>(
-      `SELECT pr.season,
-              l.id as league_id,
-              l.name as league_name,
-              pr.matches_played::int as matches
-       FROM peer_ratings pr
-       JOIN leagues l ON l.id = pr.league_id
-       WHERE pr.player_id = $1
-         AND pr.league_id IS NOT NULL
-         AND pr.peer_mode = 'dominant'
-         AND pr.position_scope = ''
-       ORDER BY pr.season DESC, l.name`,
-      [data.playerId],
-    )
-  })
+  .handler(async ({ data }) => playerSeasonsQuery(data.playerId))
+
+type SeasonScopedInput = { playerId: number; season: string; leagueId: number }
+
+function playerRatingsQuery(data: SeasonScopedInput) {
+  return query<MatchRating>(
+    `SELECT mr.*,
+            mps.team_id as player_team_id,
+            json_build_object('id', mat.id, 'date', mat.date, 'matchday', mat.matchday,
+              'home_team_id', mat.home_team_id, 'away_team_id', mat.away_team_id,
+              'home_score', mat.home_score, 'away_score', mat.away_score,
+              'home_team', json_build_object('id', ht.id, 'name', ht.name),
+              'away_team', json_build_object('id', at.id, 'name', at.name)) as match
+     FROM match_ratings mr
+     JOIN matches mat ON mat.id = mr.match_id
+     JOIN teams ht ON ht.id = mat.home_team_id
+     JOIN teams at ON at.id = mat.away_team_id
+     LEFT JOIN match_player_stats mps ON mps.match_id = mr.match_id AND mps.player_id = mr.player_id
+     WHERE mr.player_id = $1 AND mat.season = $2 AND mat.league_id = $3
+     ORDER BY mat.date ASC`,
+    [data.playerId, data.season, data.leagueId],
+  )
+}
 
 export const getPlayerRatings = createServerFn({ method: 'GET' })
-  .inputValidator((d: { playerId: number; season: string; leagueId: number }) => d)
-  .handler(async ({ data }) => {
-    return query<MatchRating>(
-      `SELECT mr.*,
-              mps.team_id as player_team_id,
-              json_build_object('id', mat.id, 'date', mat.date, 'matchday', mat.matchday,
-                'home_team_id', mat.home_team_id, 'away_team_id', mat.away_team_id,
-                'home_score', mat.home_score, 'away_score', mat.away_score,
-                'home_team', json_build_object('id', ht.id, 'name', ht.name),
-                'away_team', json_build_object('id', at.id, 'name', at.name)) as match
-       FROM match_ratings mr
-       JOIN matches mat ON mat.id = mr.match_id
-       JOIN teams ht ON ht.id = mat.home_team_id
-       JOIN teams at ON at.id = mat.away_team_id
-       LEFT JOIN match_player_stats mps ON mps.match_id = mr.match_id AND mps.player_id = mr.player_id
-       WHERE mr.player_id = $1 AND mat.season = $2 AND mat.league_id = $3
-       ORDER BY mat.date ASC`,
-      [data.playerId, data.season, data.leagueId],
-    )
-  })
+  .inputValidator((d: SeasonScopedInput) => d)
+  .handler(async ({ data }) => playerRatingsQuery(data))
+
+function playerSeasonTrendQuery(playerId: number) {
+  return query<PlayerSeasonTrendPoint>(
+    `SELECT pr.season,
+            pr.league_id,
+            l.name as league_name,
+            pr.position,
+            pr.model_score,
+            pr.model_score_confidence,
+            pr.rated_minutes,
+            pr.matches_played,
+            pr.minutes_played,
+            pr.avg_match_rating
+     FROM peer_ratings pr
+     LEFT JOIN leagues l ON l.id = pr.league_id
+     WHERE pr.player_id = $1
+       AND pr.league_id IS NOT NULL
+       AND pr.peer_mode = 'dominant'
+       AND pr.position_scope = ''
+       AND pr.model_score IS NOT NULL
+     ORDER BY pr.season ASC, l.name ASC`,
+    [playerId],
+  )
+}
 
 export const getPlayerSeasonTrend = createServerFn({ method: 'GET' })
   .inputValidator((d: { playerId: number }) => d)
-  .handler(async ({ data }) => {
-    return query<PlayerSeasonTrendPoint>(
-      `SELECT pr.season,
-              pr.league_id,
-              l.name as league_name,
-              pr.position,
-              pr.model_score,
-              pr.model_score_confidence,
-              pr.rated_minutes,
-              pr.matches_played,
-              pr.minutes_played,
-              pr.avg_match_rating
-       FROM peer_ratings pr
-       LEFT JOIN leagues l ON l.id = pr.league_id
-       WHERE pr.player_id = $1
-         AND pr.league_id IS NOT NULL
-         AND pr.peer_mode = 'dominant'
-         AND pr.position_scope = ''
-         AND pr.model_score IS NOT NULL
-       ORDER BY pr.season ASC, l.name ASC`,
-      [data.playerId],
-    )
-  })
+  .handler(async ({ data }) => playerSeasonTrendQuery(data.playerId))
+
+async function playerPeerRatingQuery(
+  data: SeasonScopedInput & { scope?: 'league' | 'all' },
+): Promise<PlayerPeerRatingResponse> {
+  const scope = data.scope ?? 'league'
+  const peerRating = scope === 'all'
+    ? await queryOne<PeerRating>(
+        `SELECT * FROM peer_ratings
+         WHERE player_id = $1 AND season = $2 AND league_id IS NULL
+           AND peer_mode = 'dominant' AND position_scope = ''`,
+        [data.playerId, data.season],
+      )
+    : await queryOne<PeerRating>(
+        `SELECT * FROM peer_ratings
+         WHERE player_id = $1 AND season = $2 AND league_id = $3
+           AND peer_mode = 'dominant'
+           AND position_scope = ''`,
+        [data.playerId, data.season, data.leagueId],
+      )
+
+  return { peerRating, positionBreakdown: [], availablePositionScopes: [] }
+}
 
 export const getPlayerPeerRating = createServerFn({ method: 'GET' })
   .inputValidator((d: { playerId: number; season: string; leagueId: number; scope?: 'league' | 'all'; mode?: 'dominant' | 'position'; positionScope?: string }) => d)
-  .handler(async ({ data }) => {
-    const scope = data.scope ?? 'league'
-    const peerRating = scope === 'all'
-      ? await queryOne<PeerRating>(
-          `SELECT * FROM peer_ratings
-           WHERE player_id = $1 AND season = $2 AND league_id IS NULL
-             AND peer_mode = 'dominant' AND position_scope = ''`,
-          [data.playerId, data.season],
-        )
-      : await queryOne<PeerRating>(
-          `SELECT * FROM peer_ratings
-           WHERE player_id = $1 AND season = $2 AND league_id = $3
-             AND peer_mode = 'dominant'
-             AND position_scope = ''`,
-          [data.playerId, data.season, data.leagueId],
-        )
-
-    return { peerRating, positionBreakdown: [], availablePositionScopes: [] } satisfies PlayerPeerRatingResponse
-  })
+  .handler(async ({ data }) => playerPeerRatingQuery(data))
 
 function roleVector(roleFit: RoleFitProfile | null | undefined) {
   const vector = new Map<string, number>()
@@ -406,17 +422,19 @@ async function getPeerMetricRanks(data: {
     }, {})
 }
 
+function playerShotsQuery(data: SeasonScopedInput) {
+  return query<Shot>(
+    `SELECT s.*
+     FROM shots s
+     JOIN matches mat ON mat.id = s.match_id
+     WHERE s.player_id = $1 AND mat.season = $2 AND mat.league_id = $3`,
+    [data.playerId, data.season, data.leagueId],
+  )
+}
+
 export const getPlayerShots = createServerFn({ method: 'GET' })
-  .inputValidator((d: { playerId: number; season: string; leagueId: number }) => d)
-  .handler(async ({ data }) => {
-    return query<Shot>(
-      `SELECT s.*
-       FROM shots s
-       JOIN matches mat ON mat.id = s.match_id
-       WHERE s.player_id = $1 AND mat.season = $2 AND mat.league_id = $3`,
-      [data.playerId, data.season, data.leagueId],
-    )
-  })
+  .inputValidator((d: SeasonScopedInput) => d)
+  .handler(async ({ data }) => playerShotsQuery(data))
 
 export const getLeagueTopPlayers = createServerFn({ method: 'GET' })
   .inputValidator((d: { leagueId: number; season: string }) => d)
@@ -562,10 +580,8 @@ export const getLeagueCategoryLeaders = createServerFn({ method: 'GET' })
     )
   })
 
-export const getPlayerStats = createServerFn({ method: 'GET' })
-  .inputValidator((d: { playerId: number; season: string; leagueId: number }) => d)
-  .handler(async ({ data }) => {
-    return queryOne(
+function playerStatsQuery(data: SeasonScopedInput) {
+  return queryOne<PlayerStats>(
       `WITH player_team AS (
         SELECT mps.team_id, COUNT(*) as cnt
         FROM match_player_stats mps
@@ -707,20 +723,26 @@ export const getPlayerStats = createServerFn({ method: 'GET' })
          AND pss.season = mat.season
         WHERE mps.player_id = $1 AND mat.season = $2 AND mat.league_id = $3`,
       [data.playerId, data.season, data.leagueId],
-    )
-  })
+  )
+}
+
+export const getPlayerStats = createServerFn({ method: 'GET' })
+  .inputValidator((d: SeasonScopedInput) => d)
+  .handler(async ({ data }) => playerStatsQuery(data))
+
+function playerXgotDeltaQuery(data: SeasonScopedInput) {
+  return queryOne<{ delta: number | null }>(
+    `SELECT ROUND((SUM(mps.xgot) - SUM(mps.xg))::numeric, 2) as delta
+     FROM match_player_stats mps
+     JOIN matches mat ON mat.id = mps.match_id
+     WHERE mps.player_id = $1 AND mat.season = $2 AND mat.league_id = $3`,
+    [data.playerId, data.season, data.leagueId],
+  )
+}
 
 export const getPlayerXgotDelta = createServerFn({ method: 'GET' })
-  .inputValidator((d: { playerId: number; season: string; leagueId: number }) => d)
-  .handler(async ({ data }) => {
-    return queryOne<{ delta: number | null }>(
-      `SELECT ROUND((SUM(mps.xgot) - SUM(mps.xg))::numeric, 2) as delta
-       FROM match_player_stats mps
-       JOIN matches mat ON mat.id = mps.match_id
-       WHERE mps.player_id = $1 AND mat.season = $2 AND mat.league_id = $3`,
-      [data.playerId, data.season, data.leagueId],
-    )
-  })
+  .inputValidator((d: SeasonScopedInput) => d)
+  .handler(async ({ data }) => playerXgotDeltaQuery(data))
 
 export const getPlayerMatchStats = createServerFn({ method: 'GET' })
   .inputValidator((d: { playerId: number; matchId: number }) => d)
@@ -749,15 +771,52 @@ export const searchPlayers = createServerFn({ method: 'GET' })
     )
   })
 
+function playerUnderstatQuery(playerId: number, season: string) {
+  return queryOne<PlayerUnderstat>(
+    `SELECT xg_chain, xg_buildup, xg_chain_per90, xg_buildup_per90, minutes_played
+     FROM player_season_understat
+     WHERE player_id = $1 AND season = $2`,
+    [playerId, season],
+  )
+}
+
 export const getPlayerUnderstat = createServerFn({ method: 'GET' })
   .inputValidator((d: { playerId: number; season: string }) => d)
+  .handler(async ({ data }) => playerUnderstatQuery(data.playerId, data.season))
+
+export const getPlayerOverview = createServerFn({ method: 'GET' })
+  .inputValidator((d: { playerId: number }) => d)
   .handler(async ({ data }) => {
-    return queryOne<PlayerUnderstat>(
-      `SELECT xg_chain, xg_buildup, xg_chain_per90, xg_buildup_per90, minutes_played
-       FROM player_season_understat
-       WHERE player_id = $1 AND season = $2`,
-      [data.playerId, data.season],
-    )
+    const [player, seasons, trend] = await Promise.all([
+      playerQuery(data.playerId),
+      playerSeasonsQuery(data.playerId),
+      playerSeasonTrendQuery(data.playerId),
+    ])
+    return { player, seasons, trend }
+  })
+
+export const getPlayerSeasonBundle = createServerFn({ method: 'GET' })
+  .inputValidator((d: SeasonScopedInput) => d)
+  .handler(async ({ data }) => {
+    const [ratings, peerLeague, peerAll, stats, shots, understat, xgot] =
+      await Promise.all([
+        playerRatingsQuery(data),
+        playerPeerRatingQuery({ ...data, scope: 'league' }),
+        playerPeerRatingQuery({ ...data, scope: 'all' }),
+        playerStatsQuery(data),
+        playerShotsQuery(data),
+        playerUnderstatQuery(data.playerId, data.season),
+        playerXgotDeltaQuery(data),
+      ])
+    return {
+      ratings,
+      peerRatingLeague: peerLeague.peerRating,
+      peerRatingAll: peerAll.peerRating,
+      stats,
+      shots,
+      understat,
+      xgotDelta: xgot?.delta != null ? Number(xgot.delta) : null,
+    }
   })
 
 export interface LeaguePlayer {

@@ -8,9 +8,12 @@ pg.types.setTypeParser(1184, (val: string) => val) // timestamptz
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
+  max: 2,
+  idleTimeoutMillis: 10_000,
+  connectionTimeoutMillis: 10_000,
 })
 
-export async function query<T = Record<string, unknown>>(
+export async function query<T = Record<string, any>>(
   sql: string,
   params: unknown[] = [],
 ): Promise<T[]> {
@@ -18,7 +21,7 @@ export async function query<T = Record<string, unknown>>(
   return rows as T[]
 }
 
-export async function queryOne<T = Record<string, unknown>>(
+export async function queryOne<T = Record<string, any>>(
   sql: string,
   params: unknown[] = [],
 ): Promise<T | null> {
