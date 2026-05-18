@@ -1,4 +1,4 @@
-from pipeline.engine.traits import assign_style_profile
+from pipeline.model.engine.traits import assign_style_profile
 
 
 def test_st_style_profile_returns_primary_strengths_and_confidence():

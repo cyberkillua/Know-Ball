@@ -1,8 +1,8 @@
 from copy import deepcopy
 
-from pipeline.engine.calculator import PlayerMatchStats
-from pipeline.engine.def_calculator import calculate_def_rating
-from pipeline.engine.config import load_position_config
+from pipeline.model.engine.calculator import PlayerMatchStats
+from pipeline.model.engine.def_calculator import calculate_def_rating
+from pipeline.model.engine.config import load_position_config
 
 
 def _neutral_cb() -> PlayerMatchStats:

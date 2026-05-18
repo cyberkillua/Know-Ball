@@ -1,4 +1,4 @@
-from pipeline.engine.roles import assign_role_fit
+from pipeline.model.engine.roles import assign_role_fit
 
 
 def test_st_role_fit_returns_top_roles_and_confidence():

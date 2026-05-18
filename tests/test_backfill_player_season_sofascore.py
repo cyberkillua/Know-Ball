@@ -1,6 +1,6 @@
 import unittest
 
-from pipeline.backfill_player_season_sofascore import _discover_targets
+from pipeline.ingest.backfill_player_season_sofascore import _discover_targets
 
 
 class FakeDB:

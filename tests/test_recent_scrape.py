@@ -2,8 +2,8 @@ import unittest
 from datetime import datetime, timezone
 from unittest.mock import patch
 
-import pipeline.scrape as scrape
-from pipeline.scrapers import sofascore
+import pipeline.ingest.scrape as scrape
+from pipeline.ingest.scrapers import sofascore
 
 
 class FixedDateTime:

@@ -1,8 +1,8 @@
 import unittest
 
-from pipeline.engine.calculator import PlayerMatchStats
-from pipeline.engine.cam_calculator import calc_carrying as calc_cam_carrying
-from pipeline.engine.cm_calculator import (
+from pipeline.model.engine.calculator import PlayerMatchStats
+from pipeline.model.engine.cam_calculator import calc_carrying as calc_cam_carrying
+from pipeline.model.engine.cm_calculator import (
     _weights_for_role,
     calc_control,
     calc_carrying as calc_cm_carrying,

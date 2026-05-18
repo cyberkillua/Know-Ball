@@ -1,4 +1,4 @@
-from pipeline.engine.season_score import (
+from pipeline.model.engine.season_score import (
     DEFAULT_SEASON_SCORE_CONFIG,
     calculate_season_score,
 )
