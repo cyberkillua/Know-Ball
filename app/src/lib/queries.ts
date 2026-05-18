@@ -818,7 +818,7 @@ export const getLeaguePlayers = createServerFn({ method: 'GET' })
          FROM season_team
          WHERE rn = 1
        )
-       SELECT p.id, p.name, COALESCE(pr.position, p.position) as position, p.nationality, p.date_of_birth,
+       SELECT p.id, p.name, p.position as position, p.nationality, p.date_of_birth,
               EXTRACT(YEAR FROM AGE(p.date_of_birth))::int as age,
               st.name as club, primary_team.team_id as club_id, p.photo_url,
               pr.model_score, pr.model_score_confidence, pr.rated_minutes
@@ -903,7 +903,7 @@ export const getAllPlayers = createServerFn({ method: 'GET' })
          FROM season_team
          WHERE rn = 1
        )
-       SELECT p.id, p.name, COALESCE(pr.position, p.position) as position, p.nationality, p.date_of_birth,
+       SELECT p.id, p.name, p.position as position, p.nationality, p.date_of_birth,
               EXTRACT(YEAR FROM AGE(p.date_of_birth))::int as age,
               st.name as club, primary_team.team_id as club_id, p.photo_url,
               pr.model_score, pr.model_score_confidence, pr.rated_minutes, l.name as league_name
