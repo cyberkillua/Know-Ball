@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-CONFIG_DIR = Path(__file__).resolve().parents[3] / "config" / "positions"
+CONFIG_DIR = Path(__file__).resolve().parents[3] / "config" / "ratings" / "positions"
 
 
 def load_position_config(position: str) -> dict:

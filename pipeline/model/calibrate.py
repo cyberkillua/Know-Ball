@@ -21,7 +21,7 @@ from pipeline.core.logger import get_logger
 
 log = get_logger("calibrate")
 
-CONFIG_DIR = Path(__file__).resolve().parents[2] / "config" / "positions"
+CONFIG_DIR = Path(__file__).resolve().parents[2] / "config" / "ratings" / "positions"
 
 # Dimension columns per position in match_ratings
 POSITION_DIMENSIONS: dict[str, list[str]] = {

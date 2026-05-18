@@ -19,3 +19,7 @@ __pycache__/
 commands.MD 
 docs/feature-roadmap.md
 docs/phase-0-model-language.md
+
+
+.pytest_cache/
+.ruff_cache/

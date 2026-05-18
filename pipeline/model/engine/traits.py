@@ -9,7 +9,7 @@ from typing import Any
 
 
 CONFIG_PATH = (
-    Path(__file__).resolve().parents[3] / "config" / "model_traits.json"
+    Path(__file__).resolve().parents[3] / "config" / "profiles" / "model_traits.json"
 )
 
 
