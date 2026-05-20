@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { query, queryOne } from './db.server'
-import { POSITION_GROUPS, type PositionGroup } from './positions'
+import { POSITION_GROUPS, POSITION_GROUP_TO_RATING_CODES, ratingCodeToPositionGroup, type PositionGroup } from './positions'
 import type { League, Match, MatchRating, PeerMetricRank, Player, PlayerSeasonTrendPoint, PlayerStats, PeerRating, PlayerPeerRatingResponse, PlayerUnderstat, RoleFitProfile, Shot, SimilarRoleProfile } from './types'
 
 export const getLeagues = createServerFn({ method: 'GET' }).handler(async () => {
@@ -843,8 +843,11 @@ export const getLeaguePlayers = createServerFn({ method: 'GET' })
     let searchFilter = ''
 
     if (data.position) {
-      posFilter = ` AND pr.position = $${params.length + 1}`
-      params.push(data.position)
+      const codes = POSITION_GROUP_TO_RATING_CODES[data.position] ?? []
+      if (codes.length > 0) {
+        posFilter = ` AND pr.position = ANY($${params.length + 1})`
+        params.push(codes)
+      }
     }
     if (data.clubId) {
       clubFilter = ` AND primary_team.team_id = $${params.length + 1}`
@@ -925,8 +928,11 @@ export const getAllPlayers = createServerFn({ method: 'GET' })
 
     const postWhere: string[] = []
     if (data.position != null) {
-      params.push(data.position)
-      postWhere.push(`pr.position = $${params.length}`)
+      const codes = POSITION_GROUP_TO_RATING_CODES[data.position] ?? []
+      if (codes.length > 0) {
+        params.push(codes)
+        postWhere.push(`pr.position = ANY($${params.length})`)
+      }
     }
     if (data.clubId != null) {
       params.push(data.clubId)
@@ -998,8 +1004,8 @@ export const getLeagueTeams = createServerFn({ method: 'GET' })
 export const getLeaguePositions = createServerFn({ method: 'GET' })
   .inputValidator((d: { leagueId: number; season: string }) => d)
   .handler(async ({ data }) => {
-    const rows = await query<{ position_group: PositionGroup }>(
-      `SELECT DISTINCT position as position_group
+    const rows = await query<{ rating_code: string }>(
+      `SELECT DISTINCT position as rating_code
        FROM peer_ratings
        WHERE league_id = $1
          AND season = $2
@@ -1008,6 +1014,8 @@ export const getLeaguePositions = createServerFn({ method: 'GET' })
          AND position IS NOT NULL`,
       [data.leagueId, data.season],
     )
-    const available = new Set(rows.map((r) => r.position_group).filter(Boolean))
+    const available = new Set(
+      rows.map((r) => ratingCodeToPositionGroup(r.rating_code)).filter((g): g is PositionGroup => g != null),
+    )
     return POSITION_GROUPS.filter((group) => available.has(group.value))
   })
