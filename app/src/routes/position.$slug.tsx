@@ -69,7 +69,7 @@ function ComingSoonPage() {
           </li>
           <li className="flex items-start gap-2">
             <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
-            Per-match ratings across 6 leagues
+            Per-match ratings across 5 leagues
           </li>
           <li className="flex items-start gap-2">
             <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-primary shrink-0" />

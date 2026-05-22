@@ -4,7 +4,7 @@ Understat scraper.
 Fetches per-shot data from understat.com.
 Data is embedded as encoded JSON inside <script> tags on each page.
 
-Coverage: EPL, La Liga, Ligue 1, Serie A, Bundesliga (no Championship).
+Coverage: EPL, La Liga, Ligue 1, Serie A, Bundesliga.
 """
 
 import json

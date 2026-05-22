@@ -22,6 +22,50 @@ log = get_logger("rate")
 MIN_MINUTES = 10
 BATCH_SIZE = 1000
 
+RATING_POSITION_CASE = """
+CASE
+    WHEN UPPER(TRIM(p.position)) IN ('ST', 'CF', 'SS', '3', 'F', 'FW', 'FORWARD', 'STRIKER') THEN 'ST'
+    WHEN UPPER(TRIM(p.position)) IN ('LW', 'RW', 'LM', 'RM') THEN 'W'
+    WHEN UPPER(TRIM(p.position)) IN ('CAM', 'AM') THEN 'CAM'
+    WHEN UPPER(TRIM(p.position)) IN ('CM', 'CDM', 'DM', '2', 'M', 'MIDFIELDER') THEN 'CM'
+    WHEN UPPER(TRIM(p.position)) IN ('CB', 'LB', 'RB', 'LWB', 'RWB', '1', 'D', 'DEFENDER') THEN 'DEF'
+    WHEN UPPER(TRIM(p.position)) IN ('GK', '0', 'G', 'GOALKEEPER') THEN 'GK'
+    ELSE UPPER(TRIM(p.position))
+END
+"""
+
+
+def delete_stale_match_ratings(
+    db: DB,
+    season: str | None = None,
+    league_id: int | None = None,
+) -> None:
+    """Clear ratings that were computed with an old player profile position."""
+    scope_clauses = []
+    params: list = []
+    if season:
+        scope_clauses.append("m.season = %s")
+        params.append(season)
+    if league_id:
+        scope_clauses.append("m.league_id = %s")
+        params.append(league_id)
+
+    scope_sql = ""
+    if scope_clauses:
+        scope_sql = "\n          AND " + "\n          AND ".join(scope_clauses)
+
+    db.execute(
+        f"""
+        DELETE FROM match_ratings mr
+        USING matches m, players p
+        WHERE m.id = mr.match_id
+          AND p.id = mr.player_id
+          AND p.position IS NOT NULL
+          AND mr.position IS DISTINCT FROM ({RATING_POSITION_CASE}){scope_sql}
+        """,
+        tuple(params),
+    )
+
 
 def get_unrated_records_batch(
     db: DB,
@@ -438,6 +482,8 @@ def main():
 
     if args.season or league_id:
         log.info(f"Rating scope: season={args.season or 'all'}, league_id={league_id or 'all'}")
+
+    delete_stale_match_ratings(db, season=args.season, league_id=league_id)
 
     available = get_available_positions()
     configs = {}

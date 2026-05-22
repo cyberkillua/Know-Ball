@@ -18,7 +18,6 @@ ALTER TABLE leagues ADD COLUMN IF NOT EXISTS sofascore_id INTEGER;
 
 -- Update league sofascore IDs
 UPDATE leagues SET sofascore_id = 17 WHERE fotmob_id = 47;  -- Premier League
-UPDATE leagues SET sofascore_id = 18 WHERE fotmob_id = 48;  -- Championship
 UPDATE leagues SET sofascore_id = 8  WHERE fotmob_id = 87;  -- La Liga
 UPDATE leagues SET sofascore_id = 34 WHERE fotmob_id = 53;  -- Ligue 1
 UPDATE leagues SET sofascore_id = 23 WHERE fotmob_id = 55;  -- Serie A

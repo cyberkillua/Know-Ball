@@ -44,7 +44,6 @@ SOFASCORE_HEADERS = {
 
 TOURNAMENT_IDS = {
     47: 17,
-    48: 18,
     87: 8,
     53: 34,
     55: 23,

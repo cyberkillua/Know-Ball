@@ -3,7 +3,6 @@ import type { League } from '../lib/types'
 
 const LEAGUE_SHORT_NAMES: Record<string, string> = {
   'Premier League': 'PL',
-  Championship: 'EFL',
   'La Liga': 'La Liga',
   'Ligue 1': 'Ligue 1',
   'Serie A': 'Serie A',

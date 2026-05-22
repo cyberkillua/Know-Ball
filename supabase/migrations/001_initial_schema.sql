@@ -191,7 +191,6 @@ CREATE TABLE rating_config (
 -- Seed leagues
 INSERT INTO leagues (name, country, fotmob_id, understat_slug, tier) VALUES
   ('Premier League', 'England', 47, 'EPL', 1),
-  ('Championship', 'England', 48, NULL, 2),
   ('La Liga', 'Spain', 87, 'La_liga', 1),
   ('Ligue 1', 'France', 53, 'Ligue_1', 1),
   ('Serie A', 'Italy', 55, 'Serie_A', 1),

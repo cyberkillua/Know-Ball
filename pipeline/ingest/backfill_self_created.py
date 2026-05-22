@@ -9,7 +9,7 @@ Run after scrape.py, before rate.py:
     python -m pipeline.ingest.backfill_self_created
 
 Safe to re-run — only processes matches where self_created_shots IS NULL.
-Skips leagues not covered by Understat (e.g. Championship).
+Skips leagues not covered by Understat.
 """
 
 import argparse
