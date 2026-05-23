@@ -36,6 +36,7 @@ from curl_cffi.requests import AsyncSession
 
 from pipeline.core.db import DB
 from pipeline.core.logger import get_logger
+from pipeline.core.settings import SETTINGS
 from pipeline.ingest.scrapers.sofascore import _api_get_async
 
 log = get_logger("backfill_match_player_extras")
@@ -120,18 +121,27 @@ async def _fetch_batch(
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--league", type=int, help="Filter by league id")
-    parser.add_argument("--season", type=str, help="Filter by season (e.g. 2025/2026)")
+    parser.add_argument(
+        "--season",
+        type=str,
+        default=SETTINGS.current_season,
+        help="Filter by season (e.g. 2025/2026)",
+    )
     parser.add_argument(
         "--no-skip-populated",
         action="store_true",
         help="Re-fetch even matches that already have data (default: skip)",
     )
     parser.add_argument(
-        "--concurrency", type=int, default=16,
+        "--concurrency",
+        type=int,
+        default=SETTINGS.backfills.match_player_extras_concurrency,
         help="Concurrent in-flight HTTP requests (default 16; rate-limited by token bucket)",
     )
     parser.add_argument(
-        "--batch-size", type=int, default=200,
+        "--batch-size",
+        type=int,
+        default=SETTINGS.backfills.match_player_extras_batch_size,
         help="Matches per fetch+commit batch (default 200)",
     )
     parser.add_argument("--limit", type=int, default=None, help="Cap number of matches")

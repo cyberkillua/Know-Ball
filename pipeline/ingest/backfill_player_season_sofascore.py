@@ -25,6 +25,7 @@ from curl_cffi.requests import AsyncSession
 
 from pipeline.core.db import DB
 from pipeline.core.logger import get_logger
+from pipeline.core.settings import SETTINGS
 from pipeline.ingest.scrapers.sofascore import (
     _SEASON_STAT_FIELD_MAP,
     _api_get_async,
@@ -396,14 +397,29 @@ def backfill(
 def main() -> None:
     ap = argparse.ArgumentParser(description="Backfill Sofascore per-player season stats")
     ap.add_argument("--league", type=int, help="FotMob league id (optional filter)")
-    ap.add_argument("--season", type=str, help="Season string e.g. 2025/2026 (optional filter)")
-    ap.add_argument("--concurrency", type=int, default=8, help="Concurrent in-flight HTTP requests")
-    ap.add_argument("--batch-size", type=int, default=200, help="Targets per fetch+upsert batch")
+    ap.add_argument(
+        "--season",
+        type=str,
+        default=SETTINGS.current_season,
+        help="Season string e.g. 2025/2026 (optional filter)",
+    )
+    ap.add_argument(
+        "--concurrency",
+        type=int,
+        default=SETTINGS.backfills.player_season_sofascore_concurrency,
+        help="Concurrent in-flight HTTP requests",
+    )
+    ap.add_argument(
+        "--batch-size",
+        type=int,
+        default=SETTINGS.backfills.player_season_sofascore_batch_size,
+        help="Targets per fetch+upsert batch",
+    )
     ap.add_argument("--limit", type=int, help="Cap number of targets, useful for smoke tests")
     ap.add_argument(
         "--stale-days",
         type=int,
-        default=7,
+        default=SETTINGS.backfills.player_season_sofascore_stale_days,
         help="With skip-populated, re-fetch rows older than this many days; 0 disables age-based refresh",
     )
     ap.add_argument(

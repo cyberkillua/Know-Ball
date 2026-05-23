@@ -19,6 +19,7 @@ from datetime import datetime
 from pipeline.core.db import DB
 from pipeline.core.leagues import CURRENT_SEASON, LEAGUES
 from pipeline.core.logger import get_logger
+from pipeline.core.settings import SETTINGS
 from pipeline.ingest.scrape import clear_player_cache, get_existing_match_ids, get_league_id, scrape_league
 from pipeline.ingest.scrapers.sofascore import fetch_league_matches
 from pipeline.core.store import clear_player_team_state_cache
@@ -277,8 +278,16 @@ def main() -> None:
     parser.add_argument("--skip-self-created", action="store_true", help="Skip Understat self-created backfill")
     parser.add_argument("--skip-health-check", action="store_true", help="Skip health check after compute")
     parser.add_argument("--full-backfills", action="store_true", help="Run heavyweight player-season Sofascore backfill")
-    parser.add_argument("--season-stats-concurrency", type=int, default=8)
-    parser.add_argument("--season-stats-batch-size", type=int, default=200)
+    parser.add_argument(
+        "--season-stats-concurrency",
+        type=int,
+        default=SETTINGS.daily.season_stats_concurrency,
+    )
+    parser.add_argument(
+        "--season-stats-batch-size",
+        type=int,
+        default=SETTINGS.daily.season_stats_batch_size,
+    )
     args = parser.parse_args()
 
     started = datetime.now().isoformat(timespec="seconds")

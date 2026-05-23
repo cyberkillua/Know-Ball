@@ -14,6 +14,7 @@ from collections import defaultdict
 import psycopg2.extras
 
 from pipeline.core.db import DB
+from pipeline.core.leagues import CURRENT_SEASON
 from pipeline.model.engine.config import load_position_config
 from pipeline.model.engine.season_score import (
     DEFAULT_SEASON_SCORE_CONFIG,
@@ -2132,7 +2133,11 @@ def compute_cross_league_ratings(db: DB, season: str | None = None) -> None:
 
 def main():
     parser = argparse.ArgumentParser(description="Compute Know Ball season peer ratings")
-    parser.add_argument("--season", help="Limit compute to one season, e.g. 2025/2026")
+    parser.add_argument(
+        "--season",
+        default=CURRENT_SEASON,
+        help="Limit compute to one season, e.g. 2025/2026",
+    )
     parser.add_argument("--league", type=int, help="Limit compute to one DB league id")
     parser.add_argument("--fotmob-league-id", type=int, help="Limit compute to one FotMob league id")
     parser.add_argument("--skip-cross-league", action="store_true", help="Skip ST cross-league recompute")

@@ -8,6 +8,7 @@ import sys
 from pipeline.core.db import DB
 from pipeline.core.leagues import CURRENT_SEASON, LEAGUES
 from pipeline.core.logger import get_logger
+from pipeline.core.settings import SETTINGS
 
 log = get_logger("daily")
 
@@ -125,17 +126,25 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run the daily Know Ball pipeline")
     parser.add_argument(
         "--season",
-        default=os.getenv("CURRENT_SEASON") or CURRENT_SEASON,
-        help="Season string, defaults to CURRENT_SEASON env or pipeline.core.leagues.CURRENT_SEASON",
+        default=CURRENT_SEASON,
+        help="Season string; defaults to config/pipeline.toml current_season",
     )
     parser.add_argument("--league", type=int, help="Optional FotMob league id")
-    parser.add_argument("--season-stats-concurrency", type=int, default=8)
-    parser.add_argument("--season-stats-batch-size", type=int, default=200)
+    parser.add_argument(
+        "--season-stats-concurrency",
+        type=int,
+        default=SETTINGS.daily.season_stats_concurrency,
+    )
+    parser.add_argument(
+        "--season-stats-batch-size",
+        type=int,
+        default=SETTINGS.daily.season_stats_batch_size,
+    )
     parser.add_argument("--skip-health-check", action="store_true")
     parser.add_argument(
         "--recent-days",
         type=int,
-        default=_env_int("KNOW_BALL_RECENT_DAYS", 0),
+        default=_env_int("KNOW_BALL_RECENT_DAYS", SETTINGS.daily.recent_days),
         help=(
             "Only scrape completed matches from the previous N day(s). "
             "Use 0 to reconcile finished matches from each configured league season."

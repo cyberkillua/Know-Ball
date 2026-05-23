@@ -1,8 +1,9 @@
 """Shared league and season configuration for the data pipeline."""
 
+from pipeline.core.settings import SETTINGS
 from pipeline.ingest.scrapers.sofascore import TOURNAMENT_IDS
 
-CURRENT_SEASON = "2025/2026"
+CURRENT_SEASON = SETTINGS.current_season
 
 LEAGUES = [
     ("Premier League", 47, "EPL"),

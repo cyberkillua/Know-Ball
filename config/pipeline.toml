@@ -1,0 +1,18 @@
+# Shared defaults for Know Ball pipeline scripts.
+#
+# CLI flags still win over these values. Environment variables are supported
+# for automation overrides where the script already had them.
+
+current_season = "2025/2026"
+
+[daily]
+recent_days = 2
+season_stats_concurrency = 8
+season_stats_batch_size = 200
+
+[backfills]
+match_player_extras_concurrency = 16
+match_player_extras_batch_size = 200
+player_season_sofascore_concurrency = 8
+player_season_sofascore_batch_size = 200
+player_season_sofascore_stale_days = 7

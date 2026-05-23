@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from pipeline.core.db import DB
 from pipeline.core.leagues import CURRENT_SEASON, FOTMOB_ID_BY_TOURNAMENT_ID, LEAGUES
 from pipeline.core.logger import get_logger
+from pipeline.core.settings import SETTINGS
 from pipeline.ingest.scrapers.sofascore import (
     fetch_league_matches,
     fetch_match_details,
@@ -222,6 +223,7 @@ def scrape_recent_matches(
     season: str,
     days: int,
     existing_ids: set[int],
+    fotmob_league_id: int | None = None,
 ) -> None:
     today = datetime.now(timezone.utc).date()
     league_meta = {fotmob_id: (name, understat_slug) for name, fotmob_id, understat_slug in LEAGUES}
@@ -235,6 +237,8 @@ def scrape_recent_matches(
         for event in events:
             match = _match_from_event(event)
             if not match or match["sofascore_id"] in seen_ids:
+                continue
+            if fotmob_league_id and match["fotmob_league_id"] != fotmob_league_id:
                 continue
             seen_ids.add(match["sofascore_id"])
             matches_by_league.setdefault(match["fotmob_league_id"], []).append(match)
@@ -696,10 +700,12 @@ def main():
     parser.add_argument(
         "--recent-days",
         type=int,
-        default=0,
+        default=None,
         help="Only scrape completed matches from the previous N day(s)",
     )
     args = parser.parse_args()
+    if args.recent_days is None:
+        args.recent_days = 0 if args.league else SETTINGS.daily.recent_days
 
     # Handle --list-seasons
     if args.list_seasons:
@@ -734,10 +740,14 @@ def main():
     print(f"Existing matches: {len(existing_ids)}")
 
     if args.recent_days > 0:
-        if args.league:
-            log.warning("--league is ignored with --recent-days; scheduled events are filtered by configured leagues")
         try:
-            scrape_recent_matches(db, args.season, args.recent_days, existing_ids)
+            scrape_recent_matches(
+                db,
+                args.season,
+                args.recent_days,
+                existing_ids,
+                fotmob_league_id=args.league,
+            )
         except Exception as e:
             log.error(f"Failed to scrape recent matches: {e}")
             import traceback

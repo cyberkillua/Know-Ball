@@ -8,6 +8,7 @@ Designed to run after scrape.py.
 import argparse
 
 from pipeline.core.db import DB
+from pipeline.core.leagues import CURRENT_SEASON
 from pipeline.core.logger import get_logger
 from pipeline.model.engine.config import load_position_config, get_available_positions
 from pipeline.model.engine.calculator import PlayerMatchStats, calculate_match_rating
@@ -468,7 +469,11 @@ def rate_record(
 
 def main():
     parser = argparse.ArgumentParser(description="Rate unrated player-match records")
-    parser.add_argument("--season", help="Limit rating to one season, e.g. 2025/2026")
+    parser.add_argument(
+        "--season",
+        default=CURRENT_SEASON,
+        help="Limit rating to one season, e.g. 2025/2026",
+    )
     parser.add_argument("--league", type=int, help="Limit rating to one DB league id")
     parser.add_argument("--fotmob-league-id", type=int, help="Limit rating to one FotMob league id")
     args = parser.parse_args()
