@@ -28,7 +28,8 @@ CASE
     WHEN UPPER(TRIM(p.position)) IN ('LW', 'RW', 'LM', 'RM') THEN 'W'
     WHEN UPPER(TRIM(p.position)) IN ('CAM', 'AM') THEN 'CAM'
     WHEN UPPER(TRIM(p.position)) IN ('CM', 'CDM', 'DM', '2', 'M', 'MIDFIELDER') THEN 'CM'
-    WHEN UPPER(TRIM(p.position)) IN ('CB', 'LB', 'RB', 'LWB', 'RWB', '1', 'D', 'DEFENDER') THEN 'DEF'
+    WHEN UPPER(TRIM(p.position)) IN ('LB', 'RB', 'LWB', 'RWB') THEN 'FB'
+    WHEN UPPER(TRIM(p.position)) IN ('CB', '1', 'D', 'DEFENDER') THEN 'DEF'
     WHEN UPPER(TRIM(p.position)) IN ('GK', '0', 'G', 'GOALKEEPER') THEN 'GK'
     ELSE UPPER(TRIM(p.position))
 END
@@ -193,7 +194,9 @@ def _normalize_position(position: str) -> str:
     if pos in {"CM", "CDM", "DM"}:
         return "CM"
     # Defenders
-    if pos in {"CB", "LB", "RB", "LWB", "RWB"}:
+    if pos in {"LB", "RB", "LWB", "RWB"}:
+        return "FB"
+    if pos in {"CB"}:
         return "DEF"
     # Goalkeeper
     if pos in {"GK"}:
@@ -417,7 +420,7 @@ def rate_record(
             sofascore_rating,
         )
 
-    if position_key == "DEF":
+    if position_key in {"DEF", "FB"}:
         final_rating, scores = calculate_def_rating(stats, config)
         return True, (
             match_id,
@@ -527,7 +530,7 @@ def main():
                         cam_batch.append(rating_data)
                     elif rating_data[2] == "CM":
                         cm_batch.append(rating_data)
-                    elif rating_data[2] == "DEF":
+                    elif rating_data[2] in {"DEF", "FB"}:
                         def_batch.append(rating_data)
                     else:
                         st_batch.append(rating_data)

@@ -1,0 +1,132 @@
+{
+  "position": "FB",
+  "version": 1,
+  "baseline": 6.5,
+  "weights": {
+    "defensive": 0.3,
+    "duels": 0.22,
+    "team_function": 0.16,
+    "carrying": 0.12,
+    "volume_passing": 0.14,
+    "goal_threat": 0.06
+  },
+  "constants": {
+    "clearance_reward": 0.045,
+    "block_reward": 0.12,
+    "interception_reward": 0.12,
+    "recovery_reward": 0.06,
+    "tackle_reward": 0.08,
+    "aerial_win_reward": 0.1,
+    "aerial_loss_penalty": 0.05,
+    "ground_duel_win_reward": 0.08,
+    "ground_duel_loss_penalty": 0.05,
+    "duel_volume_reward": 0.002,
+    "mobility_action_reward": 0.035,
+    "progressive_carry_distance_weight": 0.0012,
+    "pass_accuracy_threshold": 0.78,
+    "pass_accuracy_weight": 0.55,
+    "presence_factor": 0.0015,
+    "possession_loss_rate_penalty": 0.18,
+    "error_lead_to_shot_penalty": 0.35,
+    "error_lead_to_goal_penalty": 0.65,
+    "pass_value_weight": 0.65,
+    "accurate_long_ball_reward": 0.025,
+    "accurate_long_ball_cap": 10,
+    "opposition_half_pass_reward": 0.004,
+    "opposition_half_pass_cap": 30,
+    "long_ball_accuracy_min_attempts": 3,
+    "long_ball_accuracy_threshold": 0.48,
+    "long_ball_accuracy_weight": 0.18,
+    "goal_bonus": 0.55,
+    "penalty_goal_bonus": 0.35,
+    "xg_volume_weight": 0.25,
+    "shot_volume_reward": 0.035,
+    "match_assist_lift": 0.35,
+    "clean_sheet_bonus": 0.25,
+    "clean_sheet_min_minutes": 60,
+    "result_context_min_minutes": 45,
+    "win_bonus": 0.04,
+    "draw_bonus": 0.0,
+    "loss_penalty": 0.03,
+    "cb_context_min_minutes": 60,
+    "goal_conceded_after_first_penalty": 0.04,
+    "goal_conceded_penalty_cap": 0.12,
+    "low_xg_against_bonus_threshold": 0.7,
+    "low_xg_against_bonus": 0.04,
+    "high_xg_against_penalty_threshold": 1.8,
+    "high_xg_against_penalty_weight": 0.04,
+    "high_xg_against_penalty_cap": 0.08,
+    "big_chance_conceded_penalty": 0.025,
+    "big_chance_conceded_penalty_cap": 0.06,
+    "penalty_conceded_penalty": 0.35,
+    "own_goal_penalty": 0.45,
+    "red_card_penalty": -1.0,
+    "yellow_card_penalty": -0.05
+  },
+  "season_score": {
+    "version": 3,
+    "weights": {
+      "quality": 0.25,
+      "availability": 0.25,
+      "consistency": 0.35,
+      "peak": 0.15
+    },
+    "consistency_threshold": 7.0,
+    "impact_threshold": 8.0,
+    "availability_target_minutes": 1800,
+    "availability_target_ratio": 0.6,
+    "availability_floor": 0,
+    "availability_ratio_curve": "linear",
+    "replacement_level_score": 50,
+    "sample_size_shrinkage": true
+  },
+  "display_only_stats": [
+    "clearances",
+    "outfielderBlock",
+    "errorLeadToShot",
+    "errorLeadToGoal"
+  ],
+  "normalization": {
+    "method": "median_iqr",
+    "calibrated_at": "2026-04-29",
+    "sample_size": 74566,
+    "midpoints": {
+      "defensive": {
+        "median": 0.595,
+        "scale": 0.46,
+        "p25": 0.365,
+        "p75": 0.825
+      },
+      "duels": {
+        "median": 0.17,
+        "scale": 0.304,
+        "p25": 0.034,
+        "p75": 0.338
+      },
+      "carrying": {
+        "median": 0.1805,
+        "scale": 0.1844,
+        "p25": 0.092,
+        "p75": 0.2764
+      },
+      "team_function": {
+        "median": 0.088,
+        "scale": 0.1038,
+        "p25": 0.0373,
+        "p75": 0.1411
+      },
+      "volume_passing": {
+        "median": 0.107,
+        "scale": 0.1386,
+        "p25": 0.049,
+        "p75": 0.1876
+      },
+      "goal_threat": {
+        "median": 0.0,
+        "scale": 0.1,
+        "p25": 0.0,
+        "p75": 0.041
+      }
+    }
+  }
+}

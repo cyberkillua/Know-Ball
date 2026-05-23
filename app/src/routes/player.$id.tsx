@@ -74,7 +74,7 @@ const POSITION_LABELS: Record<string, string> = {
   LWB: "Fullbacks",
   RWB: "Fullbacks",
   CB: "Centre-Backs",
-  DEF: "Defenders",
+  DEF: "Centre-Backs",
   GK: "Goalkeepers",
 };
 
@@ -892,7 +892,8 @@ function defenderScoutReport(
 
 function methodVariantForPosition(position: string | null | undefined): React.ComponentProps<typeof RatingMethodNote>["variant"] {
   const pos = (position ?? "").toUpperCase();
-  if (["CB", "FB", "LB", "RB", "LWB", "RWB", "DEF", "DEFENDER"].includes(pos)) return "defender";
+  if (["FB", "LB", "RB", "LWB", "RWB"].includes(pos)) return "fullback";
+  if (["CB", "DEF", "DEFENDER"].includes(pos)) return "defender";
   if (["CM", "CDM", "DM", "MID", "MIDFIELDER"].includes(pos)) return "midfielder";
   if (["CAM", "AM"].includes(pos)) return "attacking-midfielder";
   if (["LW", "RW", "LM", "RM", "W", "WINGER"].includes(pos)) return "winger";
@@ -1258,8 +1259,10 @@ function PlayerProfilePage() {
         : defenderReport
           ? {
               report: defenderReport,
-              title: playerPosition === "CB" ? "CB Scout Report" : "Defender Scout Report",
-              emptyWarning: "No major defender-specific statistical warning in this peer pool.",
+              title: ["FB", "LB", "RB", "LWB", "RWB"].includes(playerPosition)
+                ? "Fullback Scout Report"
+                : "CB Scout Report",
+              emptyWarning: "No major defensive statistical warning in this peer pool.",
               seasonTitle: "Season Defensive Context",
             }
       : null;

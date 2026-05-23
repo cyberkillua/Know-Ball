@@ -40,7 +40,7 @@ def trait_definitions_for_position(position: str) -> list[dict[str, Any]]:
     config = _trait_config()
     positions = config.get("positions", {})
     key = position.upper().strip()
-    fallback = "W" if key == "WINGER" else "DEF" if key in {"CB", "FB"} else key
+    fallback = "W" if key == "WINGER" else "DEF" if key == "CB" else key
     return positions.get(key) or positions.get(fallback) or []
 
 

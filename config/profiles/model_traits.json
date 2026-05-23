@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "position_build_order": ["ST", "W", "CAM", "CM", "DEF"],
+  "position_build_order": ["ST", "W", "CAM", "CM", "DEF", "FB"],
   "positions": {
     "ST": [
       {
@@ -619,6 +619,107 @@
         ],
         "gates": [
           { "metric": "team_function_percentile", "label": "Composure risk gate", "max": 45, "cap": 45 }
+        ],
+        "concerns": [],
+        "minimum_minutes": 600
+      }
+    ],
+    "FB": [
+      {
+        "key": "overlap_creator",
+        "label": "Overlap Creator",
+        "description": "A fullback who creates from wide support runs, delivery, and repeatable attacking involvement.",
+        "family": "creation",
+        "signals": [
+          { "metric": "chance_creation_percentile", "label": "Chance creation", "weight": 0.28 },
+          { "metric": "accurate_cross_per90_percentile", "label": "Cross delivery", "weight": 0.24 },
+          { "metric": "xa_per90_percentile", "label": "xA volume", "weight": 0.18 },
+          { "metric": "key_passes_per90_percentile", "label": "Key passes", "weight": 0.16 },
+          { "metric": "touches_per90_percentile", "label": "Touch involvement", "weight": 0.14 }
+        ],
+        "gates": [
+          { "metric": "chance_creation_percentile", "label": "Creation gate", "min": 42, "cap": 55 }
+        ],
+        "concerns": [
+          { "metric": "defensive_percentile", "label": "Attacking output needs defensive context", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "inverted_support",
+        "label": "Inverted Support",
+        "description": "A fullback who supports buildup from inside lanes with secure and valuable passing.",
+        "family": "passing",
+        "signals": [
+          { "metric": "volume_passing_percentile", "label": "Passing volume", "weight": 0.28 },
+          { "metric": "team_function_percentile", "label": "Build-up security", "weight": 0.24 },
+          { "metric": "pass_value_normalized_percentile", "label": "Pass value", "weight": 0.22 },
+          { "metric": "passes_completed_per90_percentile", "label": "Pass involvement", "weight": 0.14 },
+          { "metric": "carrying_percentile", "label": "Carry support", "weight": 0.12 }
+        ],
+        "gates": [
+          { "metric": "volume_passing_percentile", "label": "Passing volume gate", "min": 42, "cap": 55 },
+          { "metric": "team_function_percentile", "label": "Security gate", "min": 38, "cap": 55 }
+        ],
+        "concerns": [
+          { "metric": "defensive_percentile", "label": "Inside support should not hide wide defending", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "wide_progressor",
+        "label": "Wide Progressor",
+        "description": "A fullback who advances play through carrying and progression from wide areas.",
+        "family": "mobility",
+        "signals": [
+          { "metric": "carrying_percentile", "label": "Carrying", "weight": 0.3 },
+          { "metric": "progressive_carries_distance_per90_percentile", "label": "Progressive carry distance", "weight": 0.26 },
+          { "metric": "dribbles_per90_percentile", "label": "Dribble volume", "weight": 0.18 },
+          { "metric": "pass_value_normalized_percentile", "label": "Pass value", "weight": 0.14 },
+          { "metric": "ball_recoveries_per90_percentile", "label": "Recovery mobility", "weight": 0.12 }
+        ],
+        "gates": [
+          { "metric": "carrying_percentile", "label": "Carrying gate", "min": 42, "cap": 55 }
+        ],
+        "concerns": [
+          { "metric": "possession_loss_rate_percentile", "label": "Progression may come with possession risk", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "lockdown_fullback",
+        "label": "Lockdown Fullback",
+        "description": "A fullback whose strongest value is defending wide spaces and winning repeat contests.",
+        "family": "defending",
+        "signals": [
+          { "metric": "defensive_percentile", "label": "Defensive work", "weight": 0.3 },
+          { "metric": "tackles_per90_percentile", "label": "Tackles", "weight": 0.2 },
+          { "metric": "interceptions_per90_percentile", "label": "Interceptions", "weight": 0.18 },
+          { "metric": "ground_duel_win_rate_percentile", "label": "Ground duel success", "weight": 0.18 },
+          { "metric": "ball_recoveries_per90_percentile", "label": "Recoveries", "weight": 0.14 }
+        ],
+        "gates": [
+          { "metric": "defensive_percentile", "label": "Defensive output gate", "min": 45, "cap": 56 }
+        ],
+        "concerns": [
+          { "metric": "chance_creation_percentile", "label": "Wide support output may be limited", "below": 35 }
+        ],
+        "minimum_minutes": 600
+      },
+      {
+        "key": "fullback_security_risk",
+        "label": "Fullback Security Risk",
+        "description": "A risk flag for fullbacks whose passing and possession security can expose wide transitions.",
+        "family": "risk",
+        "risk": true,
+        "signals": [
+          { "metric": "team_function_percentile", "label": "Build-up security", "weight": 0.34, "invert": true },
+          { "metric": "passing_accuracy_percentile", "label": "Passing security", "weight": 0.24, "invert": true },
+          { "metric": "possession_loss_rate_percentile", "label": "Possession security", "weight": 0.24, "invert": true },
+          { "metric": "carrying_percentile", "label": "Carry exposure", "weight": 0.18 }
+        ],
+        "gates": [
+          { "metric": "team_function_percentile", "label": "Security risk gate", "max": 45, "cap": 45 }
         ],
         "concerns": [],
         "minimum_minutes": 600

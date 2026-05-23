@@ -1,7 +1,7 @@
 import { ChevronDown, Info } from 'lucide-react'
 
 interface Props {
-  variant: 'forward' | 'winger' | 'attacking-midfielder' | 'midfielder' | 'defender'
+  variant: 'forward' | 'winger' | 'attacking-midfielder' | 'midfielder' | 'defender' | 'fullback'
 }
 
 const NOTES: Record<Props['variant'], { title: string; measured: string[]; limits: string[] }> = {
@@ -66,7 +66,7 @@ const NOTES: Record<Props['variant'], { title: string; measured: string[]; limit
     ],
   },
   defender: {
-    title: 'What this defender rating means',
+    title: 'What this centre-back rating means',
     measured: [
       'Box defending: clearances, blocks, interceptions, recoveries, tackles',
       'Duel security: aerial and ground contest outcomes',
@@ -77,7 +77,22 @@ const NOTES: Record<Props['variant'], { title: string; measured: string[]; limit
     limits: [
       'Off-ball positioning, marking, line control, communication, and covering runs are not fully visible in event data',
       'Shared responsibility for goals is only lightly captured unless a formal error is logged',
-      'Team style can affect volume: low-block defenders may record more defensive actions than proactive high-line defenders',
+      'Team style can affect volume: low-block centre-backs may record more defensive actions than proactive high-line centre-backs',
+    ],
+  },
+  fullback: {
+    title: 'What this fullback rating means',
+    measured: [
+      'Defending wide spaces: recoveries, tackles, interceptions, blocks, and duel outcomes',
+      'Ball security: passing, touches, possession losses, and mistake control',
+      'Build-up value: pass value, opposition-half passing, long balls, and progressive carrying',
+      'Mobility and contest work: ground duels, recovery actions, and carry progression',
+      'Direct impact and context: goals, assists, cards, penalties conceded, and clean-sheet context',
+    ],
+    limits: [
+      'Overlaps, underlaps, rest-defense positioning, recovery runs, and back-post marking are only partly visible',
+      'Fullback roles vary from wide outlet to inverted midfielder to conservative marker',
+      'Team shape strongly changes how often a fullback gets progression and defensive-event credit',
     ],
   },
 }

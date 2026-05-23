@@ -35,7 +35,7 @@ POSITION_GROUPS: list[tuple[list[str], str, str]] = [
     (["LW", "RW", "LM", "RM"], "W", "WINGER"),
     (["CM", "CDM"], "CM", "CM"),
     (["CB"], "DEF", "CB"),
-    (["LB", "RB", "LWB", "RWB"], "DEF", "FB"),
+    (["LB", "RB", "LWB", "RWB"], "FB", "FB"),
 ]
 # Each tuple: (profile_positions, rating_position, label)
 # profile_positions — players.position values that belong to the peer group
@@ -678,7 +678,7 @@ def compute_peer_ratings(
     is_winger = rating_position == "W"
     is_cam = rating_position == "CAM"
     is_cm = rating_position == "CM"
-    is_def = rating_position == "DEF"
+    is_def = rating_position in {"DEF", "FB"}
     if is_winger:
         dims = W_DIMENSIONS
     elif is_cam:

@@ -12,7 +12,7 @@ import type { Match, MatchRating } from '../lib/types'
 export const Route = createFileRoute('/match/$id')({ component: MatchDetailPage })
 
 function ratingBarsFor(r: MatchRating) {
-  if (r.position === 'DEF') {
+  if (r.position === 'DEF' || r.position === 'FB') {
     return {
       values: {
         finishing: Number(r.defensive_norm ?? 0),

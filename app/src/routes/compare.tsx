@@ -554,7 +554,7 @@ const POSITION_LABELS: Record<string, string> = {
   CAM: 'Attacking Midfielders', CM: 'Central Midfielders', CDM: 'Central Midfielders',
   DM: 'Central Midfielders', MID: 'Central Midfielders', MIDFIELDER: 'Central Midfielders',
   FB: 'Fullbacks', LB: 'Fullbacks', RB: 'Fullbacks', LWB: 'Fullbacks', RWB: 'Fullbacks',
-  CB: 'Centre-Backs', DEF: 'Defenders', GK: 'Goalkeepers',
+  CB: 'Centre-Backs', DEF: 'Centre-Backs', GK: 'Goalkeepers',
 }
 
 function rateColor(val: number, low: number, high: number) {

@@ -25,7 +25,7 @@ export default function MotmCard({
   physical,
   pressing,
 }: Props) {
-  const labels = position === 'DEF'
+  const labels = position === 'DEF' || position === 'FB'
     ? {
         finishing: 'Box Def.',
         involvement: 'Duels',

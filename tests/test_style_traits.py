@@ -135,3 +135,35 @@ def test_defender_style_profile_uses_defender_traits():
     assert profile is not None
     assert profile["primary"]["key"] == "box_defender"
     assert profile["strengths"][0]["label"] == "Box Defender"
+
+
+def test_fullback_style_profile_uses_fullback_traits():
+    profile = assign_style_profile(
+        {
+            "rated_minutes": 1800,
+            "volume_passing_percentile": 88,
+            "team_function_percentile": 84,
+            "pass_value_normalized_percentile": 90,
+            "passes_completed_per90_percentile": 82,
+            "carrying_percentile": 74,
+            "defensive_percentile": 62,
+            "chance_creation_percentile": 48,
+            "accurate_cross_per90_percentile": 44,
+            "xa_per90_percentile": 43,
+            "key_passes_per90_percentile": 45,
+            "touches_per90_percentile": 81,
+            "progressive_carries_distance_per90_percentile": 68,
+            "dribbles_per90_percentile": 52,
+            "ball_recoveries_per90_percentile": 57,
+            "tackles_per90_percentile": 59,
+            "interceptions_per90_percentile": 54,
+            "ground_duel_win_rate_percentile": 61,
+            "passing_accuracy_percentile": 78,
+            "possession_loss_rate_percentile": 73,
+        },
+        "FB",
+    )
+
+    assert profile is not None
+    assert profile["primary"]["key"] == "inverted_support"
+    assert profile["strengths"][0]["label"] == "Inverted Support"

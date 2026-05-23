@@ -40,9 +40,7 @@ def role_definitions_for_position(position: str) -> list[dict[str, Any]]:
     config = _role_config()
     positions = config.get("positions", {})
     key = position.upper().strip()
-    return (
-        positions.get(key) or positions.get("DEF" if key in {"CB", "FB"} else key) or []
-    )
+    return positions.get(key) or positions.get("DEF" if key == "CB" else key) or []
 
 
 def role_metric_names() -> list[str]:

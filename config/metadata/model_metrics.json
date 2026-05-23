@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "position_build_order": ["ST", "W", "CAM", "CM", "DEF"],
+  "position_build_order": ["ST", "W", "CAM", "CM", "DEF", "FB"],
   "metrics": [
     {
       "key": "shots_per90_percentile",
@@ -108,7 +108,7 @@
       "domain": "carrying",
       "value_type": "percentile",
       "direction": "higher_is_better",
-      "positions": ["ST", "W", "CAM", "CM", "DEF"],
+      "positions": ["ST", "W", "CAM", "CM", "DEF", "FB"],
       "source": "peer_ratings.carrying_percentile",
       "confidence_notes": "Should be checked with possession loss and role context."
     },
@@ -141,7 +141,7 @@
       "domain": "physical",
       "value_type": "percentile",
       "direction": "higher_is_better",
-      "positions": ["ST", "DEF"],
+      "positions": ["ST", "DEF", "FB"],
       "source": "peer_ratings.aerials_per90_percentile",
       "confidence_notes": "Volume is shaped by team directness and opponent behavior."
     },
@@ -152,7 +152,7 @@
       "domain": "physical",
       "value_type": "percentile",
       "direction": "higher_is_better",
-      "positions": ["ST", "DEF"],
+      "positions": ["ST", "DEF", "FB"],
       "source": "peer_ratings.aerial_win_rate_percentile",
       "confidence_notes": "Needs volume context because low-attempt players can rate well."
     },
@@ -163,7 +163,7 @@
       "domain": "defending",
       "value_type": "percentile",
       "direction": "higher_is_better",
-      "positions": ["ST", "W", "CAM", "CM", "DEF"],
+      "positions": ["ST", "W", "CAM", "CM", "DEF", "FB"],
       "source": "peer_ratings.ball_recoveries_per90_percentile",
       "confidence_notes": "Team pressing structure can create or reduce recovery opportunities."
     },
@@ -174,7 +174,7 @@
       "domain": "risk",
       "value_type": "percentile",
       "direction": "higher_is_better",
-      "positions": ["ST", "W", "CAM", "CM", "DEF"],
+      "positions": ["ST", "W", "CAM", "CM", "DEF", "FB"],
       "source": "peer_ratings.possession_loss_rate_percentile",
       "confidence_notes": "Must be interpreted alongside how risky and valuable the player's role is."
     }

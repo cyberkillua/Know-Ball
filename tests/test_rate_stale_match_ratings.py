@@ -19,6 +19,8 @@ def test_delete_stale_match_ratings_normalizes_profile_positions():
     assert "mr.position IS DISTINCT FROM" in sql
     assert "'CF'" in sql
     assert "THEN 'ST'" in sql
+    assert "'LWB'" in sql
+    assert "THEN 'FB'" in sql
     assert "'CAM'" in sql
     assert "THEN 'CAM'" in sql
     assert params == ()
