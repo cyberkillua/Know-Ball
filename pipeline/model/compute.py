@@ -648,7 +648,8 @@ def compute_peer_ratings(
             MAX(pss.accurate_final_third_passes)                     AS accurate_final_third_passes_raw,
             MAX(pss.pass_to_assist)                                  AS pass_to_assist_raw,
             BOOL_OR(pss.accurate_final_third_passes IS NOT NULL)      AS has_accurate_final_third_passes,
-            BOOL_OR(pss.pass_to_assist IS NOT NULL)                   AS has_pass_to_assist
+            BOOL_OR(pss.pass_to_assist IS NOT NULL)                   AS has_pass_to_assist,
+            MAX(ppt.team_id)::int                                     AS primary_team_id
         FROM annotated_stats a
         {dominant_join}
         LEFT JOIN player_season_understat psu
@@ -661,6 +662,10 @@ def compute_peer_ratings(
             ON tma.player_id = a.player_id
            AND tma.league_id = a.league_id
            AND tma.season    = a.season
+        LEFT JOIN player_primary_team ppt
+            ON ppt.player_id = a.player_id
+           AND ppt.league_id = a.league_id
+           AND ppt.season    = a.season
         WHERE {player_filter}
         GROUP BY a.player_id, a.player_position, a.league_id, a.season
         """,
@@ -793,6 +798,7 @@ def compute_peer_ratings(
         p = {
             "player_id": r["player_id"],
             "league_id": r["league_id"],
+            "primary_team_id": r.get("primary_team_id"),
             "season": r["season"],
             "position": position_label,
             "player_position": r["player_position"],
@@ -1622,7 +1628,7 @@ def compute_peer_ratings(
 
     upsert_sql = """
             INSERT INTO peer_ratings (
-                player_id, league_id, season, position, peer_mode, position_scope,
+                player_id, league_id, primary_team_id, season, position, peer_mode, position_scope,
                 cm_archetype, role_archetype, role_family, role_fit, role_confidence, role_evidence,
                 style_profile, style_confidence,
                 matches_played, minutes_played, rated_minutes, avg_match_rating,
@@ -1706,7 +1712,7 @@ def compute_peer_ratings(
                 pass_to_assist_per90_percentile,
                 pass_to_assist_raw_percentile
             ) VALUES (
-                %(player_id)s, %(league_id)s, %(season)s, %(position)s, %(peer_mode)s, %(position_scope)s,
+                %(player_id)s, %(league_id)s, %(primary_team_id)s, %(season)s, %(position)s, %(peer_mode)s, %(position_scope)s,
                 %(cm_archetype)s, %(role_archetype)s, %(role_family)s, %(role_fit)s, %(role_confidence)s, %(role_evidence)s,
                 %(style_profile)s, %(style_confidence)s,
                 %(matches_played)s, %(minutes_played)s, %(rated_minutes)s, %(avg_match_rating)s,
@@ -1791,6 +1797,7 @@ def compute_peer_ratings(
                 %(pass_to_assist_raw_percentile)s
             )
             ON CONFLICT (player_id, league_id, season, peer_mode, position_scope) DO UPDATE SET
+                primary_team_id                   = EXCLUDED.primary_team_id,
                 position                          = EXCLUDED.position,
                 peer_mode                         = EXCLUDED.peer_mode,
                 position_scope                    = EXCLUDED.position_scope,

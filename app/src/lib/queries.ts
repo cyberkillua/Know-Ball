@@ -850,7 +850,7 @@ export const getLeaguePlayers = createServerFn({ method: 'GET' })
       }
     }
     if (data.clubId) {
-      clubFilter = ` AND primary_team.team_id = $${params.length + 1}`
+      clubFilter = ` AND pr.primary_team_id = $${params.length + 1}`
       params.push(data.clubId)
     }
     if (data.search) {
@@ -860,34 +860,13 @@ export const getLeaguePlayers = createServerFn({ method: 'GET' })
     }
 
     return query<LeaguePlayer>(
-      `WITH season_team AS (
-         SELECT
-           mps.player_id,
-           mps.team_id,
-           COUNT(*) AS appearances,
-           SUM(mps.minutes_played) AS minutes_played,
-           ROW_NUMBER() OVER (
-             PARTITION BY mps.player_id
-             ORDER BY COUNT(*) DESC, SUM(mps.minutes_played) DESC, mps.team_id
-           ) AS rn
-         FROM match_player_stats mps
-         JOIN matches m ON m.id = mps.match_id
-         WHERE m.league_id = $1 AND m.season = $2
-         GROUP BY mps.player_id, mps.team_id
-       ),
-       primary_team AS (
-         SELECT player_id, team_id
-         FROM season_team
-         WHERE rn = 1
-       )
-       SELECT p.id, p.name, p.position as position, p.nationality, p.date_of_birth,
+      `SELECT p.id, p.name, p.position as position, p.nationality, p.date_of_birth,
               EXTRACT(YEAR FROM AGE(p.date_of_birth))::int as age,
-              st.name as club, primary_team.team_id as club_id, p.photo_url,
+              st.name as club, pr.primary_team_id as club_id, p.photo_url,
               pr.model_score, pr.model_score_confidence, pr.rated_minutes
        FROM peer_ratings pr
        JOIN players p ON p.id = pr.player_id
-       LEFT JOIN primary_team ON primary_team.player_id = pr.player_id
-       LEFT JOIN teams st ON st.id = primary_team.team_id
+       LEFT JOIN teams st ON st.id = pr.primary_team_id
        WHERE pr.league_id = $1 AND pr.season = $2
          AND pr.peer_mode = 'dominant' AND pr.position_scope = ''
          ${posFilter}${clubFilter}${searchFilter}
@@ -919,11 +898,9 @@ export const getAllPlayers = createServerFn({ method: 'GET' })
     const params: any[] = [data.season]
     let leagueParamIdx: number | null = null
 
-    let seasonTeamLeagueFilter = ''
     if (data.leagueId != null) {
       params.push(data.leagueId)
       leagueParamIdx = params.length
-      seasonTeamLeagueFilter = ` AND m.league_id = $${leagueParamIdx}`
     }
 
     const postWhere: string[] = []
@@ -936,7 +913,7 @@ export const getAllPlayers = createServerFn({ method: 'GET' })
     }
     if (data.clubId != null) {
       params.push(data.clubId)
-      postWhere.push(`primary_team.team_id = $${params.length}`)
+      postWhere.push(`pr.primary_team_id = $${params.length}`)
     }
     if (data.search) {
       params.push(data.search)
@@ -947,37 +924,13 @@ export const getAllPlayers = createServerFn({ method: 'GET' })
     const prLeagueFilter = leagueParamIdx != null ? `AND pr.league_id = $${leagueParamIdx}` : ''
 
     return query<LeaguePlayer & { league_name: string | null }>(
-      `WITH season_team AS (
-         SELECT
-           mps.player_id,
-           mps.team_id,
-           m.league_id,
-           COUNT(*) AS appearances,
-           SUM(mps.minutes_played) AS minutes_played,
-           ROW_NUMBER() OVER (
-             PARTITION BY mps.player_id, m.league_id
-             ORDER BY COUNT(*) DESC, SUM(mps.minutes_played) DESC, mps.team_id
-           ) AS rn
-         FROM match_player_stats mps
-         JOIN matches m ON m.id = mps.match_id
-         WHERE m.season = $1${seasonTeamLeagueFilter}
-         GROUP BY mps.player_id, mps.team_id, m.league_id
-       ),
-       primary_team AS (
-         SELECT player_id, team_id, league_id
-         FROM season_team
-         WHERE rn = 1
-       )
-       SELECT p.id, p.name, p.position as position, p.nationality, p.date_of_birth,
+      `SELECT p.id, p.name, p.position as position, p.nationality, p.date_of_birth,
               EXTRACT(YEAR FROM AGE(p.date_of_birth))::int as age,
-              st.name as club, primary_team.team_id as club_id, p.photo_url,
+              st.name as club, pr.primary_team_id as club_id, p.photo_url,
               pr.model_score, pr.model_score_confidence, pr.rated_minutes, l.name as league_name
        FROM peer_ratings pr
        JOIN players p ON p.id = pr.player_id
-       LEFT JOIN primary_team
-         ON primary_team.player_id = pr.player_id
-        AND primary_team.league_id = pr.league_id
-       LEFT JOIN teams st ON st.id = primary_team.team_id
+       LEFT JOIN teams st ON st.id = pr.primary_team_id
        LEFT JOIN leagues l ON l.id = pr.league_id
        WHERE pr.season = $1
          AND pr.league_id IS NOT NULL

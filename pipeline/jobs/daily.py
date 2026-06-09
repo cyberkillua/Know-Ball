@@ -122,6 +122,21 @@ def _run_league_pipeline(
     _run("pipeline.model.compute", *db_league_scope)
 
 
+def _refresh_planner_stats() -> None:
+    """Refresh planner statistics after the bulk rating rewrites.
+
+    rate/compute delete-and-reinsert match_ratings and peer_ratings, which leaves
+    the planner's stats stale until autovacuum lazily catches up. Running ANALYZE
+    here keeps the read app's query plans accurate against the freshly written data.
+    """
+    db = DB()
+    try:
+        log.info("Refreshing planner statistics (ANALYZE)")
+        db.execute("ANALYZE match_ratings, peer_ratings, match_player_stats, shots")
+    finally:
+        db.close()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the daily Know Ball pipeline")
     parser.add_argument(
@@ -231,6 +246,7 @@ def main() -> None:
                 season_stats_concurrency=args.season_stats_concurrency,
                 season_stats_batch_size=args.season_stats_batch_size,
             )
+        _refresh_planner_stats()
 
     if not args.skip_health_check:
         health_args = [*season_scope]
