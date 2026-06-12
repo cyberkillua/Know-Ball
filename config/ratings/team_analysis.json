@@ -1,0 +1,8 @@
+{
+  "_description": "Tunable constants for team style analysis.",
+  "style": {
+    "strength_percentile_min": 60,
+    "weakness_percentile_max": 40,
+    "max_items": 4
+  }
+}

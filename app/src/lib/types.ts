@@ -664,3 +664,43 @@ export interface MatchOdds {
   draw: number | null
   away_win: number | null
 }
+
+// --- Team analysis ---
+
+export interface TeamStyleMetricItem {
+  key: string
+  label: string
+  value: number
+  percentile: number
+}
+
+export interface TeamStyleProfile {
+  team_id: number
+  league_id: number
+  season: string
+  matches_played: number
+  metrics: Record<string, number>
+  percentiles: Record<string, number>
+  axes: Record<string, number>
+  strengths: TeamStyleMetricItem[]
+  weaknesses: TeamStyleMetricItem[]
+}
+
+export interface TeamProfileBundle {
+  team: {
+    id: number
+    name: string
+    logo_url: string | null
+    league_id: number
+    league: { id: number; name: string } | null
+  } | null
+  seasons: string[]
+  season: string | null
+  style: TeamStyleProfile | null
+}
+
+export interface TeamSearchResult {
+  id: number
+  name: string
+  league_name: string
+}

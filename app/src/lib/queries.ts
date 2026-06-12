@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { query, queryOne } from './db.server'
 import { POSITION_GROUPS, POSITION_GROUP_TO_RATING_CODES, ratingCodeToPositionGroup, type PositionGroup } from './positions'
-import type { League, Match, MatchRating, PeerMetricRank, Player, PlayerSeasonTrendPoint, PlayerStats, PeerRating, PlayerPeerRatingResponse, PlayerUnderstat, RoleFitProfile, Shot, SimilarRoleProfile } from './types'
+import type { League, Match, MatchRating, PeerMetricRank, Player, PlayerSeasonTrendPoint, PlayerStats, PeerRating, PlayerPeerRatingResponse, PlayerUnderstat, RoleFitProfile, Shot, SimilarRoleProfile, TeamProfileBundle, TeamSearchResult, TeamStyleProfile } from './types'
 
 export const getLeagues = createServerFn({ method: 'GET' }).handler(async () => {
   return query<League>('SELECT * FROM leagues ORDER BY tier, name')
@@ -971,4 +971,54 @@ export const getLeaguePositions = createServerFn({ method: 'GET' })
       rows.map((r) => ratingCodeToPositionGroup(r.rating_code)).filter((g): g is PositionGroup => g != null),
     )
     return POSITION_GROUPS.filter((group) => available.has(group.value))
+  })
+
+// --- Team analysis ---
+
+export const getTeamProfile = createServerFn({ method: 'GET' })
+  .inputValidator((d: { teamId: number; season?: string }) => d)
+  .handler(async ({ data }): Promise<TeamProfileBundle> => {
+    const team = await queryOne<TeamProfileBundle['team']>(
+      `SELECT t.id, t.name, t.logo_url, t.league_id,
+              json_build_object('id', l.id, 'name', l.name) as league
+       FROM teams t
+       JOIN leagues l ON l.id = t.league_id
+       WHERE t.id = $1`,
+      [data.teamId],
+    )
+
+    const seasonRows = await query<{ season: string }>(
+      `SELECT DISTINCT season FROM team_style_profiles
+       WHERE team_id = $1 ORDER BY season DESC`,
+      [data.teamId],
+    )
+    const seasons = seasonRows.map((r) => r.season)
+    const season = data.season ?? seasons[0] ?? null
+
+    if (!team || !season) {
+      return { team, seasons, season: null, style: null }
+    }
+
+    const style = await queryOne<TeamStyleProfile>(
+      `SELECT * FROM team_style_profiles WHERE team_id = $1 AND season = $2`,
+      [data.teamId, season],
+    )
+
+    return { team, seasons, season, style }
+  })
+
+export const searchTeams = createServerFn({ method: 'GET' })
+  .inputValidator((d: { query: string }) => d)
+  .handler(async ({ data }) => {
+    return query<TeamSearchResult>(
+      `SELECT t.id, t.name, l.name as league_name
+       FROM teams t
+       JOIN leagues l ON l.id = t.league_id
+       WHERE EXISTS (SELECT 1 FROM team_style_profiles s WHERE s.team_id = t.id)
+         AND (unaccent(t.name) ILIKE '%' || unaccent($1) || '%'
+              OR similarity(unaccent(lower(t.name)), unaccent(lower($1))) > 0.3)
+       ORDER BY similarity(unaccent(lower(t.name)), unaccent(lower($1))) DESC
+       LIMIT 8`,
+      [data.query],
+    )
   })

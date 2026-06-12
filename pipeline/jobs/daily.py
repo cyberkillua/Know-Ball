@@ -120,6 +120,7 @@ def _run_league_pipeline(
 
     _run("pipeline.model.rate", *db_league_scope)
     _run("pipeline.model.compute", *db_league_scope)
+    _run("pipeline.model.compute_teams", *db_league_scope)
 
 
 def _refresh_planner_stats() -> None:
@@ -132,7 +133,10 @@ def _refresh_planner_stats() -> None:
     db = DB()
     try:
         log.info("Refreshing planner statistics (ANALYZE)")
-        db.execute("ANALYZE match_ratings, peer_ratings, match_player_stats, shots")
+        db.execute(
+            "ANALYZE match_ratings, peer_ratings, match_player_stats, shots, "
+            "team_style_profiles"
+        )
     finally:
         db.close()
 
