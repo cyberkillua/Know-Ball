@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS team_style_profiles (
   axes            JSONB   NOT NULL,
   strengths       JSONB   NOT NULL,
   weaknesses      JSONB   NOT NULL,
+  phases          JSONB   NOT NULL,
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (team_id, league_id, season)
 );

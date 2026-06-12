@@ -23,6 +23,9 @@ DEFAULT_CONFIG = {
         "strength_percentile_min": 60,
         "weakness_percentile_max": 40,
         "max_items": 4,
+        "phase_items": 2,
+        "phase_relative_strength_percentile_min": 50,
+        "phase_improvement_percentile_max": 89,
     },
 }
 
@@ -59,18 +62,85 @@ STYLE_METRICS: list[tuple[str, str, bool]] = [
     ("possession", "Possession", True),
     ("passes_for", "Passing volume", True),
     ("pass_accuracy", "Passing accuracy", True),
+    ("goals_against", "Goals conceded", False),
     ("xg_against", "Expected goals conceded", False),
     ("shots_against", "Shots conceded", False),
     ("big_chances_against", "Big chances conceded", False),
 ]
 
 STYLE_AXES: dict[str, list[str]] = {
-    "attack": ["xg_for", "shots_for", "big_chances_for"],
-    "creation": ["big_chances_for", "key_passes_for"],
-    "possession": ["possession", "passes_for", "pass_accuracy"],
-    "defending": ["xg_against", "shots_against", "big_chances_against"],
-    "finishing": ["finishing_overperformance", "goals_for"],
+    "attack": [
+        "xg_for",
+        "shots_for",
+        "big_chances_for",
+        "goals_for",
+        "finishing_overperformance",
+    ],
+    "midfield": ["key_passes_for", "possession", "passes_for", "pass_accuracy"],
+    "defence": [
+        "goals_against",
+        "xg_against",
+        "shots_against",
+        "big_chances_against",
+    ],
 }
+
+PHASES: dict[str, dict[str, object]] = {
+    "attack": {
+        "label": "Attack",
+        "metrics": STYLE_AXES["attack"],
+    },
+    "midfield": {
+        "label": "Midfield & control",
+        "metrics": STYLE_AXES["midfield"],
+    },
+    "defence": {
+        "label": "Defence",
+        "metrics": STYLE_AXES["defence"],
+    },
+}
+
+METRIC_LABELS = {key: label for key, label, _ in STYLE_METRICS}
+
+
+def _metric_item(key: str, metrics: dict, percentiles: dict) -> dict:
+    return {
+        "key": key,
+        "label": METRIC_LABELS[key],
+        "value": metrics[key],
+        "percentile": percentiles[key],
+    }
+
+
+def _build_phase_profiles(metrics: dict, percentiles: dict) -> dict:
+    """Build honest phase reports: relative best areas and clearest improvements."""
+    style_config = CFG["style"]
+    item_limit = style_config["phase_items"]
+    relative_strength_min = style_config["phase_relative_strength_percentile_min"]
+    improvement_max = style_config["phase_improvement_percentile_max"]
+    phases = {}
+    for key, phase in PHASES.items():
+        ranked = sorted(
+            (
+                _metric_item(metric_key, metrics, percentiles)
+                for metric_key in phase["metrics"]
+            ),
+            key=lambda item: item["percentile"],
+            reverse=True,
+        )
+        phases[key] = {
+            "label": phase["label"],
+            "score": round(
+                sum(item["percentile"] for item in ranked) / len(ranked)
+            ),
+            "relative_strengths": [
+                item for item in ranked if item["percentile"] >= relative_strength_min
+            ][:item_limit],
+            "improvements": [
+                item for item in reversed(ranked) if item["percentile"] <= improvement_max
+            ][:item_limit],
+        }
+    return phases
 
 
 def _team_style_metrics(
@@ -116,6 +186,8 @@ def _team_style_metrics(
                 AS pass_accuracy,
             AVG(CASE WHEN m.home_team_id = s.team_id THEN m.home_score
                      ELSE m.away_score END) AS goals_for
+            ,AVG(CASE WHEN m.home_team_id = s.team_id THEN m.away_score
+                      ELSE m.home_score END) AS goals_against
         FROM match_team_stats s
         JOIN matches m ON m.id = s.match_id
         JOIN match_team_stats o ON o.match_id = s.match_id AND o.team_id <> s.team_id
@@ -148,6 +220,7 @@ def _team_style_metrics(
                 "pass_accuracy": round(float(row["pass_accuracy"] or 0) * 100, 1),
                 "goals_for": round(goals_for, 2),
                 "finishing_overperformance": round(goals_for - xg_for, 2),
+                "goals_against": round(float(row["goals_against"] or 0), 2),
             },
         }
     return result
@@ -203,6 +276,7 @@ def _build_style_profiles(
                 for item in reversed(ranked)
                 if item["percentile"] <= style_config["weakness_percentile_max"]
             ][:limit]
+            phases = _build_phase_profiles(metrics, percentiles)
             profiles.append(
                 {
                     "team_id": team_id,
@@ -214,6 +288,7 @@ def _build_style_profiles(
                     "axes": axes,
                     "strengths": strengths,
                     "weaknesses": weaknesses,
+                    "phases": phases,
                 }
             )
     return profiles
@@ -227,7 +302,7 @@ def _store_style(db: DB, profiles: list[dict]) -> None:
         """
         INSERT INTO team_style_profiles
             (team_id, league_id, season, matches_played,
-             metrics, percentiles, axes, strengths, weaknesses)
+             metrics, percentiles, axes, strengths, weaknesses, phases)
         VALUES %s
         ON CONFLICT (team_id, league_id, season) DO UPDATE SET
             matches_played = EXCLUDED.matches_played,
@@ -236,6 +311,7 @@ def _store_style(db: DB, profiles: list[dict]) -> None:
             axes           = EXCLUDED.axes,
             strengths      = EXCLUDED.strengths,
             weaknesses     = EXCLUDED.weaknesses,
+            phases         = EXCLUDED.phases,
             updated_at     = now()
         """,
         [
@@ -249,6 +325,7 @@ def _store_style(db: DB, profiles: list[dict]) -> None:
                 json.dumps(profile["axes"]),
                 json.dumps(profile["strengths"]),
                 json.dumps(profile["weaknesses"]),
+                json.dumps(profile["phases"]),
             )
             for profile in profiles
         ],

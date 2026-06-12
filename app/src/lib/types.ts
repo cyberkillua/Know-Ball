@@ -674,6 +674,13 @@ export interface TeamStyleMetricItem {
   percentile: number
 }
 
+export interface TeamStylePhase {
+  label: string
+  score: number
+  relative_strengths: TeamStyleMetricItem[]
+  improvements: TeamStyleMetricItem[]
+}
+
 export interface TeamStyleProfile {
   team_id: number
   league_id: number
@@ -684,6 +691,7 @@ export interface TeamStyleProfile {
   axes: Record<string, number>
   strengths: TeamStyleMetricItem[]
   weaknesses: TeamStyleMetricItem[]
+  phases: Record<string, TeamStylePhase>
 }
 
 export interface TeamProfileBundle {

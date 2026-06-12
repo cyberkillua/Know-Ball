@@ -3,6 +3,9 @@
   "style": {
     "strength_percentile_min": 60,
     "weakness_percentile_max": 40,
-    "max_items": 4
+    "max_items": 4,
+    "phase_items": 2,
+    "phase_relative_strength_percentile_min": 50,
+    "phase_improvement_percentile_max": 89
   }
 }

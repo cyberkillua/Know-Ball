@@ -12,7 +12,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Skeleton } from '../components/ui/skeleton'
 import { getTeamProfile } from '../lib/queries'
-import type { TeamProfileBundle } from '../lib/types'
+import type { TeamProfileBundle, TeamStylePhase } from '../lib/types'
 
 export const Route = createFileRoute('/team/$id')({
   component: TeamProfilePage,
@@ -20,11 +20,11 @@ export const Route = createFileRoute('/team/$id')({
 
 const AXIS_LABELS: Record<string, string> = {
   attack: 'Attack',
-  creation: 'Creation',
-  possession: 'Possession',
-  defending: 'Defending',
-  finishing: 'Finishing',
+  midfield: 'Midfield',
+  defence: 'Defence',
 }
+
+const PHASE_ORDER = ['attack', 'midfield', 'defence']
 
 function StyleRadar({ axes }: { axes: Record<string, number> }) {
   const data = Object.keys(AXIS_LABELS).map((key) => ({
@@ -54,31 +54,83 @@ function StyleRadar({ axes }: { axes: Record<string, number> }) {
 function MetricChips({
   items,
   tone,
+  emptyText = 'None stand out.',
 }: {
   items: { key: string; label: string; value: number; percentile: number }[]
-  tone: 'good' | 'bad'
+  tone: 'leading' | 'relative' | 'improve'
+  emptyText?: string
 }) {
   if (items.length === 0) {
-    return <p className="text-sm text-muted-foreground">None stand out.</p>
+    return <p className="text-sm text-muted-foreground">{emptyText}</p>
   }
-  const cls =
-    tone === 'good'
-      ? 'border-emerald-500/30 bg-emerald-500/10'
-      : 'border-red-500/30 bg-red-500/10'
+  const baseCls = {
+    leading: 'border-emerald-500/30 bg-emerald-500/10',
+    relative: 'border-primary/25 bg-primary/5',
+    improve: '',
+  }[tone]
   return (
     <div className="flex flex-col gap-2">
-      {items.map((metric) => (
-        <div
-          key={metric.key}
-          className={`flex items-center justify-between rounded-md border px-3 py-2 ${cls}`}
-        >
-          <span className="text-sm text-foreground">{metric.label}</span>
-          <span className="text-xs font-medium text-muted-foreground">
-            {metric.value} · {metric.percentile}th pct
+      {items.map((metric) => {
+        const opportunityCls =
+          metric.percentile <= 25
+            ? 'border-red-500/40 bg-red-500/10'
+            : metric.percentile <= 49
+              ? 'border-orange-500/35 bg-orange-500/10'
+              : metric.percentile <= 69
+                ? 'border-amber-500/30 bg-amber-500/10'
+                : 'border-sky-500/25 bg-sky-500/10'
+        const cls = tone === 'improve' ? opportunityCls : baseCls
+        return (
+          <div
+            key={metric.key}
+            className={`flex items-center justify-between rounded-md border px-3 py-2 ${cls}`}
+          >
+            <span className="text-sm text-foreground">{metric.label}</span>
+            <span className="text-xs font-medium text-muted-foreground">
+              {metric.value} · {metric.percentile}th pct
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function PhaseCard({ phase }: { phase: TeamStylePhase }) {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <CardTitle className="text-base">{phase.label}</CardTitle>
+          <span className="text-sm font-semibold text-foreground">
+            {phase.score}
+            <span className="ml-1 text-xs font-normal text-muted-foreground">phase score</span>
           </span>
         </div>
-      ))}
-    </div>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div>
+          <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Relative strengths
+          </h3>
+          <MetricChips
+            items={phase.relative_strengths}
+            tone="relative"
+            emptyText="No above-average strengths in this phase."
+          />
+        </div>
+        <div>
+          <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Can improve
+          </h3>
+          <MetricChips
+            items={phase.improvements}
+            tone="improve"
+            emptyText="All metrics in this phase are at or above the 90th percentile."
+          />
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -161,38 +213,48 @@ function TeamProfilePage() {
       {!style ? (
         <p className="text-muted-foreground">No analysis available for this season yet.</p>
       ) : (
-        <section className="grid gap-4 md:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Style identity</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <StyleRadar axes={style.axes} />
-            </CardContent>
-          </Card>
-          <div className="grid gap-4">
+        <>
+          <section className="grid gap-4 md:grid-cols-2">
             <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm text-muted-foreground">
-                  What they're good at
-                </CardTitle>
+              <CardHeader>
+                <CardTitle className="text-base">Phase profile</CardTitle>
               </CardHeader>
               <CardContent>
-                <MetricChips items={style.strengths} tone="good" />
+                <StyleRadar axes={style.axes} />
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm text-muted-foreground">
-                  Where they fall short
-                </CardTitle>
+                <CardTitle className="text-base">League-leading strengths</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Metrics at or above the 60th percentile in this league and season.
+                </p>
               </CardHeader>
               <CardContent>
-                <MetricChips items={style.weaknesses} tone="bad" />
+                <MetricChips
+                  items={style.strengths}
+                  tone="leading"
+                  emptyText="No metrics currently clear the league-leading threshold."
+                />
               </CardContent>
             </Card>
-          </div>
-        </section>
+          </section>
+
+          <section className="space-y-3">
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">By phase</h2>
+              <p className="text-sm text-muted-foreground">
+                Relative strengths are the best parts of this team's own profile, even when they
+                are below league average. Improvement areas are the weakest metrics in each phase.
+              </p>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-3">
+              {PHASE_ORDER.map((key) => style.phases?.[key]).filter(Boolean).map((phase) => (
+                <PhaseCard key={phase.label} phase={phase} />
+              ))}
+            </div>
+          </section>
+        </>
       )}
     </div>
   )
