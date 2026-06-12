@@ -12,7 +12,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Skeleton } from '../components/ui/skeleton'
 import { getTeamProfile } from '../lib/queries'
-import type { TeamProfileBundle, TeamStylePhase } from '../lib/types'
+import type { TeamProfileBundle, TeamStylePhase, TeamTendency } from '../lib/types'
 
 export const Route = createFileRoute('/team/$id')({
   component: TeamProfilePage,
@@ -134,6 +134,38 @@ function PhaseCard({ phase }: { phase: TeamStylePhase }) {
   )
 }
 
+function TendencyCard({ tendency }: { tendency: TeamTendency }) {
+  const confidenceCls =
+    tendency.confidence === 'high'
+      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-500'
+      : 'border-amber-500/30 bg-amber-500/10 text-amber-500'
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <CardTitle className="text-base">{tendency.label}</CardTitle>
+          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${confidenceCls}`}>
+            {tendency.confidence} confidence
+          </span>
+        </div>
+        <p className="text-sm text-muted-foreground">{tendency.description}</p>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap gap-2">
+          {tendency.evidence.map((metric) => (
+            <span
+              key={metric.key}
+              className="rounded-full border border-border bg-secondary px-2 py-1 text-xs text-muted-foreground"
+            >
+              {metric.label}: {metric.percentile}th
+            </span>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 function TeamProfilePage() {
   const { id } = Route.useParams()
   const [bundle, setBundle] = useState<TeamProfileBundle | null>(null)
@@ -242,10 +274,33 @@ function TeamProfilePage() {
 
           <section className="space-y-3">
             <div>
+              <h2 className="text-lg font-semibold text-foreground">Team tendencies</h2>
+              <p className="text-sm text-muted-foreground">
+                Evidence-backed descriptions of how the team tends to play. These describe style,
+                not whether that style is successful.
+              </p>
+            </div>
+            {style.tendencies?.length ? (
+              <div className="grid gap-4 md:grid-cols-2">
+                {style.tendencies.map((tendency) => (
+                  <TendencyCard key={tendency.key} tendency={tendency} />
+                ))}
+              </div>
+            ) : (
+              <Card>
+                <CardContent className="py-5 text-sm text-muted-foreground">
+                  No strong multi-metric tendencies detected.
+                </CardContent>
+              </Card>
+            )}
+          </section>
+
+          <section className="space-y-3">
+            <div>
               <h2 className="text-lg font-semibold text-foreground">By phase</h2>
               <p className="text-sm text-muted-foreground">
-                Relative strengths are the best parts of this team's own profile, even when they
-                are below league average. Improvement areas are the weakest metrics in each phase.
+                Relative strengths are above-average parts of this team's profile. Improvement
+                areas show the biggest remaining opportunities in each phase.
               </p>
             </div>
             <div className="grid gap-4 lg:grid-cols-3">

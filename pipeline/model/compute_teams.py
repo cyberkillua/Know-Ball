@@ -26,6 +26,8 @@ DEFAULT_CONFIG = {
         "phase_items": 2,
         "phase_relative_strength_percentile_min": 50,
         "phase_improvement_percentile_max": 89,
+        "tendency_score_min": 60,
+        "max_tendencies": 5,
     },
 }
 
@@ -141,6 +143,270 @@ def _build_phase_profiles(metrics: dict, percentiles: dict) -> dict:
             ][:item_limit],
         }
     return phases
+
+
+def _inverse(percentiles: dict, key: str) -> int:
+    return 100 - percentiles[key]
+
+
+def _tendency(
+    key: str,
+    label: str,
+    description: str,
+    score: float,
+    evidence_keys: list[str],
+    metrics: dict,
+    percentiles: dict,
+    confidence_cap: str = "high",
+) -> dict:
+    confidence = "high" if score >= 75 and confidence_cap == "high" else "moderate"
+    return {
+        "key": key,
+        "label": label,
+        "description": description,
+        "score": round(score),
+        "confidence": confidence,
+        "evidence": [
+            _metric_item(metric_key, metrics, percentiles)
+            for metric_key in evidence_keys
+        ],
+    }
+
+
+def _build_tendencies(metrics: dict, percentiles: dict, axes: dict) -> list[dict]:
+    """Infer cautious team tendencies from multiple agreeing league-relative signals."""
+    candidates: list[dict] = []
+
+    possession_score = sum(
+        percentiles[key] for key in ("possession", "passes_for", "pass_accuracy")
+    ) / 3
+    if percentiles["possession"] >= 60 and percentiles["passes_for"] >= 60:
+        candidates.append(
+            _tendency(
+                "possession_led",
+                "Possession-led",
+                "Prefers to control matches through possession and passing volume.",
+                possession_score,
+                ["possession", "passes_for", "pass_accuracy"],
+                metrics,
+                percentiles,
+            )
+        )
+
+    direct_score = (
+        _inverse(percentiles, "possession")
+        + _inverse(percentiles, "passes_for")
+        + percentiles["xg_for"]
+        + percentiles["big_chances_for"]
+    ) / 4
+    if (
+        percentiles["possession"] <= 40
+        and percentiles["passes_for"] <= 45
+        and max(percentiles["xg_for"], percentiles["big_chances_for"]) >= 60
+    ):
+        candidates.append(
+            _tendency(
+                "direct_attack",
+                "Direct attacking profile",
+                "Creates attacking threat without relying on long spells of possession.",
+                direct_score,
+                ["possession", "passes_for", "xg_for", "big_chances_for"],
+                metrics,
+                percentiles,
+            )
+        )
+
+    patient_score = (
+        percentiles["possession"]
+        + percentiles["passes_for"]
+        + percentiles["pass_accuracy"]
+        + _inverse(percentiles, "shots_for")
+    ) / 4
+    if (
+        percentiles["possession"] >= 65
+        and percentiles["passes_for"] >= 65
+        and percentiles["shots_for"] <= 55
+    ):
+        candidates.append(
+            _tendency(
+                "patient_build_up",
+                "Patient build-up",
+                "Circulates the ball patiently rather than attacking through high shot volume.",
+                patient_score,
+                ["possession", "passes_for", "shots_for"],
+                metrics,
+                percentiles,
+            )
+        )
+
+    sterile_score = (
+        percentiles["possession"]
+        + percentiles["passes_for"]
+        + _inverse(percentiles, "xg_for")
+        + _inverse(percentiles, "big_chances_for")
+    ) / 4
+    if (
+        percentiles["possession"] >= 60
+        and percentiles["passes_for"] >= 60
+        and percentiles["xg_for"] <= 45
+        and percentiles["big_chances_for"] <= 45
+    ):
+        candidates.append(
+            _tendency(
+                "sterile_possession",
+                "Sterile possession",
+                "Keeps the ball but does not consistently turn that control into dangerous chances.",
+                sterile_score,
+                ["possession", "passes_for", "xg_for", "big_chances_for"],
+                metrics,
+                percentiles,
+            )
+        )
+
+    if percentiles["shots_for"] >= 70:
+        candidates.append(
+            _tendency(
+                "shot_heavy",
+                "Shot-heavy attack",
+                "Attacks through frequent shooting.",
+                percentiles["shots_for"],
+                ["shots_for", "xg_for", "big_chances_for"],
+                metrics,
+                percentiles,
+            )
+        )
+
+    chance_quality_score = (
+        percentiles["xg_for"]
+        + percentiles["big_chances_for"]
+        + _inverse(percentiles, "shots_for")
+    ) / 3
+    if (
+        percentiles["xg_for"] >= 60
+        and percentiles["big_chances_for"] >= 60
+        and percentiles["shots_for"] <= 55
+    ):
+        candidates.append(
+            _tendency(
+                "chance_quality_focused",
+                "Chance-quality focused",
+                "Generates dangerous chances without depending on high shot volume.",
+                chance_quality_score,
+                ["xg_for", "big_chances_for", "shots_for"],
+                metrics,
+                percentiles,
+            )
+        )
+
+    if percentiles["finishing_overperformance"] >= 70:
+        candidates.append(
+            _tendency(
+                "clinical_finishing",
+                "Clinical finishing",
+                "Converts chances into goals above the league norm.",
+                percentiles["finishing_overperformance"],
+                ["finishing_overperformance", "goals_for", "xg_for"],
+                metrics,
+                percentiles,
+            )
+        )
+    elif percentiles["finishing_overperformance"] <= 30:
+        candidates.append(
+            _tendency(
+                "wasteful_finishing",
+                "Wasteful finishing",
+                "Scores less than the quality of its chances would suggest.",
+                _inverse(percentiles, "finishing_overperformance"),
+                ["finishing_overperformance", "goals_for", "xg_for"],
+                metrics,
+                percentiles,
+            )
+        )
+
+    defensive_control_score = axes["defence"]
+    if (
+        defensive_control_score >= 65
+        and percentiles["xg_against"] >= 60
+        and percentiles["shots_against"] >= 60
+    ):
+        candidates.append(
+            _tendency(
+                "defensive_control",
+                "Defensive control",
+                "Limits opponent chances and defensive exposure.",
+                defensive_control_score,
+                ["xg_against", "shots_against", "big_chances_against"],
+                metrics,
+                percentiles,
+            )
+        )
+
+    resilience_score = (
+        percentiles["goals_against"]
+        + _inverse(percentiles, "xg_against")
+        + _inverse(percentiles, "shots_against")
+    ) / 3
+    if (
+        percentiles["goals_against"] >= 65
+        and percentiles["xg_against"] <= 45
+        and percentiles["shots_against"] <= 45
+    ):
+        candidates.append(
+            _tendency(
+                "defensive_resilience",
+                "Defensive resilience",
+                "Concedes relatively few goals despite allowing notable opponent pressure.",
+                resilience_score,
+                ["goals_against", "xg_against", "shots_against"],
+                metrics,
+                percentiles,
+            )
+        )
+
+    deep_block_score = (
+        _inverse(percentiles, "possession")
+        + _inverse(percentiles, "shots_against")
+        + percentiles["goals_against"]
+    ) / 3
+    if (
+        percentiles["possession"] <= 40
+        and percentiles["shots_against"] <= 40
+        and percentiles["goals_against"] >= 55
+    ):
+        candidates.append(
+            _tendency(
+                "deep_block_profile",
+                "Deep-block profile",
+                "A low-possession profile that absorbs pressure and protects the scoreline.",
+                deep_block_score,
+                ["possession", "shots_against", "goals_against"],
+                metrics,
+                percentiles,
+                confidence_cap="moderate",
+            )
+        )
+
+    open_score = (axes["attack"] + _inverse(axes, "defence")) / 2
+    if axes["attack"] >= 60 and axes["defence"] <= 40:
+        candidates.append(
+            _tendency(
+                "open_games",
+                "Open-game profile",
+                "Combines attacking output with significant defensive exposure.",
+                open_score,
+                ["xg_for", "goals_for", "xg_against", "shots_against"],
+                metrics,
+                percentiles,
+            )
+        )
+
+    minimum = CFG["style"]["tendency_score_min"]
+    limit = CFG["style"]["max_tendencies"]
+    return sorted(
+        [item for item in candidates if item["score"] >= minimum],
+        key=lambda item: item["score"],
+        reverse=True,
+    )[:limit]
 
 
 def _team_style_metrics(
@@ -277,6 +543,7 @@ def _build_style_profiles(
                 if item["percentile"] <= style_config["weakness_percentile_max"]
             ][:limit]
             phases = _build_phase_profiles(metrics, percentiles)
+            tendencies = _build_tendencies(metrics, percentiles, axes)
             profiles.append(
                 {
                     "team_id": team_id,
@@ -289,6 +556,7 @@ def _build_style_profiles(
                     "strengths": strengths,
                     "weaknesses": weaknesses,
                     "phases": phases,
+                    "tendencies": tendencies,
                 }
             )
     return profiles
@@ -302,7 +570,7 @@ def _store_style(db: DB, profiles: list[dict]) -> None:
         """
         INSERT INTO team_style_profiles
             (team_id, league_id, season, matches_played,
-             metrics, percentiles, axes, strengths, weaknesses, phases)
+             metrics, percentiles, axes, strengths, weaknesses, phases, tendencies)
         VALUES %s
         ON CONFLICT (team_id, league_id, season) DO UPDATE SET
             matches_played = EXCLUDED.matches_played,
@@ -312,6 +580,7 @@ def _store_style(db: DB, profiles: list[dict]) -> None:
             strengths      = EXCLUDED.strengths,
             weaknesses     = EXCLUDED.weaknesses,
             phases         = EXCLUDED.phases,
+            tendencies     = EXCLUDED.tendencies,
             updated_at     = now()
         """,
         [
@@ -326,6 +595,7 @@ def _store_style(db: DB, profiles: list[dict]) -> None:
                 json.dumps(profile["strengths"]),
                 json.dumps(profile["weaknesses"]),
                 json.dumps(profile["phases"]),
+                json.dumps(profile["tendencies"]),
             )
             for profile in profiles
         ],

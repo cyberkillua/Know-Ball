@@ -1,4 +1,4 @@
-from pipeline.model.compute_teams import _build_phase_profiles
+from pipeline.model.compute_teams import _build_phase_profiles, _build_tendencies
 
 
 def _sample_metrics():
@@ -82,3 +82,73 @@ def test_relative_strengths_exclude_below_average_metrics():
     assert [item["key"] for item in phases["defence"]["relative_strengths"]] == [
         "goals_against"
     ]
+
+
+def test_tendencies_identify_possession_led_and_shot_heavy_profiles():
+    metrics = _sample_metrics()
+    percentiles = {key: 50 for key in metrics}
+    percentiles.update(
+        {
+            "possession": 85,
+            "passes_for": 80,
+            "pass_accuracy": 75,
+            "shots_for": 80,
+        }
+    )
+
+    tendencies = _build_tendencies(
+        metrics,
+        percentiles,
+        {"attack": 70, "midfield": 80, "defence": 50},
+    )
+
+    keys = {item["key"] for item in tendencies}
+    assert "possession_led" in keys
+    assert "shot_heavy" in keys
+
+
+def test_deep_block_tendency_is_cautious_and_evidence_backed():
+    metrics = _sample_metrics()
+    percentiles = {key: 50 for key in metrics}
+    percentiles.update(
+        {
+            "possession": 20,
+            "shots_against": 20,
+            "goals_against": 75,
+        }
+    )
+
+    tendencies = _build_tendencies(
+        metrics,
+        percentiles,
+        {"attack": 40, "midfield": 30, "defence": 45},
+    )
+
+    deep_block = next(item for item in tendencies if item["key"] == "deep_block_profile")
+    assert deep_block["confidence"] == "moderate"
+    assert [item["key"] for item in deep_block["evidence"]] == [
+        "possession",
+        "shots_against",
+        "goals_against",
+    ]
+
+
+def test_defensive_control_requires_actual_chance_suppression():
+    metrics = _sample_metrics()
+    percentiles = {key: 50 for key in metrics}
+    percentiles.update(
+        {
+            "goals_against": 100,
+            "xg_against": 45,
+            "shots_against": 45,
+            "big_chances_against": 100,
+        }
+    )
+
+    tendencies = _build_tendencies(
+        metrics,
+        percentiles,
+        {"attack": 50, "midfield": 50, "defence": 73},
+    )
+
+    assert "defensive_control" not in {item["key"] for item in tendencies}

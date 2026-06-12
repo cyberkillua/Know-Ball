@@ -681,6 +681,15 @@ export interface TeamStylePhase {
   improvements: TeamStyleMetricItem[]
 }
 
+export interface TeamTendency {
+  key: string
+  label: string
+  description: string
+  score: number
+  confidence: 'moderate' | 'high'
+  evidence: TeamStyleMetricItem[]
+}
+
 export interface TeamStyleProfile {
   team_id: number
   league_id: number
@@ -692,6 +701,7 @@ export interface TeamStyleProfile {
   strengths: TeamStyleMetricItem[]
   weaknesses: TeamStyleMetricItem[]
   phases: Record<string, TeamStylePhase>
+  tendencies: TeamTendency[]
 }
 
 export interface TeamProfileBundle {
