@@ -4,6 +4,7 @@ import { Skeleton } from '../components/ui/skeleton'
 import HeroSearch from '../components/HeroSearch'
 import LeagueCard from '../components/LeagueCard'
 import TrendingPlayerCard from '../components/TrendingPlayerCard'
+import WorldCupFeatureCard from '../components/WorldCupFeatureCard'
 import {
   getLeagues,
   getLeaguePlayerCounts,
@@ -50,7 +51,7 @@ function LandingPage() {
         ])
 
         const countsMap = new Map(playerCounts.map((c) => [c.league_id, c.player_count]))
-        const leaguesWithCounts = leaguesData.map((league) => ({
+        const leaguesWithCounts = leaguesData.filter((league) => league.fotmob_id !== 77).map((league) => ({
           ...league,
           player_count: countsMap.get(league.id),
         }))
@@ -70,6 +71,10 @@ function LandingPage() {
   return (
     <div className="space-y-6 pb-20">
       <HeroSearch playerCount={totalPlayers} leagueCount={leagues.length} />
+
+      <section className="space-y-3">
+        <WorldCupFeatureCard />
+      </section>
 
       {/* Competitions */}
       <section className="space-y-3">

@@ -17,13 +17,19 @@ import time
 from curl_cffi.requests import AsyncSession, Session
 from curl_cffi.requests.exceptions import HTTPError
 from datetime import datetime
-from tenacity import retry, stop_after_attempt, wait_exponential, wait_random
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+    wait_random,
+)
 
 from pipeline.core.logger import get_logger
 
 log = get_logger("sofascore")
 
-BASE_URL = "https://www.sofascore.com/api/v1"
+BASE_URL = os.getenv("SOFASCORE_BASE_URL", "https://www.sofascore.com/api/v1").rstrip("/")
 REQUEST_DELAY = 2.0
 
 SOFASCORE_HEADERS = {
@@ -43,11 +49,16 @@ SOFASCORE_HEADERS = {
 }
 
 TOURNAMENT_IDS = {
+    77: 16,
     47: 17,
     87: 8,
     53: 34,
     55: 23,
     54: 35,
+}
+
+KNOWN_SEASON_IDS = {
+    (16, "2026"): 58210,
 }
 
 _POSITIONS_DETAILED_MAP = {
@@ -166,11 +177,31 @@ class RateLimiter:
 _rate_limiter = RateLimiter(rate=1.0, burst=5)
 
 
+def _http_status_code(exc: Exception) -> int | None:
+    response = getattr(exc, "response", None)
+    return getattr(response, "status_code", None)
+
+
+def _retryable_api_error(exc: Exception) -> bool:
+    """Retry transient failures, but fail immediately on permanent client blocks."""
+    status = _http_status_code(exc)
+    return status is None or status == 429 or status >= 500
+
+
+def _request_network_kwargs() -> dict:
+    proxy = os.getenv("SOFASCORE_PROXY")
+    return {"proxy": proxy} if proxy else {}
+
+
 async def _api_get_async(path: str, session: AsyncSession) -> dict:
     url = f"{BASE_URL}/{path}"
     await _rate_limiter.acquire_async()
     resp = await session.get(
-        url, impersonate="chrome", headers=SOFASCORE_HEADERS, timeout=30
+        url,
+        impersonate="chrome",
+        headers=SOFASCORE_HEADERS,
+        timeout=30,
+        **_request_network_kwargs(),
     )
     resp.raise_for_status()
     return resp.json()
@@ -179,21 +210,21 @@ async def _api_get_async(path: str, session: AsyncSession) -> dict:
 @retry(
     stop=stop_after_attempt(5),
     wait=wait_exponential(multiplier=2, min=10, max=60) + wait_random(0, 5),
+    retry=retry_if_exception(_retryable_api_error),
     reraise=True,
 )
 def _api_get(path: str) -> dict:
     url = f"{BASE_URL}/{path}"
     _rate_limiter.acquire_sync()
     resp = Session().get(
-        url, impersonate="chrome", headers=SOFASCORE_HEADERS, timeout=30
+        url,
+        impersonate="chrome",
+        headers=SOFASCORE_HEADERS,
+        timeout=30,
+        **_request_network_kwargs(),
     )
     resp.raise_for_status()
     return resp.json()
-
-
-def _http_status_code(exc: Exception) -> int | None:
-    response = getattr(exc, "response", None)
-    return getattr(response, "status_code", None)
 
 
 def _generate_season_alternatives(season_name: str) -> list[str]:
@@ -340,13 +371,22 @@ def get_season_id_by_name(tournament_id: int, season_name: str) -> int | None:
 
     Returns season ID or None if not found.
     """
-    override = _season_id_overrides().get((tournament_id, season_name.strip()))
+    season_key = (tournament_id, season_name.strip())
+    override = _season_id_overrides().get(season_key)
     if override:
         log.info(
             f"Using SOFASCORE_SEASON_IDS override: "
             f"tournament={tournament_id} season={season_name} id={override}"
         )
         return override
+
+    known_season_id = KNOWN_SEASON_IDS.get(season_key)
+    if known_season_id:
+        log.info(
+            f"Using known Sofascore season ID: "
+            f"tournament={tournament_id} season={season_name} id={known_season_id}"
+        )
+        return known_season_id
 
     seasons = list_available_seasons(tournament_id)
     if not seasons:
@@ -406,29 +446,18 @@ def fetch_league_matches(fotmob_league_id: int, season: str) -> list[dict]:
     )
 
     matches = []
-    consecutive_forbidden = 0
-    max_consecutive_forbidden = 2
 
     for round_num in range(1, 50):
         try:
             data = _api_get(
                 f"unique-tournament/{tournament_id}/season/{season_id}/events/round/{round_num}"
             )
-            consecutive_forbidden = 0
         except HTTPError as e:
             if _http_status_code(e) == 403:
-                consecutive_forbidden += 1
-                log.warning(
-                    f"Round {round_num}: HTTP 403 Forbidden "
-                    f"({consecutive_forbidden}/{max_consecutive_forbidden})"
+                raise RuntimeError(
+                    "SofaScore rejected this public IP with HTTP 403. "
+                    "Switch network/VPN or set SOFASCORE_PROXY before retrying."
                 )
-                if consecutive_forbidden >= max_consecutive_forbidden:
-                    raise RuntimeError(
-                        f"Too many 403 errors fetching tournament "
-                        f"{tournament_id}, season {season_id}"
-                    )
-                time.sleep(10)
-                continue
 
             log.info(f"Round {round_num}: no data ({e}), stopping")
             break

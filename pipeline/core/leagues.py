@@ -13,4 +13,10 @@ LEAGUES = [
     ("Bundesliga", 54, "Bundesliga"),
 ]
 
+OPTIONAL_COMPETITIONS = [
+    ("FIFA World Cup", 77, None),
+]
+
+ALL_COMPETITIONS = [*LEAGUES, *OPTIONAL_COMPETITIONS]
+
 FOTMOB_ID_BY_TOURNAMENT_ID = {v: k for k, v in TOURNAMENT_IDS.items()}

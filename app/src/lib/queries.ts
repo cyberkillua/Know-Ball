@@ -104,6 +104,72 @@ export const getTopRatedFromLatestMatchdays = createServerFn({ method: 'GET' })
     )
   })
 
+export const getWorldCupOverview = createServerFn({ method: 'GET' }).handler(async () => {
+  const league = await queryOne<League>(
+    'SELECT * FROM leagues WHERE fotmob_id = 77 LIMIT 1',
+  )
+
+  if (!league) {
+    return { league: null, matches: [], players: [], teams: [], standings: [] }
+  }
+
+  const [matches, players, teams, standings] = await Promise.all([
+    query(
+      `SELECT m.*,
+              json_build_object('id', ht.id, 'name', ht.name, 'logo_url', ht.logo_url) as home_team,
+              json_build_object('id', at.id, 'name', at.name, 'logo_url', at.logo_url) as away_team
+       FROM matches m
+       JOIN teams ht ON ht.id = m.home_team_id
+       JOIN teams at ON at.id = m.away_team_id
+       WHERE m.league_id = $1 AND m.season = '2026'
+       ORDER BY m.date DESC, m.id DESC`,
+      [league.id],
+    ),
+    query(
+      `SELECT pr.player_id, pr.model_score, pr.matches_played, pr.avg_match_rating,
+              pr.position, pr.role_archetype,
+              json_build_object('id', p.id, 'name', p.name, 'photo_url', p.photo_url) as player,
+              team_data.team
+       FROM peer_ratings pr
+       JOIN players p ON p.id = pr.player_id
+       LEFT JOIN LATERAL (
+         SELECT json_build_object('id', t.id, 'name', t.name, 'logo_url', t.logo_url) as team
+         FROM match_player_stats mps
+         JOIN matches m ON m.id = mps.match_id
+         JOIN teams t ON t.id = mps.team_id
+         WHERE mps.player_id = pr.player_id AND m.league_id = $1 AND m.season = '2026'
+         ORDER BY m.date DESC LIMIT 1
+       ) team_data ON TRUE
+       WHERE pr.league_id = $1 AND pr.season = '2026'
+         AND pr.peer_mode = 'dominant' AND pr.position_scope = ''
+       ORDER BY pr.model_score DESC NULLS LAST
+       LIMIT 50`,
+      [league.id],
+    ),
+    query(
+      `SELECT DISTINCT t.id, t.name, t.logo_url,
+              COUNT(DISTINCT m.id)::int as matches_played
+       FROM teams t
+       JOIN matches m ON m.league_id = $1
+         AND (m.home_team_id = t.id OR m.away_team_id = t.id)
+       WHERE m.season = '2026'
+       GROUP BY t.id, t.name, t.logo_url
+       ORDER BY t.name`,
+      [league.id],
+    ),
+    query(
+      `SELECT ls.*, json_build_object('id', t.id, 'name', t.name, 'logo_url', t.logo_url) as team
+       FROM league_standings ls
+       JOIN teams t ON t.id = ls.team_id
+       WHERE ls.league_id = $1 AND ls.season = '2026'
+       ORDER BY ls.position`,
+      [league.id],
+    ),
+  ])
+
+  return { league, matches, players, teams, standings }
+})
+
 export const getMatch = createServerFn({ method: 'GET' })
   .inputValidator((d: { matchId: number }) => d)
   .handler(async ({ data }) => {

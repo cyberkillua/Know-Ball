@@ -18,5 +18,23 @@ find and edit.
 - `python -m pipeline.jobs.daily`
 - `python -m pipeline.jobs.historical_backfill`
 
+## FIFA World Cup
+
+The World Cup is an optional competition because its `2026` season label does
+not match the domestic leagues' `2025/2026` label. After applying the database
+migrations, scrape completed World Cup matches with:
+
+```bash
+python -m pipeline.ingest.scrape --league 77 --season 2026 --recent-days 7
+```
+
+If SofaScore returns HTTP `403`, the current public IP is blocked. Run from a
+different network/VPN, or configure an HTTP/SOCKS proxy:
+
+```bash
+SOFASCORE_PROXY=http://user:password@proxy-host:port \
+  python -m pipeline.ingest.scrape --league 77 --season 2026 --recent-days 7
+```
+
 Older one-off repair scripts were removed once their data migrations were no
 longer part of the current workflow.

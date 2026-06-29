@@ -17,6 +17,51 @@ class FixedDateTime:
 
 
 class RecentScrapeTest(unittest.TestCase):
+    def test_world_cup_event_is_recognized(self):
+        event = {
+            "id": 456,
+            "status": {"type": "finished"},
+            "tournament": {"uniqueTournament": {"id": 16}},
+            "homeTeam": {"name": "Nigeria", "id": 1},
+            "awayTeam": {"name": "Argentina", "id": 2},
+            "homeScore": {"current": 2},
+            "awayScore": {"current": 1},
+            "roundInfo": {"round": 1},
+            "startTimestamp": 1781481600,
+        }
+
+        match = scrape._match_from_event(event)
+
+        self.assertIsNotNone(match)
+        self.assertEqual(match["fotmob_league_id"], 77)
+
+    def test_unscoped_recent_scrape_skips_optional_world_cup(self):
+        event = {
+            "id": 456,
+            "status": {"type": "finished"},
+            "tournament": {"uniqueTournament": {"id": 16}},
+            "homeTeam": {"name": "Nigeria", "id": 1},
+            "awayTeam": {"name": "Argentina", "id": 2},
+            "homeScore": {"current": 2},
+            "awayScore": {"current": 1},
+            "roundInfo": {"round": 1},
+            "startTimestamp": 1781481600,
+        }
+
+        with (
+            patch.object(scrape, "datetime", FixedDateTime),
+            patch.object(scrape, "fetch_scheduled_events", return_value=[event]),
+            patch.object(scrape, "_process_match") as process_match,
+        ):
+            scrape.scrape_recent_matches(
+                db=None,
+                season="2025/2026",
+                days=1,
+                existing_ids=set(),
+            )
+
+        process_match.assert_not_called()
+
     def test_recent_scrape_checks_each_day_in_lookback_window(self):
         fetched_dates = []
 
@@ -77,6 +122,36 @@ class RecentScrapeTest(unittest.TestCase):
 
 
 class ScheduledEventsTest(unittest.TestCase):
+    def test_forbidden_api_errors_are_not_retried(self):
+        error = sofascore.HTTPError("forbidden")
+        error.response = type("Response", (), {"status_code": 403})()
+
+        with patch.object(sofascore, "Session") as session:
+            session.return_value.get.return_value.raise_for_status.side_effect = error
+            with self.assertRaises(sofascore.HTTPError):
+                sofascore._api_get("sport/football/scheduled-events/2026-04-27")
+
+        session.return_value.get.assert_called_once()
+
+    def test_sofascore_proxy_is_passed_to_requests(self):
+        response = type(
+            "Response",
+            (),
+            {"raise_for_status": lambda self: None, "json": lambda self: {"events": []}},
+        )()
+
+        with (
+            patch.dict("os.environ", {"SOFASCORE_PROXY": "http://proxy.test:8080"}),
+            patch.object(sofascore, "Session") as session,
+        ):
+            session.return_value.get.return_value = response
+            sofascore._api_get("sport/football/scheduled-events/2026-04-27")
+
+        self.assertEqual(
+            session.return_value.get.call_args.kwargs["proxy"],
+            "http://proxy.test:8080",
+        )
+
     def test_scheduled_event_fetch_errors_are_not_silently_empty(self):
         with patch.object(sofascore, "_api_get", side_effect=RuntimeError("blocked")):
             with self.assertRaises(RuntimeError):
@@ -92,6 +167,11 @@ class ScheduledEventsTest(unittest.TestCase):
             patch.object(sofascore, "list_available_seasons") as list_seasons,
         ):
             self.assertEqual(sofascore.get_season_id_by_name(17, "2025/2026"), 76986)
+            list_seasons.assert_not_called()
+
+    def test_known_world_cup_season_skips_season_lookup(self):
+        with patch.object(sofascore, "list_available_seasons") as list_seasons:
+            self.assertEqual(sofascore.get_season_id_by_name(16, "2026"), 58210)
             list_seasons.assert_not_called()
 
 

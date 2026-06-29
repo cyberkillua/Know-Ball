@@ -14,10 +14,16 @@ Optimizations:
 from datetime import datetime, timedelta, timezone
 
 from pipeline.core.db import DB
-from pipeline.core.leagues import CURRENT_SEASON, FOTMOB_ID_BY_TOURNAMENT_ID, LEAGUES
+from pipeline.core.leagues import (
+    ALL_COMPETITIONS,
+    CURRENT_SEASON,
+    FOTMOB_ID_BY_TOURNAMENT_ID,
+    LEAGUES,
+)
 from pipeline.core.logger import get_logger
 from pipeline.core.settings import SETTINGS
 from pipeline.ingest.scrapers.sofascore import (
+    TOURNAMENT_IDS,
     fetch_league_matches,
     fetch_match_details,
     extract_player_stats,
@@ -226,7 +232,11 @@ def scrape_recent_matches(
     fotmob_league_id: int | None = None,
 ) -> None:
     today = datetime.now(timezone.utc).date()
-    league_meta = {fotmob_id: (name, understat_slug) for name, fotmob_id, understat_slug in LEAGUES}
+    default_league_ids = {fotmob_id for _, fotmob_id, _ in LEAGUES}
+    league_meta = {
+        fotmob_id: (name, understat_slug)
+        for name, fotmob_id, understat_slug in ALL_COMPETITIONS
+    }
     matches_by_league: dict[int, list[dict]] = {}
     seen_ids = set(existing_ids)
 
@@ -239,6 +249,8 @@ def scrape_recent_matches(
             if not match or match["sofascore_id"] in seen_ids:
                 continue
             if fotmob_league_id and match["fotmob_league_id"] != fotmob_league_id:
+                continue
+            if not fotmob_league_id and match["fotmob_league_id"] not in default_league_ids:
                 continue
             seen_ids.add(match["sofascore_id"])
             matches_by_league.setdefault(match["fotmob_league_id"], []).append(match)
@@ -712,7 +724,10 @@ def main():
         tournament_id = TOURNAMENT_IDS.get(args.list_seasons)
         if not tournament_id:
             log.error(f"No mapping for league {args.list_seasons}")
-            log.info(f"Available leagues: {[(name, fid) for name, fid, _ in LEAGUES]}")
+            log.info(
+                f"Available competitions: "
+                f"{[(name, fid) for name, fid, _ in ALL_COMPETITIONS]}"
+            )
             return
 
         print(f"\nAvailable seasons for league {args.list_seasons}:")
@@ -724,10 +739,16 @@ def main():
 
     leagues = LEAGUES
     if args.league:
-        leagues = [l for l in LEAGUES if l[1] == args.league]
+        leagues = [
+            competition
+            for competition in ALL_COMPETITIONS
+            if competition[1] == args.league
+        ]
         if not leagues:
-            log.error(f"Unknown FotMob league ID: {args.league}")
-            log.info(f"Available: {[(name, fid) for name, fid, _ in LEAGUES]}")
+            log.error(f"Unknown FotMob competition ID: {args.league}")
+            log.info(
+                f"Available: {[(name, fid) for name, fid, _ in ALL_COMPETITIONS]}"
+            )
             return
 
     log.info("Starting Know Ball scrape (Sofascore)")

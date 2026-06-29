@@ -5,6 +5,7 @@ import SearchBar from './SearchBar'
 
 const NAV_LINKS = [
   { to: '/', label: 'Home' },
+  { to: '/world-cup', label: '2026 WC' },
   { to: '/players', label: 'Players' },
   { to: '/compare', label: 'Compare' },
 ] as const
